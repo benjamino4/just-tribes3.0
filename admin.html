@@ -1,0 +1,57 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<title>TRIBES · Admin — Live Economy</title>
+<meta name="theme-color" content="#0a0612"/>
+<script src="https://cdn.tailwindcss.com"></script>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel:wght@600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css"/>
+<style>
+  .admin{max-width:640px;margin:0 auto;padding:calc(env(safe-area-inset-top,0)+18px) 16px 90px;position:relative;z-index:2}
+  .gate{position:fixed;inset:0;z-index:50;display:grid;place-content:center;justify-items:center;gap:14px;padding:24px;
+    background:radial-gradient(60% 50% at 50% 40%,#1b1030,#080510)}
+  .gate .box{width:min(360px,92vw);text-align:center}
+  .a-head{display:flex;align-items:center;justify-content:space-between;margin-bottom:14px}
+  .a-title{font-family:'Cinzel';font-weight:800;font-size:1.35rem;
+    background:linear-gradient(180deg,#fff2cf,#ffb03a);-webkit-background-clip:text;background-clip:text;color:transparent}
+  .a-grid{display:grid;grid-template-columns:1fr auto;gap:10px 14px;align-items:center}
+  .a-grid label{font-size:.82rem;color:#e7d6b8}
+  .a-grid .sub{font-size:.66rem;color:var(--ash-dim)}
+  .a-grid input{width:120px;padding:9px 11px;border-radius:11px;background:rgba(255,255,255,.06);
+    border:1px solid var(--line);color:#fff;font-size:.86rem;outline:none;text-align:right;font-variant-numeric:tabular-nums}
+  .a-grid input:focus{border-color:rgba(255,183,90,.55)}
+  .savebar{position:fixed;left:0;right:0;bottom:0;z-index:40;max-width:640px;margin:0 auto;
+    display:flex;gap:10px;padding:12px 16px calc(14px + env(safe-area-inset-bottom,0));
+    background:linear-gradient(0deg,#0a0612,rgba(10,6,18,.85) 60%,transparent)}
+  .badge{display:inline-flex;align-items:center;gap:6px;font-size:.66rem;font-weight:800;padding:5px 10px;border-radius:999px;
+    background:rgba(46,220,140,.15);color:#7ef0b0;border:1px solid rgba(46,220,140,.35)}
+</style>
+</head>
+<body>
+<div class="aurora" aria-hidden="true"><span class="aurora-band b1"></span><span class="aurora-band b2"></span><span class="aurora-band b3"></span></div>
+<canvas id="starfield" aria-hidden="true"></canvas>
+<div class="vignette" aria-hidden="true"></div>
+<svg width="0" height="0" style="position:absolute"><defs>
+  <linearGradient id="gFlame" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#ff2d00"/><stop offset=".5" stop-color="#ff6b1a"/><stop offset="1" stop-color="#ffe89a"/></linearGradient>
+</defs></svg>
+
+<!-- password gate (client-side DRAFT — replace with real server auth) -->
+<div id="gate" class="gate">
+  <div class="box">
+    <div class="tb-mark" style="width:44px;height:54px;margin:0 auto 10px"></div>
+    <h1 class="a-title">TRIBES · Admin</h1>
+    <p class="muted" style="margin:6px 0 16px">Live economy control room</p>
+    <div class="field"><input id="pw" type="password" placeholder="Admin password" autocomplete="off"/></div>
+    <button id="loginBtn" class="btn btn-primary btn-block btn-shine">Enter the Cave</button>
+    <p class="tiny" style="margin-top:14px">Draft gate only — wire real server-side auth before launch.</p>
+  </div>
+</div>
+
+<div id="panel" class="admin" style="display:none"></div>
+<div id="savebarRoot"></div>
+<div id="toastRoot" class="toast-root"></div>
+<script src="admin.js"></script>
+</body>
+</html>

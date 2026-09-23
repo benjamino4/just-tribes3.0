@@ -1,0 +1,27 @@
+# Render.com blueprint for TRIBES (Node web service).
+# Push this repo, then Render → New + → Blueprint. Set the secret env vars
+# (DATABASE_URL from Aiven, BOT_TOKEN, TON_RECEIVE_ADDRESS) in the dashboard.
+services:
+  - type: web
+    name: tribes
+    runtime: node
+    plan: starter
+    buildCommand: npm install
+    startCommand: node src/index.js
+    healthCheckPath: /api/health
+    autoDeploy: true
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
+      - key: DATABASE_URL          # Aiven Postgres connection string (sslmode is auto-handled)
+        sync: false
+      - key: BOT_TOKEN             # from @BotFather — enables Telegram Stars
+        sync: false
+      - key: TON_RECEIVE_ADDRESS   # your TON wallet that receives payments
+        sync: false
+      - key: TONCENTER_API_KEY     # optional — enables on-chain TON verification
+        sync: false
+      - key: TON_NETWORK           # mainnet | testnet
+        value: mainnet
+      - key: ALLOW_GUEST           # set to 1 only for browser preview outside Telegram
+        value: "0"

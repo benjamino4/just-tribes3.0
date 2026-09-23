@@ -1,0 +1,15 @@
+{
+  "name": "tribes",
+  "version": "2.0.0",
+  "private": true,
+  "description": "TRIBES — Telegram Mini App: stone-age tribe idle game with live Tribe Wars, TON Connect and Telegram Stars.",
+  "type": "module",
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "start": "node src/index.js"
+  },
+  "dependencies": {
+    "express": "4.19.2",
+    "pg": "8.12.0"
+  }
+}
