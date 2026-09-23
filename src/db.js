@@ -117,6 +117,23 @@ CREATE TABLE IF NOT EXISTS ledger (
   stars      BIGINT DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS config (
+  k TEXT PRIMARY KEY,
+  v TEXT
+);
+
+CREATE TABLE IF NOT EXISTS audit (
+  id         BIGSERIAL PRIMARY KEY,
+  admin_id   BIGINT,
+  action     TEXT,
+  detail     TEXT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+
+ALTER TABLE users    ADD COLUMN IF NOT EXISTS banned     BOOLEAN DEFAULT false;
+ALTER TABLE users    ADD COLUMN IF NOT EXISTS ban_reason TEXT;
+ALTER TABLE payments ADD COLUMN IF NOT EXISTS refunded   BOOLEAN DEFAULT false;
 `;
 
 export async function initDb() {

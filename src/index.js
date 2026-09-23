@@ -7,6 +7,9 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDb, pool } from './db.js';
 import { router, handleWebhook } from './routes.js';
+import { loadConfig } from './config.js';
+import { q } from './db.js';
+import { adminRouter, adminBotWebhook, setupAdminBot } from './admin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, '..', 'public');
@@ -29,6 +32,15 @@ app.post('/api/tg/webhook', async (req,res)=>{
   try { await handleWebhook(req.body || {}); } catch(e){ console.error('[webhook]', e.message); }
   res.json({ ok:true });
 });
+
+// Admin Telegram bot webhook (separate bot) — must be before the authed router.
+app.post('/api/admin/webhook', async (req,res)=>{
+  try { await adminBotWebhook(req.body || {}); } catch(e){ console.error('[admin webhook]', e.message); }
+  res.json({ ok:true });
+});
+
+// Admin web dashboard API (token-guarded inside the router).
+app.use('/api/admin', adminRouter);
 
 // TON Connect manifest (generated so the url always matches the live origin).
 app.get('/tonconnect-manifest.json', (req,res)=>{
@@ -61,7 +73,13 @@ app.use((err,req,res,next)=>{
 const PORT = process.env.PORT || 3000;
 export { app };
 if (process.env.TRIBES_TEST !== '1') {
-  initDb().catch(e=>console.error('[db init]', e.message)).finally(()=>{
-    app.listen(PORT, ()=> console.log(`TRIBES server on :${PORT}`));
-  });
+  initDb()
+    .then(()=> loadConfig(q))
+    .catch(e=>console.error('[db init]', e.message))
+    .finally(()=>{
+      app.listen(PORT, ()=> {
+        console.log(`TRIBES server on :${PORT}`);
+        setupAdminBot(process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || '');
+      });
+    });
 }

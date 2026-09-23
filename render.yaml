@@ -25,3 +25,9 @@ services:
         value: mainnet
       - key: ALLOW_GUEST           # set to 1 only for browser preview outside Telegram
         value: "0"
+      - key: ADMIN_BOT_TOKEN       # SEPARATE @BotFather bot used only for admin commands
+        sync: false
+      - key: ADMIN_IDS             # comma-separated Telegram user ids allowed to command the admin bot
+        sync: false
+      - key: ADMIN_TOKEN           # secret token for the /admin web dashboard login
+        sync: false

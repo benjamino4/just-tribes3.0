@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="robots" content="noindex">
+<title>TRIBES — Warden Console</title>
+<link rel="stylesheet" href="admin.css">
+</head>
+<body>
+<div class="embers" aria-hidden="true">
+  <svg class="flamebg" viewBox="0 0 200 200" preserveAspectRatio="none">
+    <defs>
+      <radialGradient id="glow" cx="50%" cy="100%" r="80%">
+        <stop offset="0%" stop-color="#ff7a18" stop-opacity=".55"/>
+        <stop offset="45%" stop-color="#c81d25" stop-opacity=".25"/>
+        <stop offset="100%" stop-color="#000" stop-opacity="0"/>
+      </radialGradient>
+    </defs>
+    <rect x="0" y="0" width="200" height="200" fill="url(#glow)"/>
+  </svg>
+</div>
+
+<!-- LOGIN -->
+<section id="login" class="gate">
+  <div class="gate-card">
+    <svg class="crest" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
+      <path d="M32 4c6 10-4 14 2 24 4 6 2 12-2 16-5-3-8-9-6-15-6 4-9 12-6 20 2 6 8 11 12 11 9 0 16-7 16-16 0-14-10-22-16-40z"
+        fill="#ff7a18"><animate attributeName="opacity" values="0.75;1;0.75" dur="2.4s" repeatCount="indefinite"/></path>
+  </svg>
+    <h1>The Warden&rsquo;s Gate</h1>
+    <p class="muted">Keeper of the Great Pyre. Present your token.</p>
+    <input id="token" type="password" placeholder="Admin token" autocomplete="off">
+    <button id="enterBtn" class="btn primary">Enter the Fire</button>
+    <p id="loginErr" class="err"></p>
+  </div>
+</section>
+
+<!-- CONSOLE -->
+<main id="console" hidden>
+  <header class="topbar">
+    <div class="brand"><span class="dot"></span> TRIBES · Warden Console</div>
+    <div class="top-actions">
+      <span id="maintFlag" class="pill"></span>
+      <button id="logoutBtn" class="btn ghost sm">Lock</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <button class="tab active" data-tab="stats">Overview</button>
+    <button class="tab" data-tab="players">Players</button>
+    <button class="tab" data-tab="tribes">Tribes</button>
+    <button class="tab" data-tab="wars">Wars</button>
+    <button class="tab" data-tab="payments">Payments</button>
+    <button class="tab" data-tab="economy">Economy</button>
+    <button class="tab" data-tab="control">Control</button>
+  </nav>
+
+  <section class="panel active" id="tab-stats">
+    <div id="statCards" class="cards"></div>
+  </section>
+
+  <section class="panel" id="tab-players">
+    <div class="row">
+      <input id="pQuery" placeholder="Search name, @username or id">
+      <button id="pSearch" class="btn">Search</button>
+    </div>
+    <div id="playerList" class="list"></div>
+    <div id="playerCard" class="detail"></div>
+  </section>
+
+  <section class="panel" id="tab-tribes">
+    <div id="tribeList" class="list"></div>
+    <div id="tribeCard" class="detail"></div>
+  </section>
+
+  <section class="panel" id="tab-wars">
+    <div class="row">
+      <input id="waAtk" placeholder="Attacker tribe id" class="num">
+      <input id="waDef" placeholder="Defender tribe id" class="num">
+      <button id="waStart" class="btn">Force war</button>
+    </div>
+    <div id="warList" class="list"></div>
+  </section>
+
+  <section class="panel" id="tab-payments">
+    <div id="payList" class="list"></div>
+  </section>
+
+  <section class="panel" id="tab-economy">
+    <p class="muted">Live economy multipliers &amp; caps. Changes apply instantly — no redeploy.</p>
+    <div id="econGrid" class="econ"></div>
+    <button id="econReset" class="btn ghost">Reset all to defaults</button>
+  </section>
+
+  <section class="panel" id="tab-control">
+    <div class="ctl-card">
+      <h3>Maintenance mode</h3>
+      <p class="muted">Freezes all player actions (reads still work). Use during migrations.</p>
+      <div class="row">
+        <button id="maintOn" class="btn warn">Enable</button>
+        <button id="maintOff" class="btn">Disable</button>
+      </div>
+    </div>
+    <div class="ctl-card">
+      <h3>Broadcast</h3>
+      <p class="muted">Sends a message to every non-banned player via the game bot.</p>
+      <textarea id="bcText" rows="3" placeholder="Your message to the tribes…"></textarea>
+      <button id="bcSend" class="btn primary">Send to all</button>
+    </div>
+    <div class="ctl-card danger">
+      <h3>Season wipe</h3>
+      <p class="muted">Resets Loyalty &amp; war records for all tribes. Balances are kept.</p>
+      <button id="wipeBtn" class="btn danger">Wipe season</button>
+    </div>
+  </section>
+
+  <div id="toast" class="toast"></div>
+</main>
+<script src="admin.js"></script>
+</body>
+</html>
