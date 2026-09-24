@@ -82,9 +82,14 @@ app.use('/api', router);
 
 // static Mini App
 app.use(express.static(PUBLIC, {
-  extensions:['html'], maxAge:'1h',
-  setHeaders(res, p){
-    if (p.endsWith('.html')) res.setHeader('Cache-Control','no-cache');
+  extensions:['html'],
+  maxAge:'1h',
+  setHeaders(res, filePath){
+    if (filePath.endsWith('.html') || filePath.endsWith('index.html')) {
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
+    }
   },
 }));
 app.get('*', (req,res)=>{
