@@ -4,21 +4,17 @@
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
 <title>TRIBES — Rise of the Tribes</title>
-<meta name="theme-color" content="#0a0705"/>
+<meta name="theme-color" content="#07060a"/>
 <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="https://cdn.tailwindcss.com"></script>
 <script src="https://unpkg.com/@tonconnect/ui@2.0.9/dist/tonconnect-ui.min.js"></script>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@700;900&family=Cinzel:wght@500;600;700;800&family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css"/>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@900&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=3"/>
 </head>
 <body>
 
 <div class="world" aria-hidden="true">
-  <div class="strata"></div>
-  <div class="cavepaint"></div>
-  <div class="torch torch-l"></div>
-  <div class="torch torch-r"></div>
-  <div class="emberfield" id="emberfield"></div>
   <div class="heat"></div>
   <div class="vig"></div>
 </div>
@@ -30,23 +26,43 @@
 </defs></svg>
 
 <div id="boot" class="boot">
-  <div class="boot-fire"><span></span><span></span><span></span></div>
+  <div class="boot-orb">
+    <div class="core"></div>
+    <div class="ring"></div>
+    <div class="ring"></div>
+    <div class="spark"></div>
+    <div class="spark" style="animation-delay:-1.3s"></div>
+  </div>
   <h1 class="boot-title">TRIBES</h1>
   <p class="boot-sub">Rise of the Tribes</p>
   <div id="bootMsg" class="boot-msg">Waking the ancestors…</div>
-  <button id="retryBtn" class="btn btn-primary btn-shine" style="display:none">Retry the summons</button>
+  <button id="retryBtn" class="btn btn-primary btn-shine" style="display:none;margin-top:16px">Retry the summons</button>
+</div>
+
+<div id="gate" class="gate" style="display:none">
+  <div class="gate-card">
+    <div class="gate-icon">🪪</div>
+    <h2>Set a Telegram Username</h2>
+    <p class="tiny">Tribes require a name to march under. Set a <b>@username</b> in Telegram, then return here.</p>
+    <a href="tg://settings" id="gateLink" class="btn btn-primary btn-shine btn-block" target="_blank" rel="noopener">Open Telegram Settings</a>
+    <button id="gateRetry" class="btn btn-ghost btn-block" style="margin-top:8px">I've set it — retry</button>
+    <p class="tiny" style="margin-top:14px;opacity:.7">In Telegram: Settings → Username → set one → save. Then tap “I've set it”.</p>
+  </div>
 </div>
 
 <div id="app" class="app" style="display:none">
   <header class="topbar">
-    <button id="crestBtn" class="crest-chip"><span id="crestArt" class="crest-art"></span>
-      <span class="crest-meta"><b id="tribeName">No Tribe</b><i id="roleName">Wanderer</i></span></button>
+    <button id="crestBtn" class="chip crest-chip">
+      <span id="crestArt" class="crest-art"></span>
+      <span class="crest-meta"><b id="tribeName">No Tribe</b><i id="roleName">Wanderer</i></span>
+    </button>
     <div class="wallets">
-      <span class="purse" title="Ember"><span class="pico pico-ember"></span><b id="emberVal">0</b></span>
-      <span class="purse" title="Stars"><span class="pico">⭐</span><b id="starVal">0</b></span>
-      <button id="tonBtn" class="ton-chip">Connect</button>
+      <span class="chip purse" title="Ember"><span class="pico pico-ember"></span><b id="emberVal">0</b></span>
+      <button id="tonBtn" class="chip ton-chip">Connect</button>
     </div>
   </header>
+
+  <div id="bonfireBanner" class="bonfire-banner" style="display:none"></div>
 
   <main id="screens" class="screens"></main>
 
@@ -59,10 +75,21 @@
   </nav>
 </div>
 
-<div id="modalRoot"></div>
+<div id="sheetRoot"></div>
 <div id="toastRoot" class="toast-root"></div>
 <div id="fxRoot" aria-hidden="true"></div>
 
-<script src="app.js"></script>
+<div id="ceremony" class="ceremony" style="display:none">
+  <div class="ceremony-burst"></div>
+  <div class="ceremony-content">
+    <div id="ceremonyIcon" class="ceremony-icon">🏆</div>
+    <h2 id="ceremonyTitle">VICTORY</h2>
+    <p id="ceremonySub"></p>
+  </div>
+</div>
+
+<script src="strings.js?v=3"></script>
+<script src="app.js?v=3"></script>
+<script src="miniapp-extra.js?v=3"></script>
 </body>
 </html>

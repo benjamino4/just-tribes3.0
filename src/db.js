@@ -1,10 +1,16 @@
 // ---------------------------------------------------------------------------
-// Postgres pool + schema. Works with Aiven / Render managed Postgres.
-// SSL FIX: strip ?sslmode=... from the URL before pg parses it and set SSL
-// explicitly, otherwise Aiven throws a self-signed / sslmode warning.
+// Postgres pool + schema + optional auto-migration.
+// MIGRATE=1 in env runs migrations/*.sql on boot, in order, inside one tx.
+// Remove the env var after the first successful boot.
 // ---------------------------------------------------------------------------
 import pg from 'pg';
+import fs from 'fs/promises';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
 const { Pool } = pg;
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
+const MIGRATIONS_DIR = path.join(__dirname, '..', 'migrations');
 
 function buildPool() {
   let url = process.env.DATABASE_URL || '';
@@ -12,8 +18,8 @@ function buildPool() {
     console.warn('[db] DATABASE_URL is not set — API calls that need the DB will fail until you add it.');
     return null;
   }
-  // strip sslmode (and channel_binding) from the query string; we set ssl below
-  url = url.replace(/([?&])sslmode=[^&]*/i, '$1').replace(/([?&])channel_binding=[^&]*/i, '$1')
+  url = url.replace(/([?&])sslmode=[^&]*/i, '$1')
+           .replace(/([?&])channel_binding=[^&]*/i, '$1')
            .replace(/[?&]$/, '').replace(/\?&/, '?');
   return new Pool({
     connectionString: url,
@@ -38,7 +44,7 @@ CREATE TABLE IF NOT EXISTS tribes (
   hue           INT  DEFAULT 0,
   motto         TEXT DEFAULT '',
   crest         TEXT DEFAULT 'totem',
-  treasury      BIGINT DEFAULT 0,          -- The Great Pyre
+  treasury      BIGINT DEFAULT 0,
   created_by    BIGINT,
   members       INT  DEFAULT 0,
   loyalty_total   BIGINT DEFAULT 0,
@@ -55,13 +61,13 @@ CREATE TABLE IF NOT EXISTS tribes (
 );
 
 CREATE TABLE IF NOT EXISTS users (
-  id           BIGINT PRIMARY KEY,          -- telegram user id
+  id           BIGINT PRIMARY KEY,
   username     TEXT,
   first_name   TEXT,
   photo_url    TEXT,
   role         TEXT DEFAULT 'Toddler',
   ember        BIGINT DEFAULT 500,
-  stars        BIGINT DEFAULT 0,
+  stars        BIGINT DEFAULT 0,           -- legacy, no longer read
   loyalty      BIGINT DEFAULT 0,
   streak       INT DEFAULT 0,
   last_checkin TIMESTAMPTZ,
@@ -77,7 +83,7 @@ CREATE TABLE IF NOT EXISTS wars (
   attacker_id    BIGINT REFERENCES tribes(id) ON DELETE CASCADE,
   defender_id    BIGINT REFERENCES tribes(id) ON DELETE CASCADE,
   challenge_id   TEXT NOT NULL,
-  status         TEXT DEFAULT 'active',      -- active | resolved
+  status         TEXT DEFAULT 'active',
   goal           BIGINT NOT NULL,
   metric         TEXT NOT NULL,
   stake_pct      INT DEFAULT 20,
@@ -98,7 +104,7 @@ CREATE INDEX IF NOT EXISTS wars_tribes_idx ON wars(attacker_id, defender_id);
 CREATE TABLE IF NOT EXISTS payments (
   id            BIGSERIAL PRIMARY KEY,
   user_id       BIGINT,
-  kind          TEXT,                        -- stars | ton
+  kind          TEXT,
   charge_id     TEXT UNIQUE,
   payload       TEXT,
   amount        BIGINT,
@@ -134,11 +140,60 @@ CREATE TABLE IF NOT EXISTS audit (
 ALTER TABLE users    ADD COLUMN IF NOT EXISTS banned     BOOLEAN DEFAULT false;
 ALTER TABLE users    ADD COLUMN IF NOT EXISTS ban_reason TEXT;
 ALTER TABLE payments ADD COLUMN IF NOT EXISTS refunded   BOOLEAN DEFAULT false;
+
+CREATE TABLE IF NOT EXISTS codes (
+  code       TEXT PRIMARY KEY,
+  kind       TEXT NOT NULL,
+  amount     BIGINT NOT NULL,
+  max_uses   INT DEFAULT 0,
+  uses       INT DEFAULT 0,
+  note       TEXT,
+  expires_at TIMESTAMPTZ,
+  created_by BIGINT,
+  created_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE TABLE IF NOT EXISTS code_redemptions (
+  code    TEXT,
+  user_id BIGINT,
+  at      TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (code, user_id)
+);
 `;
+
+async function runMigrations() {
+  if (!pool) return;
+  let files;
+  try { files = (await fs.readdir(MIGRATIONS_DIR)).filter(f => f.endsWith('.sql')).sort(); }
+  catch { console.log('[db] no migrations directory — skipping'); return; }
+  if (!files.length) { console.log('[db] no migration files'); return; }
+
+  for (const f of files) {
+    const sql = await fs.readFile(path.join(MIGRATIONS_DIR, f), 'utf8');
+    const client = await pool.connect();
+    try {
+      console.log(`[db] running migration ${f}`);
+      await client.query('BEGIN');
+      await client.query(sql);
+      await client.query('COMMIT');
+      console.log(`[db] migration ${f} applied`);
+    } catch (e) {
+      await client.query('ROLLBACK').catch(() => {});
+      console.error(`[db] migration ${f} FAILED:`, e.message);
+      client.release();
+      throw e;
+    }
+    client.release();
+  }
+}
 
 export async function initDb() {
   if (!pool) return false;
   await pool.query(SCHEMA);
-  console.log('[db] schema ready');
+  console.log('[db] base schema ready');
+  if (process.env.MIGRATE === '1') {
+    console.log('[db] MIGRATE=1 → running migrations');
+    await runMigrations();
+    console.log('[db] MIGRATE=1 → migrations complete; remove the env var to skip next boot');
+  }
   return true;
 }

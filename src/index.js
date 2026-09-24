@@ -1,56 +1,79 @@
 // ---------------------------------------------------------------------------
-// TRIBES — server. Serves the Mini App (public/) and the REST API, verifies
-// Telegram Stars payments via webhook, and exposes /api/health.
+// TRIBES — server. Phase 1 additions:
+//   * SSE route for Kiva mounted BEFORE express.json (streaming, no body parse)
+//   * /api/cron/tick endpoint for external keep-alive + maintenance sweeps
+//   * Background push queue flusher when the instance is warm
 // ---------------------------------------------------------------------------
 import express from 'express';
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { initDb, pool } from './db.js';
-import { router, handleWebhook } from './routes.js';
-import { loadConfig } from './config.js';
-import { q } from './db.js';
+import { initDb, pool, q } from './db.js';
+import { router, handleWebhook, kivaSse } from './routes.js';
+import { loadConfig, CFG } from './config.js';
 import { adminRouter, adminBotWebhook, setupAdminBot } from './admin.js';
+import { startFlusher, flushQueue } from './push.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, '..', 'public');
 const app = express();
 app.disable('x-powered-by');
-app.use(express.json({ limit:'256kb' }));
 
-// Telegram loads the app in a webview — allow embedding.
+// SSE — must be before express.json so the stream isn't buffered by the parser.
+app.get('/api/kiva/stream', (req,res)=>kivaSse(req,res));
+
+app.use(express.json({ limit:'256kb' }));
 app.use((req,res,next)=>{ res.removeHeader('X-Frame-Options'); next(); });
 
-// health (no auth, no db required)
+// health
 app.get('/api/health', async (req,res)=>{
   let db = false;
-  try { if (pool){ await pool.query('SELECT 1'); db = true; } } catch {}
+  try { if (pool) { await pool.query('SELECT 1'); db = true; } } catch {}
   res.json({ ok:true, db, bot: !!process.env.BOT_TOKEN, ton: !!process.env.TON_RECEIVE_ADDRESS, ts: Date.now() });
 });
 
-// Telegram webhook (Stars) — MUST be before the authed /api router.
+// cron tick — hit by an external scheduler every 10 min to keep the instance
+// warm AND to run the maintenance sweeps we can't trust to a sleeping process.
+app.get('/api/cron/tick', async (req,res)=>{
+  const out = { ok:true, ts: Date.now() };
+  try{
+    // flush push queue
+    const flushed = await flushQueue(60);
+    out.push = flushed;
+
+    // expire any bonfires that have ended
+    await q(`UPDATE bonfire_events SET end_at = LEAST(end_at, now()) WHERE end_at < now()`);
+
+    // prune orphan users older than 30 days with no tribe and < 100 ember
+    await q(`DELETE FROM users WHERE tribe_id IS NULL AND ember < 100 AND created_at < now() - interval '30 days'`);
+
+    // prune push queue rows already sent, older than 7 days
+    await q(`DELETE FROM push_queue WHERE sent_at IS NOT NULL AND sent_at < now() - interval '7 days'`);
+  }catch(e){ out.error = e.message; }
+  res.json(out);
+});
+
+// Telegram webhook (Stars)
 app.post('/api/tg/webhook', async (req,res)=>{
   try { await handleWebhook(req.body || {}); } catch(e){ console.error('[webhook]', e.message); }
   res.json({ ok:true });
 });
 
-// Admin Telegram bot webhook (separate bot) — must be before the authed router.
+// Admin bot webhook
 app.post('/api/admin/webhook', async (req,res)=>{
   try { await adminBotWebhook(req.body || {}); } catch(e){ console.error('[admin webhook]', e.message); }
   res.json({ ok:true });
 });
 
-// Admin web dashboard API (token-guarded inside the router).
+// Admin web dashboard API
 app.use('/api/admin', adminRouter);
 
-// TON Connect manifest (generated so the url always matches the live origin).
+// TON Connect manifest
 app.get('/tonconnect-manifest.json', (req,res)=>{
   const origin = `${req.protocol}://${req.get('host')}`;
   res.json({
-    url: origin,
-    name: 'TRIBES',
+    url: origin, name: 'TRIBES',
     iconUrl: origin + '/icon.png',
-    termsOfUseUrl: origin + '/',
-    privacyPolicyUrl: origin + '/'
+    termsOfUseUrl: origin + '/', privacyPolicyUrl: origin + '/'
   });
 });
 
@@ -58,13 +81,17 @@ app.get('/tonconnect-manifest.json', (req,res)=>{
 app.use('/api', router);
 
 // static Mini App
-app.use(express.static(PUBLIC, { extensions:['html'], maxAge:'1h' }));
+app.use(express.static(PUBLIC, {
+  extensions:['html'], maxAge:'1h',
+  setHeaders(res, p){
+    if (p.endsWith('.html')) res.setHeader('Cache-Control','no-cache');
+  },
+}));
 app.get('*', (req,res)=>{
   if (req.path.startsWith('/api/')) return res.status(404).json({ error:'not found' });
   res.sendFile(path.join(PUBLIC, 'index.html'));
 });
 
-// error handler
 app.use((err,req,res,next)=>{
   console.error('[api error]', err.message);
   res.status(500).json({ error: 'server error', detail: err.message });
@@ -75,7 +102,8 @@ export { app };
 if (process.env.TRIBES_TEST !== '1') {
   initDb()
     .then(()=> loadConfig(q))
-    .catch(e=>console.error('[db init]', e.message))
+    .then(()=> startFlusher(Number(process.env.PUSH_FLUSH_SECONDS)||20))
+    .catch(e=>console.error('[boot]', e.message))
     .finally(()=>{
       app.listen(PORT, ()=> {
         console.log(`TRIBES server on :${PORT}`);

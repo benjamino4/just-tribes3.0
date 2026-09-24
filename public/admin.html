@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
 <title>TRIBES — Warden Console</title>
-<link rel="stylesheet" href="admin.css">
+<link rel="stylesheet" href="admin.css?v=3">
 </head>
 <body>
 <div class="embers" aria-hidden="true">
@@ -21,13 +21,12 @@
   </svg>
 </div>
 
-<!-- LOGIN -->
 <section id="login" class="gate">
   <div class="gate-card">
     <svg class="crest" viewBox="0 0 64 64" width="64" height="64" aria-hidden="true">
       <path d="M32 4c6 10-4 14 2 24 4 6 2 12-2 16-5-3-8-9-6-15-6 4-9 12-6 20 2 6 8 11 12 11 9 0 16-7 16-16 0-14-10-22-16-40z"
         fill="#ff7a18"><animate attributeName="opacity" values="0.75;1;0.75" dur="2.4s" repeatCount="indefinite"/></path>
-  </svg>
+    </svg>
     <h1>The Warden&rsquo;s Gate</h1>
     <p class="muted">Keeper of the Great Pyre. Present your token.</p>
     <input id="token" type="password" placeholder="Admin token" autocomplete="off">
@@ -36,7 +35,6 @@
   </div>
 </section>
 
-<!-- CONSOLE -->
 <main id="console" hidden>
   <header class="topbar">
     <div class="brand"><span class="dot"></span> TRIBES · Warden Console</div>
@@ -53,18 +51,17 @@
     <button class="tab" data-tab="wars">Wars</button>
     <button class="tab" data-tab="payments">Payments</button>
     <button class="tab" data-tab="economy">Economy</button>
+    <button class="tab" data-tab="trials">Trials</button>
+    <button class="tab" data-tab="bonfire">Bonfire</button>
+    <button class="tab" data-tab="names">Names</button>
+    <button class="tab" data-tab="codes">Codes</button>
     <button class="tab" data-tab="control">Control</button>
   </nav>
 
-  <section class="panel active" id="tab-stats">
-    <div id="statCards" class="cards"></div>
-  </section>
+  <section class="panel active" id="tab-stats"><div id="statCards" class="cards"></div></section>
 
   <section class="panel" id="tab-players">
-    <div class="row">
-      <input id="pQuery" placeholder="Search name, @username or id">
-      <button id="pSearch" class="btn">Search</button>
-    </div>
+    <div class="row"><input id="pQuery" placeholder="Search name, @username or id"><button id="pSearch" class="btn">Search</button></div>
     <div id="playerList" class="list"></div>
     <div id="playerCard" class="detail"></div>
   </section>
@@ -75,48 +72,60 @@
   </section>
 
   <section class="panel" id="tab-wars">
-    <div class="row">
-      <input id="waAtk" placeholder="Attacker tribe id" class="num">
-      <input id="waDef" placeholder="Defender tribe id" class="num">
-      <button id="waStart" class="btn">Force war</button>
-    </div>
+    <div class="row"><input id="waAtk" placeholder="Attacker tribe id" class="num"><input id="waDef" placeholder="Defender tribe id" class="num"><button id="waStart" class="btn">Force war</button></div>
     <div id="warList" class="list"></div>
   </section>
 
-  <section class="panel" id="tab-payments">
-    <div id="payList" class="list"></div>
-  </section>
+  <section class="panel" id="tab-payments"><div id="payList" class="list"></div></section>
 
   <section class="panel" id="tab-economy">
-    <p class="muted">Live economy multipliers &amp; caps. Changes apply instantly — no redeploy.</p>
+    <p class="muted">Live economy multipliers &amp; caps. Changes apply instantly.</p>
     <div id="econGrid" class="econ"></div>
     <button id="econReset" class="btn ghost">Reset all to defaults</button>
+  </section>
+
+  <section class="panel" id="tab-trials">
+    <div class="row"><button id="trialsNew" class="btn primary">New trial</button><button id="trialsReset" class="btn ghost">Reset all cooldowns</button></div>
+    <div id="trialsList" class="list"></div>
+    <div id="trialsEditor" class="detail"></div>
+  </section>
+
+  <section class="panel" id="tab-bonfire">
+    <div class="row"><input id="bfTitle" placeholder="Title" value="Double Ash"><select id="bfMetric" class="num"><option>ember</option><option>loyalty</option><option>ash</option><option>checkin</option><option>war</option></select><input id="bfMult" class="num" type="number" step="0.1" value="2"><input id="bfHours" class="num" type="number" value="2"><button id="bfStart" class="btn primary">Start now</button></div>
+    <div id="bfList" class="list"></div>
+  </section>
+
+  <section class="panel" id="tab-names">
+    <div class="row"><input id="nmName" placeholder="New tribe name"><button id="nmAdd" class="btn primary">Add</button></div>
+    <div id="nmList" class="list"></div>
+  </section>
+
+  <section class="panel" id="tab-codes">
+    <div class="row"><input id="cdCode" placeholder="CODE"><select id="cdKind" class="num"><option>ember</option><option>loyalty</option></select><input id="cdAmount" class="num" type="number" placeholder="amount"><input id="cdMax" class="num" type="number" placeholder="max uses"><input id="cdDays" class="num" type="number" placeholder="expires days"><button id="cdAdd" class="btn primary">Create</button></div>
+    <div id="cdList" class="list"></div>
   </section>
 
   <section class="panel" id="tab-control">
     <div class="ctl-card">
       <h3>Maintenance mode</h3>
-      <p class="muted">Freezes all player actions (reads still work). Use during migrations.</p>
-      <div class="row">
-        <button id="maintOn" class="btn warn">Enable</button>
-        <button id="maintOff" class="btn">Disable</button>
-      </div>
+      <p class="muted">Freezes player actions (reads still work).</p>
+      <div class="row"><button id="maintOn" class="btn warn">Enable</button><button id="maintOff" class="btn">Disable</button></div>
     </div>
     <div class="ctl-card">
       <h3>Broadcast</h3>
-      <p class="muted">Sends a message to every non-banned player via the game bot.</p>
+      <p class="muted">Send a message to every non-banned player via the game bot.</p>
       <textarea id="bcText" rows="3" placeholder="Your message to the tribes…"></textarea>
       <button id="bcSend" class="btn primary">Send to all</button>
     </div>
     <div class="ctl-card danger">
       <h3>Season wipe</h3>
-      <p class="muted">Resets Loyalty &amp; war records for all tribes. Balances are kept.</p>
+      <p class="muted">Resets Loyalty &amp; war records for all tribes. Balances kept.</p>
       <button id="wipeBtn" class="btn danger">Wipe season</button>
     </div>
   </section>
 
   <div id="toast" class="toast"></div>
 </main>
-<script src="admin.js"></script>
+<script src="admin.js?v=3"></script>
 </body>
 </html>
