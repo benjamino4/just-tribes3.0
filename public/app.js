@@ -609,164 +609,24 @@ async function doCreate(btn){
     await refresh();
   });
 }
-async function actJoin(btn, id){
-  await doAct(btn, async () => {
-    await api('/tribe/join', { tribeId: Number(id) });
-    haptic();
-    toast('You joined the fire!','good');
-    await refresh();
-  });
-}
-async function actLeave(btn){
-  await doAct(btn, async () => {
-    await api('/tribe/leave');
-    toast('You left the tribe','warn');
-    await refresh();
-  });
-}
-function openDonate(){
-  sheet(`<h3>Stoke the Great Pyre</h3><div class="sub">You hold ${fmt(S.user.ember)} Ember</div>
-    <div class="field"><input id="dAmt" type="number" min="1" placeholder="Ember to donate"/></div>
-    <div style="display:flex;gap:8px;margin-bottom:14px">
-      ${[500,2500,10000].map(v=>`<button class="btn btn-stone" style="flex:1;padding:12px 8px;font-size:.82rem" data-act="setDon" data-val="${v}">${fmt(v)}</button>`).join('')}</div>
-    <button class="btn btn-primary btn-shine btn-block" data-act="doDonate">Donate to the Pyre</button>
-    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Cancel</button>`);
-}
-function setDon(btn, v){ const i=$('#dAmt'); if(i) i.value = v; }
-async function doDonate(btn){
-  await doAct(btn, async () => {
-    const amt = Math.floor(Number($('#dAmt')?.value)||0);
-    if(amt<1){ toast('Enter an amount','warn'); return; }
-    const r = await api('/tribe/donate', { amount: amt });
-    closeSheet();
-    haptic('medium');
-    toast('Donated '+fmt(r.donated)+' Ember to the Pyre','good');
-    await refresh();
-  });
-}
+/* ---------- WAR (patched render) ---------- */
+// The War screen builds its arena DOM once and patches it on every
+// render. The 20s ticker no longer rebuilds the whole arena — it
+// just calls updateWarScreen(), which touches a handful of nodes.
+//
+// State machine (kept in warState.mode):
+//   'loading'  → skeleton cards
+//   'none'     → no war; declare button + trials of war
+//   'active'   → war in progress
+//   'done'     → war resolved
+//
+// When the mode changes we swap the inner content of the wrap element.
+// When the mode stays the same we patch in place.
 
-/* ---------- KIVA ---------- */
-let kivaEs = null, kivaPoll = null, kivaLastId = 0, kivaOpen = false;
-async function openKiva(){
-  if(!S.tribe) return;
-  kivaOpen = true;
-  sheet(`<div class="kiva-sheet">
-    <div class="kiva-head"><b>${esc(S.tribe.name)} — Kiva</b>
-      <button class="btn btn-ghost" data-act="closeKiva" style="padding:6px 10px;font-size:.72rem">Close</button></div>
-    <div class="kiva-feed" id="kivaFeed"><div class="skeleton" style="height:44px"></div></div>
-    <div class="kiva-compose">
-      <input id="kivaInput" maxlength="280" placeholder="Say something to the tribe…"/>
-      <button class="send" data-act="sendKiva">➤</button>
-    </div>
-  </div>`);
-  await loadKiva();
-  connectKivaStream();
-}
-function closeKiva(){
-  kivaOpen = false;
-  if(kivaEs){ try{ kivaEs.close(); }catch(e){} kivaEs=null; }
-  if(kivaPoll){ clearInterval(kivaPoll); kivaPoll=null; }
-  closeSheet();
-}
-async function loadKiva(){
-  try{
-    const d = await api('/kiva');
-    const rows = d.messages || [];
-    kivaLastId = rows.length ? rows[rows.length-1].id : 0;
-    renderKivaFeed(rows);
-  }catch(e){ const f=$('#kivaFeed'); if(f) f.innerHTML = '<p class="tiny">Could not reach the Kiva.</p>'; }
-}
-function renderKivaFeed(rows){
-  const feed = $('#kivaFeed'); if(!feed) return;
-  feed.innerHTML = rows.map(m => kivaMsgHtml(m)).join('');
-  feed.scrollTop = feed.scrollHeight;
-}
-function kivaMsgHtml(m){
-  if(m.kind==='system' || m.kind==='war' || m.kind==='level'){
-    return `<div class="kiva-msg system"><b>${esc(m.body)}</b></div>`;
-  }
-  const mine = S.user && m.user_id === S.user.id;
-  const role = (m.role||'').toLowerCase();
-  const roleTag = (role && role!=='toddler') ? `<span class="km-role">${esc(m.role)}</span>` : '';
-  const pin = m.pinned ? '📌 ' : '';
-  const canPin = ['Chief','Head','Elder'].includes(S.user.role);
-  return `<div class="kiva-msg ${mine?'self':''} ${m.pinned?'pinned':''}" data-mid="${m.id}">
-    <div class="km-av" style="${m.name_color?('color:'+m.name_color):''}">${esc((m.first_name||'?').slice(0,1).toUpperCase())}</div>
-    <div class="km-body">
-      <div class="km-meta"><span class="km-name">${esc(m.first_name||m.username||'Kin')}</span>${roleTag}<span>${fmtTime(m.created_at)}</span></div>
-      <div class="km-text">${pin}${esc(m.body)}</div>
-      ${canPin?`<div class="km-actions"><button data-act="pinKiva" data-val="${m.id}">${m.pinned?'Unpin':'Pin'}</button></div>`:''}
-    </div>
-  </div>`;
-}
-function fmtTime(t){
-  try{
-    const d = new Date(t);
-    const hh = String(d.getHours()).padStart(2,'0');
-    const mm = String(d.getMinutes()).padStart(2,'0');
-    return hh+':'+mm;
-  }catch(e){ return ''; }
-}
-function connectKivaStream(){
-  if(!S.tribe) return;
-  try{
-    kivaEs = new EventSource('/api/kiva/stream?tribeId='+encodeURIComponent(S.tribe.id));
-    let opened = false;
-    const guard = setTimeout(()=>{ if(!opened && kivaEs){ kivaEs.close(); kivaEs=null; startKivaPoll(); } }, 3000);
-    kivaEs.onopen = ()=>{ opened = true; clearTimeout(guard); if(kivaPoll){ clearInterval(kivaPoll); kivaPoll=null; } };
-    kivaEs.onmessage = ev => {
-      try{
-        const msg = JSON.parse(ev.data);
-        if(msg.type==='message' && msg.message && msg.message.id > kivaLastId){
-          kivaLastId = msg.message.id;
-          const feed = $('#kivaFeed');
-          if(feed){ feed.insertAdjacentHTML('beforeend', kivaMsgHtml(msg.message)); feed.scrollTop = feed.scrollHeight; }
-        } else if(msg.type==='pin'){
-          const node = document.querySelector(`[data-mid="${msg.id}"]`);
-          if(node) node.classList.toggle('pinned', !!msg.pinned);
-        }
-      }catch(e){}
-    };
-  }catch(e){ startKivaPoll(); }
-}
-function startKivaPoll(){
-  if(kivaPoll) return;
-  kivaPoll = setInterval(async ()=>{
-    if(!kivaOpen){ clearInterval(kivaPoll); kivaPoll=null; return; }
-    try{
-      const d = await api('/kiva?since='+kivaLastId);
-      const rows = d.messages || [];
-      if(rows.length){
-        const feed = $('#kivaFeed');
-        for(const m of rows){
-          if(m.id > kivaLastId){
-            kivaLastId = m.id;
-            if(feed){ feed.insertAdjacentHTML('beforeend', kivaMsgHtml(m)); feed.scrollTop = feed.scrollHeight; }
-          }
-        }
-      }
-    }catch(e){}
-  }, 6000);
-}
-async function sendKiva(){
-  const inp = $('#kivaInput'); if(!inp) return;
-  const body = inp.value.trim();
-  if(!body) return;
-  inp.value = '';
-  try{ await api('/kiva', { body }); haptic(); }
-  catch(e){ toast(e.message,'bad'); inp.value = body; }
-}
-async function pinKiva(messageId){
-  try{
-    const node = document.querySelector(`[data-mid="${messageId}"]`);
-    const pinned = node ? !node.classList.contains('pinned') : true;
-    await api('/kiva/pin', { id: Number(messageId), pinned });
-    if(node) node.classList.toggle('pinned', pinned);
-  }catch(e){ toast(e.message,'bad'); }
-}
-
-/* ---------- WAR ---------- */
+let warState = null;    // { wrap, mode, ...refs }
 let warTimer = null;
+let warData = null;     // last-known war object
+
 function stopWarTicker(){ if(warTimer){ clearInterval(warTimer); warTimer=null; } }
 function startWarTicker(endAt){
   stopWarTicker();
@@ -778,29 +638,87 @@ function startWarTicker(endAt){
   tick();
   warTimer = setInterval(tick, 1000);
 }
+
+function warWrap(box){
+  if (!warState || warState.wrap.parentNode !== box){
+    warState = { wrap: document.createElement('div'), mode: null };
+    box.replaceChildren(warState.wrap);
+  }
+  return warState.wrap;
+}
+
+function setMode(mode){
+  if (warState.mode !== mode){
+    warState.wrap.replaceChildren();
+    warState.mode = mode;
+  }
+}
+
 async function renderWar(box){
   const u = S.user;
+  const wrap = warWrap(box);
+
   if(!u.tribe_id){
     stopWarTicker();
-    box.innerHTML = `<div class="empty"><span class="big">⚔️</span>
+    setMode('no-tribe');
+    if (warState.mode === 'no-tribe' && warState.rendered) return;
+    warState.rendered = true;
+    wrap.innerHTML = `<div class="empty"><span class="big">⚔️</span>
       <h2 style="margin:0;color:var(--gold);font-weight:800">No banner to raise</h2>
       <p class="tiny" style="margin-top:8px">You must belong to a tribe before you can wage war.</p></div>
       <button class="btn btn-primary btn-shine btn-block" data-act="gotoTribe">Go to Tribe</button>`;
     return;
   }
-  box.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+
+  // Show loading only on first load; subsequent refreshes keep the arena
+  // visible and patch in place.
+  if (!warData){
+    setMode('loading');
+    if (warState.rendered !== 'loading'){
+      warState.rendered = 'loading';
+      wrap.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
+    }
+  }
+
   let war = null;
   try{ war = (await api('/war')).war; }
-  catch(e){ if(TAB==='war') box.innerHTML = '<p class="tiny">Could not reach the war drums.</p>'; return; }
-  if(TAB!=='war') return;
-  if(!war){ renderWarNone(box); return; }
-  if(war.status==='resolved'){ renderWarDone(box, war); return; }
-  renderWarActive(box, war);
+  catch(e){
+    if (TAB==='war'){
+      setMode('error');
+      if (warState.rendered !== 'error'){
+        warState.rendered = 'error';
+        wrap.innerHTML = '<p class="tiny">Could not reach the war drums.</p>';
+      }
+    }
+    return;
+  }
+  if (TAB !== 'war') return;
+
+  warData = war;
+
+  if (!war){ renderWarNone(wrap); return; }
+  if (war.status === 'resolved'){ renderWarDone(wrap, war); return; }
+  renderWarActive(wrap, war);
 }
-function renderWarNone(box){
+
+function renderWarNone(wrap){
   stopWarTicker();
+  setMode('none');
   const can = ['Chief','Head','Elder'].includes(S.user.role);
-  box.innerHTML = `
+
+  if (warState.rendered === 'none'){
+    // Same mode already rendered → patch just what can change.
+    const btn = wrap.querySelector('[data-act="declareWar"]');
+    if (btn){
+      btn.disabled = !can;
+      btn.className = 'btn ' + (can ? 'btn-danger btn-shine' : 'btn-stone') + ' btn-block';
+      btn.textContent = can ? '⚔️ Declare War' : 'Only Elders, Heads & the Chief may declare war';
+    }
+    return;
+  }
+
+  warState.rendered = 'none';
+  wrap.innerHTML = `
   <div class="war-arena">
     <div class="war-emblem"><div class="vs">WAR DRUMS</div>
       <p class="tiny" style="margin:6px 0 14px">Declare war to be matched against a random rival tribe. Winner seizes Ember and tribute.</p></div>
@@ -815,51 +733,83 @@ function renderWarNone(box){
         <div class="tiny">${esc(c.desc)}</div></div>
       <span class="pill pill-blood">${c.days}d · ${c.stake}%</span></div></div>`).join('')}`;
 }
-function renderWarActive(box, war){
-  const mineA = war.mine==='attacker';
-  const me = mineA?war.attacker:war.defender;
-  const foe = mineA?war.defender:war.attacker;
-  const myScore = Number(mineA?war.attacker_score:war.defender_score);
-  const foeScore = Number(mineA?war.defender_score:war.attacker_score);
+
+function renderWarActive(wrap, war){
+  const mineA = war.mine === 'attacker';
+  const me = mineA ? war.attacker : war.defender;
+  const foe = mineA ? war.defender : war.attacker;
+  const myScore = Number(mineA ? war.attacker_score : war.defender_score);
+  const foeScore = Number(mineA ? war.defender_score : war.attacker_score);
   const goal = Number(war.goal);
   const tot = myScore + foeScore || 1;
-  const mePct = clamp(myScore/tot*100, 0, 100);
-  const leadTxt = myScore>foeScore?'You lead':myScore<foeScore?'You trail':'Dead even';
-  box.innerHTML = `
-  <div class="war-arena">
-    <div class="war-emblem"><div class="vs">⚔️ WAR ⚔️</div></div>
-    <div class="versus">
-      <div class="war-totem"><div class="tm">${artSvg(me.crest)}</div><b>${esc(me.name)}</b><div class="sc">${fmt(myScore)}</div></div>
-      <div class="clash">🔥</div>
-      <div class="war-totem foe"><div class="tm">${artSvg(foe.crest)}</div><b>${esc(foe.name)}</b><div class="sc">${fmt(foeScore)}</div></div>
+  const mePct = clamp(myScore / tot * 100, 0, 100);
+  const leadTxt = myScore>foeScore ? 'You lead' : myScore<foeScore ? 'You trail' : 'Dead even';
+
+  // Rebuild only when switching into active mode, or when the war id changes.
+  const sameWar = warState.rendered === 'active' && warState.warId === war.id;
+
+  if (!sameWar){
+    setMode('active');
+    warState.rendered = 'active';
+    warState.warId = war.id;
+    wrap.innerHTML = `
+    <div class="war-arena">
+      <div class="war-emblem"><div class="vs">⚔️ WAR ⚔️</div></div>
+      <div class="versus">
+        <div class="war-totem"><div class="tm">${artSvg(me.crest)}</div><b data-war="me-name"></b><div class="sc" data-war="me-score"></div></div>
+        <div class="clash">🔥</div>
+        <div class="war-totem foe"><div class="tm">${artSvg(foe.crest)}</div><b data-war="foe-name"></b><div class="sc" data-war="foe-score"></div></div>
+      </div>
+      <div class="warbar"><i class="me" data-war="me-fill" style="width:0%"></i><i class="foe" data-war="foe-fill" style="width:0%"></i><span class="mid"></span></div>
+      <p class="tiny" style="text-align:center;margin:6px 0 0"><span data-war="lead"></span> · goal <span data-war="goal"></span></p>
     </div>
-    <div class="warbar"><i class="me" style="width:${mePct}%"></i><i class="foe" style="width:${100-mePct}%"></i><span class="mid"></span></div>
-    <p class="tiny" style="text-align:center;margin:6px 0 0">${leadTxt} · goal ${fmt(goal)}</p>
-  </div>
 
-  <div class="scroll">
-    <div class="cg">${war.challenge.glyph||'⚔️'}</div>
-    <div class="cn">${esc(war.challenge.name||'Trial of War')}</div>
-    <div class="cd">${esc(war.challenge.desc||'')}</div>
-    <div class="goal">First to ${fmt(goal)} — or highest score when the fire dies — wins.</div>
-  </div>
+    <div class="scroll">
+      <div class="cg">${war.challenge.glyph||'⚔️'}</div>
+      <div class="cn">${esc(war.challenge.name||'Trial of War')}</div>
+      <div class="cd">${esc(war.challenge.desc||'')}</div>
+      <div class="goal">First to <span data-war="goal2"></span> — or highest score when the fire dies — wins.</div>
+    </div>
 
-  <div class="wmeta">
-    <div class="box"><b id="warCd" class="cd-live">…</b><span>Time left</span></div>
-    <div class="box"><b>${fmt(war.reward_ember)}</b><span>Reward</span></div>
-    <div class="box"><b>${war.stake_pct}%</b><span>Tribute</span></div>
-  </div>`;
-  startWarTicker(new Date(war.end_at).getTime());
+    <div class="wmeta">
+      <div class="box"><b id="warCd" class="cd-live">…</b><span>Time left</span></div>
+      <div class="box"><b>${fmt(war.reward_ember)}</b><span>Reward</span></div>
+      <div class="box"><b>${war.stake_pct}%</b><span>Tribute</span></div>
+    </div>`;
+    startWarTicker(new Date(war.end_at).getTime());
+  }
+
+  // Patch values (identical logic whether we just built or are re-rendering)
+  const q = (k)=>wrap.querySelector(`[data-war="${k}"]`);
+  const setT = (node, v)=>{ if(node && node.textContent !== String(v)) node.textContent = String(v); };
+  setT(q('me-name'), me.name);
+  setT(q('foe-name'), foe.name);
+  setT(q('me-score'), fmt(myScore));
+  setT(q('foe-score'), fmt(foeScore));
+  setT(q('lead'), leadTxt);
+  setT(q('goal'), fmt(goal));
+  setT(q('goal2'), fmt(goal));
+
+  const meFill = q('me-fill');
+  const foeFill = q('foe-fill');
+  if (meFill) meFill.style.width = mePct.toFixed(1)+'%';
+  if (foeFill) foeFill.style.width = (100-mePct).toFixed(1)+'%';
 }
-function renderWarDone(box, war){
+
+function renderWarDone(wrap, war){
   stopWarTicker();
   const myId = S.tribe ? Number(S.tribe.id) : null;
-  const won = war.winner_id && Number(war.winner_id)===myId;
+  const won = war.winner_id && Number(war.winner_id) === myId;
   const draw = !war.winner_id;
-  const mineA = war.mine==='attacker';
-  const foe = mineA?war.defender:war.attacker;
+  const mineA = war.mine === 'attacker';
+  const foe = mineA ? war.defender : war.attacker;
   const big = draw?'🤝':won?'🏆':'💀';
-  box.innerHTML = `
+
+  setMode('done');
+  if (warState.rendered === 'done' && warState.warId === war.id) return;
+  warState.rendered = 'done';
+  warState.warId = war.id;
+  wrap.innerHTML = `
   <div class="war-arena" style="text-align:center">
     <div class="war-emblem"><div class="vs">${draw?'STALEMATE':won?'VICTORY':'DEFEAT'}</div></div>
     <span style="font-size:3.2rem;display:block;margin:6px 0 4px">${big}</span>
@@ -868,22 +818,26 @@ function renderWarDone(box, war){
       :('Your tribe fell to '+esc(foe.name)+', paying '+fmt(war.tribute)+' Ember in tribute.')}</p>
   </div>
   <button class="btn btn-primary btn-shine btn-block" data-act="declareWar" ${['Chief','Head','Elder'].includes(S.user.role)?'':'disabled'}>⚔️ Rally for a New War</button>`;
+  if (won) setTimeout(()=>{ try{ if (window.__tribesCeremony) window.__tribesCeremony('🏆','VICTORY','Your tribe stands.',2400); }catch(e){} }, 300);
 }
+
 async function actDeclare(btn){
   await doAct(btn, async () => {
     const r = await api('/war/declare');
     haptic('heavy');
     toast('War declared against '+r.war.defender.name+'!','good');
+    // Force the War screen to re-fetch and rebuild for the new war id.
+    warData = null;
+    warState.rendered = null;
     await refresh();
     renderScreen('war');
   });
 }
-
 /* ================= RANKS — patched render ================= */
-// This screen uses build-once / update-in-place. The DOM is created the
-// first time you visit Ranks and kept for the rest of the session. Every
-// subsequent render patches only the text and width values that changed.
-let ranksState = null;   // { root, listEl, rows: Map<tribeId, {row, els}> }
+// Builds the Ranks screen DOM once, then patches it on every render.
+// If perf.js didn't load, falls back to innerHTML rendering.
+
+let ranksState = null;
 
 function buildRanksScreen(){
   const p = PERF || null;
