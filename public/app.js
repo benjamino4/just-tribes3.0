@@ -4,6 +4,7 @@
    Ranks + War screens use build-once/update-in-place via window.__tribes_perf.
 ===================================================================== */
 'use strict';
+window.addEventListener('error', function(e){ var b = document.getElementById('bootMsg'); if (b) b.textContent = 'Error: ' + (e.message || 'unknown'); });
 const TG = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 try{
   if(TG){
