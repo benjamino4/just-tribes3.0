@@ -1021,8 +1021,17 @@ function renderBonfire(){
 let pushTimer = null;
 function startPushPoller(){
   if(pushTimer) return;
-  pushTimer = setInterval(()=>{ if(document.visibilityState==='visible') refresh(); }, 45000);
-}
+  pushTimer = setInterval(()=>{
+    if(document.visibilityState!=='visible') return;
+    if(document.querySelector('.sheet-bg')) return;
+    const a = document.activeElement;
+    if(a && (a.tagName==='INPUT' || a.tagName==='TEXTAREA')) return;
+    refresh();
+  }, 60000);
+  document.addEventListener('visibilitychange', ()=>{
+    if(document.visibilityState==='visible') refresh();
+  });
+}s
 
 /* ---------- action registry ---------- */
 const ACTS = {
