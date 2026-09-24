@@ -1,6 +1,5 @@
 // ---------------------------------------------------------------------------
-// Telegram Stars (XTR) — the ONLY way soft "Stars" shows up now is as a
-// price rail. Items grant Ember, relics, cosmetics, or one-time bundles.
+// Telegram Stars (XTR) payments. Batch 1 adds war-revamp products.
 // ---------------------------------------------------------------------------
 import { q } from './db.js';
 import { CFG } from './config.js';
@@ -16,32 +15,30 @@ async function tg(method, body){
   return j.result;
 }
 
-// The catalogue. Every entry is Stars-priced. Grants never include `stars`.
 export const STAR_ITEMS = {
-  // Ember packs
   spark:   { title:'Spark Pack',    desc:'5,000 Ember',                 stars:60,  grant:{ember:5000} },
   flame:   { title:'Flame Pack',    desc:'30,000 Ember (+20% bonus)',   stars:300, grant:{ember:36000} },
   blaze:   { title:'Blaze Pack',    desc:'80,000 Ember (+35% bonus)',   stars:700, grant:{ember:108000} },
   inferno: { title:'Inferno Pack',  desc:'250,000 Ember (+60% bonus)',  stars:2000,grant:{ember:400000} },
 
-  // Relics
   firestone: { title:'Firestone Relic',  desc:'+10% idle Ember, forever',    stars:120, grant:{relic:'firestone'} },
   boneidol:  { title:'Bone Idol Relic',  desc:'+5% tribe loyalty share',     stars:280, grant:{relic:'boneidol'} },
   sundisc:   { title:'Sun Disc Relic',   desc:'+25% Ash cap & 12h offline',  stars:640, grant:{relic:'sundisc'} },
   moonshard: { title:'Moon Shard Relic', desc:'2× streak rewards',           stars:520, grant:{relic:'moonshard'} },
 
-  // Tribe boosts (apply to your tribe's treasury)
   pyreboost: { title:'Pyre Boost',       desc:'+10,000 Ember to the Pyre',   stars:80,  grant:{tribe_ember:10000} },
 
-  // Cosmetics
   name_color_ember: { title:'Name: Ember',  desc:'Name glows ember in the Kiva', stars:90,  grant:{cosmetic:'name_color','value':'#ff7a18'} },
   name_color_jade:  { title:'Name: Jade',   desc:'Name glows jade in the Kiva',  stars:90,  grant:{cosmetic:'name_color','value':'#2adc8c'} },
   name_color_void:  { title:'Name: Void',   desc:'Name glows void in the Kiva',  stars:90,  grant:{cosmetic:'name_color','value':'#9a6bff'} },
   glow_ember:       { title:'Aura: Ember',  desc:'Ember halo around your avatar', stars:120, grant:{cosmetic:'avatar_glow','value':'ember'} },
   glow_frost:       { title:'Aura: Frost',  desc:'Frost halo around your avatar', stars:120, grant:{cosmetic:'avatar_glow','value':'frost'} },
 
-  // One-time starter
   starter_bundle: { title:'Starter Bundle', desc:'10,000 Ember + a random relic + Ember name color', stars:150, oneTime:true, grant:{starter:true} },
+
+  // Batch 1: war revamp products
+  war_chest_topup: { title:'War Chest Top-Up', desc:'+5,000 Ember into your tribe\'s war chest', stars:100, grant:{war_chest:5000} },
+  rally_burst:     { title:'Rally Burst',      desc:'One free Rally in the current war',           stars:50,  grant:{war_rally_burst:1}, requiresWar:true },
 };
 
 export async function createStarInvoice(userId, itemId){
@@ -50,6 +47,15 @@ export async function createStarInvoice(userId, itemId){
   if (it.oneTime){
     const ex = await q(`SELECT 1 FROM payments WHERE user_id=$1 AND payload=$2 AND status='paid'`, [userId, itemId]);
     if (ex.rowCount) throw new Error('Already purchased');
+  }
+  if (it.requiresWar){
+    const u = (await q('SELECT tribe_id FROM users WHERE id=$1', [userId])).rows[0];
+    if (!u || !u.tribe_id) throw new Error('Join a tribe first');
+    const w = (await q(
+      `SELECT 1 FROM wars WHERE status='active' AND (attacker_id=$1 OR defender_id=$1)`,
+      [u.tribe_id]
+    ));
+    if (!w.rowCount) throw new Error('No active war for your tribe');
   }
   const payload = JSON.stringify({ u:userId, i:itemId, t:Date.now() });
   return tg('createInvoiceLink', {
@@ -69,32 +75,24 @@ async function grant(userId, itemId, it, chargeId, payload){
      RETURNING id`,
     [userId, chargeId, payload, it.stars]
   );
-  if (!ins.rowCount) return; // webhook retry
+  if (!ins.rowCount) return;
 
   const g = it.grant || {};
 
-  if (g.ember){
-    await q('UPDATE users SET ember = ember + $1 WHERE id=$2', [g.ember, userId]);
-  }
+  if (g.ember) await q('UPDATE users SET ember = ember + $1 WHERE id=$2', [g.ember, userId]);
   if (g.relic){
     const t = await q('SELECT tribe_id FROM users WHERE id=$1', [userId]);
-    if (t.rows[0]?.tribe_id) {
-      await q('UPDATE tribes SET relics_total = relics_total + 1 WHERE id=$1', [t.rows[0].tribe_id]);
-    }
+    if (t.rows[0]?.tribe_id) await q('UPDATE tribes SET relics_total = relics_total + 1 WHERE id=$1', [t.rows[0].tribe_id]);
   }
   if (g.tribe_ember){
     const t = await q('SELECT tribe_id FROM users WHERE id=$1', [userId]);
-    if (t.rows[0]?.tribe_id) {
-      await q('UPDATE tribes SET treasury = treasury + $1 WHERE id=$2', [g.tribe_ember, t.rows[0].tribe_id]);
-    } else {
-      await q('UPDATE users SET ember = ember + $1 WHERE id=$2', [g.tribe_ember, userId]);
-    }
+    if (t.rows[0]?.tribe_id) await q('UPDATE tribes SET treasury = treasury + $1 WHERE id=$2', [g.tribe_ember, t.rows[0].tribe_id]);
+    else await q('UPDATE users SET ember = ember + $1 WHERE id=$2', [g.tribe_ember, userId]);
   }
   if (g.cosmetic){
     await q(
       `INSERT INTO cosmetic_purchases (user_id, cosmetic_id, kind, value)
-       VALUES ($1,$2,$3,$4)
-       ON CONFLICT (user_id, cosmetic_id) DO NOTHING`,
+       VALUES ($1,$2,$3,$4) ON CONFLICT (user_id, cosmetic_id) DO NOTHING`,
       [userId, itemId, g.cosmetic, g.value]
     );
     if (g.cosmetic === 'name_color') await q('UPDATE users SET name_color=$1 WHERE id=$2', [g.value, userId]);
@@ -107,6 +105,24 @@ async function grant(userId, itemId, it, chargeId, payload){
     if (t.rows[0]?.tribe_id) await q('UPDATE tribes SET relics_total = relics_total + 1 WHERE id=$1', [t.rows[0].tribe_id]);
     await q('UPDATE users SET name_color=COALESCE(name_color, $1) WHERE id=$2', ['#ff7a18', userId]);
     await q('INSERT INTO ledger(user_id,kind,detail) VALUES ($1,$2,$3)', [userId, 'starter_bundle', 'Starter bundle: '+relic]);
+  }
+  if (g.war_chest){
+    const t = await q('SELECT tribe_id FROM users WHERE id=$1', [userId]);
+    if (t.rows[0]?.tribe_id){
+      const w = (await q(
+        `SELECT id, attacker_id FROM wars WHERE status='active' AND (attacker_id=$1 OR defender_id=$1) LIMIT 1`,
+        [t.rows[0].tribe_id]
+      )).rows[0];
+      if (w){
+        const col = Number(w.attacker_id) === Number(t.rows[0].tribe_id) ? 'attacker_chest' : 'defender_chest';
+        await q(`UPDATE wars SET ${col} = ${col} + $1 WHERE id=$2`, [g.war_chest, w.id]);
+      }
+    }
+  }
+  if (g.war_rally_burst){
+    // Stored as a flag on the user's tribe's active war; consumed by the client next action.
+    await q('INSERT INTO ledger(user_id,kind,detail) VALUES ($1,$2,$3)',
+      [userId, 'rally_burst', 'Rally burst purchased']);
   }
 
   await q(
