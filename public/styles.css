@@ -544,3 +544,53 @@ b{font-weight:800}
 .skeleton::after{content:'';position:absolute;inset:0;
   background:linear-gradient(100deg,transparent,rgba(255,220,180,.09),transparent);
   animation:shine 1.6s linear infinite}
+
+/* ---------- Ranks screen (patched) ---------- */
+.ranks-wrap{ padding:0; }
+.ranks-list{ display:block; }
+.rk-name{ color:var(--gold); font-weight:800; }
+.rk-score{ color:var(--gold); font-weight:800; white-space:nowrap; }
+.rk-fill{
+  display:block;
+  height:100%;
+  border-radius:8px;
+  background:linear-gradient(90deg,var(--ember),var(--gold));
+  box-shadow:0 0 12px color-mix(in srgb, var(--ember) 70%, transparent);
+  transition:width .8s cubic-bezier(.2,.8,.2,1);
+  position:relative;
+}
+.rk-fill::after{
+  content:''; position:absolute; inset:0;
+  background:linear-gradient(90deg,transparent,rgba(255,255,255,.5),transparent);
+  animation:shine 2.6s linear infinite;
+}
+
+/* ---------- Perf tier: hide heavy effects ---------- */
+[data-perf="low"] .world::after{ display:none; }
+[data-perf="low"] .heat{ display:none; }
+[data-perf="low"] .campfire .flame.f2,
+[data-perf="low"] .campfire .flame.f3{ display:none; }
+[data-perf="low"] .campfire .ring{ animation:none; }
+[data-perf="low"] .campfire .logs::before,
+[data-perf="low"] .campfire .logs::after{ display:none; }
+
+[data-perf="low"] .card,
+[data-perf="low"] .chip,
+[data-perf="low"] .quest,
+[data-perf="low"] .trial,
+[data-perf="low"] .kiva-hero,
+[data-perf="low"] .featured,
+[data-perf="low"] .shop-card,
+[data-perf="low"] .item{
+  backdrop-filter:none !important;
+  -webkit-backdrop-filter:none !important;
+  background:linear-gradient(160deg,rgba(38,29,20,.92),rgba(20,14,10,.90));
+}
+
+[data-perf="mid"] .world::after{ display:none; }
+[data-perf="mid"] .campfire .flame.f3{ display:none; }
+
+/* ---------- will-change hints ---------- */
+.campfire .flame,
+.campfire .halo,
+.campfire .ring{ will-change:transform; }
