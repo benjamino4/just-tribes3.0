@@ -594,3 +594,53 @@ b{font-weight:800}
 .campfire .flame,
 .campfire .halo,
 .campfire .ring{ will-change:transform; }
+
+/* ---------- Hold-to-confirm trial ---------- */
+.hold-wrap{
+  display:flex; flex-direction:column; align-items:center; gap:14px;
+  padding:20px 0 4px;
+}
+.hold-btn{
+  position:relative;
+  width:132px; height:132px; border-radius:50%;
+  background:radial-gradient(circle at 40% 35%, color-mix(in srgb, var(--ember) 26%, #1a1208), #0d0805);
+  border:1px solid color-mix(in srgb, var(--ember) 40%, transparent);
+  display:grid; place-items:center; cursor:pointer;
+  user-select:none; -webkit-user-select:none; touch-action:none;
+  box-shadow:0 12px 28px rgba(0,0,0,.5), inset 0 1px 0 rgba(255,220,180,.08);
+  transition:transform .15s cubic-bezier(.2,.9,.2,1);
+}
+.hold-btn:active{ transform:scale(.96); }
+.hold-btn.holding{
+  box-shadow:0 12px 28px rgba(0,0,0,.5),
+             0 0 24px color-mix(in srgb, var(--ember) 60%, transparent),
+             inset 0 1px 0 rgba(255,220,180,.12);
+}
+.hold-ring{
+  position:absolute; inset:-3px; border-radius:50%;
+  --p:0;
+  background:conic-gradient(var(--ember) calc(var(--p)*1%), transparent 0);
+  -webkit-mask:radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+          mask:radial-gradient(farthest-side, transparent calc(100% - 5px), #000 calc(100% - 4px));
+  transition:none;
+}
+.hold-inner{
+  display:flex; flex-direction:column; align-items:center; gap:2px;
+  pointer-events:none;
+}
+.hold-ico{ font-size:2rem; }
+.hold-txt{ font-size:.62rem; letter-spacing:.14em; text-transform:uppercase; color:var(--gold); font-weight:800; }
+.hold-reward{
+  font-size:.82rem; font-weight:800; color:var(--bone);
+  display:inline-flex; gap:8px; padding:6px 12px; border-radius:999px;
+  background:rgba(255,255,255,.04); border:1px solid var(--line);
+}
+
+/* ---------- Rewarded-ad placeholder ---------- */
+.ad-placeholder{
+  text-align:center; padding:24px 16px; margin:10px 0 4px;
+  border-radius:18px;
+  background:linear-gradient(160deg, rgba(34,26,18,.72), rgba(15,11,8,.68));
+  border:1px dashed rgba(255,220,180,.22);
+}
+.ad-placeholder .ad-ico{ font-size:2.4rem; display:block; margin-bottom:4px; opacity:.85; }

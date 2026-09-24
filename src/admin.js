@@ -215,17 +215,19 @@ export async function trialsList(){
   return (await q(
     `SELECT id, slug, name, glyph, hint, reward_ember, reward_loyalty,
             cooldown_hours, max_per_window, window_hours, window_start_utc,
-            active, sort_order, created_at
+            active, sort_order, kind, created_at
        FROM trials ORDER BY sort_order, id`
   )).rows;
 }
 export async function trialCreate(adminId, data){
   const slug = String(data.slug||'').trim().toLowerCase().replace(/[^a-z0-9_]/g,'').slice(0,32);
   if (slug.length < 2) throw new Error('slug must be 2+ chars a-z0-9_');
+  const kind = data.kind === 'rewarded_ad' ? 'rewarded_ad' : 'standard';
   const r = await q(
     `INSERT INTO trials (slug, name, glyph, hint, reward_ember, reward_loyalty,
-                         cooldown_hours, max_per_window, window_hours, window_start_utc, active, sort_order)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12) RETURNING *`,
+                         cooldown_hours, max_per_window, window_hours, window_start_utc,
+                         active, sort_order, kind)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13) RETURNING *`,
     [slug,
      String(data.name||'').slice(0,40) || slug,
      String(data.glyph||'🔥').slice(0,8),
@@ -237,21 +239,23 @@ export async function trialCreate(adminId, data){
      Math.max(0, Math.floor(Number(data.window_hours)||0)),
      Math.max(0, Math.min(23, Math.floor(Number(data.window_start_utc)||0))),
      data.active !== false,
-     Math.floor(Number(data.sort_order)||100)]
+     Math.floor(Number(data.sort_order)||100),
+     kind]
   );
-  await audit(adminId, 'trialCreate', slug);
+  await audit(adminId, 'trialCreate', slug + ' [' + kind + ']');
   return r.rows[0];
 }
 export async function trialUpdate(adminId, id, data){
   const cur = (await q('SELECT * FROM trials WHERE id=$1', [id])).rows[0];
   if (!cur) throw new Error('no such trial');
   const merged = { ...cur, ...data };
+  const kind = merged.kind === 'rewarded_ad' ? 'rewarded_ad' : 'standard';
   const r = await q(
     `UPDATE trials SET
         name=$1, glyph=$2, hint=$3, reward_ember=$4, reward_loyalty=$5,
         cooldown_hours=$6, max_per_window=$7, window_hours=$8, window_start_utc=$9,
-        active=$10, sort_order=$11
-      WHERE id=$12 RETURNING *`,
+        active=$10, sort_order=$11, kind=$12
+      WHERE id=$13 RETURNING *`,
     [String(merged.name||'').slice(0,40),
      String(merged.glyph||'🔥').slice(0,8),
      String(merged.hint||'').slice(0,120),
@@ -263,9 +267,10 @@ export async function trialUpdate(adminId, id, data){
      Math.max(0, Math.min(23, Math.floor(Number(merged.window_start_utc)||0))),
      !!merged.active,
      Math.floor(Number(merged.sort_order)||100),
+     kind,
      id]
   );
-  await audit(adminId, 'trialUpdate', `trial ${id}`);
+  await audit(adminId, 'trialUpdate', `trial ${id} [${kind}]`);
   return r.rows[0];
 }
 export async function trialDelete(adminId, id){

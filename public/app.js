@@ -428,17 +428,108 @@ async function actAsh(btn){
     await refresh();
   });
 }
-async function actTrial(btn, slug){
-  await doAct(btn, async () => {
-    const r = await api('/trials/'+encodeURIComponent(slug));
-    if(!r.ok){ toast('Not ready yet','warn'); return; }
-    burstAt(btn, 12); popAt(btn,'+'+fmt(r.reward_ember)); haptic();
-    const parts=[];
-    if(r.reward_ember) parts.push('+'+fmt(r.reward_ember)+' Ember');
-    if(r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
-    toast(`Trial complete: ${parts.join(' · ')}`,'good');
-    await refresh();
-  });
+// Trial tap: open the appropriate sheet instead of instantly claiming.
+//   standard      → hold-to-confirm sheet (2s hold)
+//   rewarded_ad   → placeholder ad sheet ("coming soon")
+function actTrial(btn, slug){
+  const t = (S.trials || []).find(x => x.slug === slug);
+  if (!t) return;
+  if (t.kind === 'rewarded_ad') return openAdSheet(t);
+  return openHoldSheet(t);
+}
+
+// ---------- hold-to-confirm sheet ----------
+function openHoldSheet(trial){
+  const rewardParts = [];
+  if (trial.reward_ember)   rewardParts.push('🔥 +'+fmt(trial.reward_ember));
+  if (trial.reward_loyalty) rewardParts.push('❤ +'+fmt(trial.reward_loyalty));
+  const rewardText = rewardParts.join(' · ') || 'Reward';
+
+  sheet(`
+    <h3>${esc(trial.name)}</h3>
+    <div class="sub">${esc(trial.hint||'')}</div>
+    <div class="hold-wrap">
+      <button class="hold-btn" id="holdBtn" data-act="holdStart" data-val="${esc(trial.slug)}" type="button" aria-label="Hold to confirm">
+        <span class="hold-ring"></span>
+        <span class="hold-inner">
+          <span class="hold-ico">${esc(trial.glyph||'🔥')}</span>
+          <span class="hold-txt">Hold 2s</span>
+        </span>
+      </button>
+      <div class="hold-reward">${rewardText}</div>
+    </div>
+    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:14px">Cancel</button>
+  `);
+}
+
+// The hold logic: press → start a 2000ms timer that fills the ring; on
+// release (or if the timer never completes) → cancel. On complete → fire
+// the API call and close the sheet.
+let holdTimer = null, holdRAF = null, holdStartAt = 0;
+function holdStart(btn, slug){
+  const HOLD_MS = 2000;
+  const ring = btn.querySelector('.hold-ring');
+  const txt  = btn.querySelector('.hold-txt');
+  if (!ring) return;
+
+    holdStartAt = performance.now();
+  btn.classList.add('holding');
+  haptic('light');
+
+  const paint = () => {
+    const elapsed = performance.now() - holdStartAt;
+    const pct = Math.min(100, (elapsed / HOLD_MS) * 100);
+    ring.style.setProperty('--p', pct.toFixed(1));
+    if (pct >= 100){
+      // complete
+      holdCancelSilent();
+      haptic('heavy');
+      burstAt(btn, 12);
+      // fire the API
+      api('/trials/'+encodeURIComponent(slug)).then(r => {
+        if (!r.ok){ toast('Not ready yet','warn'); return; }
+        const parts=[];
+        if (r.reward_ember)   parts.push('+'+fmt(r.reward_ember)+' Ember');
+        if (r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
+        toast(`Trial complete: ${parts.join(' · ')}`,'good');
+        closeSheet();
+        refresh();
+      }).catch(e => toast(e.message,'bad'));
+      return;
+    }
+    holdRAF = requestAnimationFrame(paint);
+  };
+  holdRAF = requestAnimationFrame(paint);
+}
+function holdCancel(){
+  const el = document.querySelector('.hold-btn');
+  if (el) el.classList.remove('holding');
+  holdCancelSilent();
+}
+function holdCancelSilent(){
+  if (holdRAF){ cancelAnimationFrame(holdRAF); holdRAF = null; }
+  if (holdTimer){ clearTimeout(holdTimer); holdTimer = null; }
+  const el = document.querySelector('.hold-btn');
+  if (el){
+    el.classList.remove('holding');
+    const ring = el.querySelector('.hold-ring');
+    if (ring) ring.style.setProperty('--p', '0');
+  }
+}
+
+// ---------- rewarded-ad placeholder sheet ----------
+function openAdSheet(trial){
+  sheet(`
+    <h3>${esc(trial.name)}</h3>
+    <div class="sub">${esc(trial.hint||'Watch a short ad to claim.')}</div>
+    <div class="ad-placeholder">
+      <div class="ad-ico">📺</div>
+      <p class="tiny" style="margin:8px 0 0">Rewarded ads are coming soon.</p>
+      <p class="tiny" style="opacity:.7">Once an ad network is connected, tapping the button below will play a short ad and grant the reward.</p>
+    </div>
+    <button class="btn btn-stone btn-block" disabled style="margin-top:14px">Watch ad — coming soon</button>
+    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Close</button>
+  `);
 }
 async function actShare(btn){
   await doAct(btn, async () => {
@@ -1073,6 +1164,7 @@ const ACTS = {
   tapFire:   (b)=>tapFire(b),
   ash:       actAsh,
   trial:     actTrial,
+  holdStart: (b,v)=>holdStart(b,v),
   share:     actShare,
   openCreate, pickName, pickPalette, pickBanner,
   doCreate, join: actJoin, leave: actLeave,
@@ -1098,6 +1190,18 @@ function init(){
     if(e.target.closest('#crestBtn')){ setTab('tribe'); return; }
     if(e.target.closest('#tonBtn')){ tonToggle(); return; }
   });
+
+  // Hold-to-confirm: pointer events so it works on touch and mouse.
+  document.addEventListener('pointerdown', e=>{
+    const btn = e.target.closest('.hold-btn');
+    if(!btn) return;
+    e.preventDefault();
+    holdStart(btn, btn.dataset.val);
+  });
+  document.addEventListener('pointerup',   holdCancel);
+  document.addEventListener('pointercancel', holdCancel);
+  document.addEventListener('pointerleave', holdCancel);
+
   const rb = $('#retryBtn'); if(rb) rb.addEventListener('click', ()=>{ setBoot('Waking the ancestors…'); boot(); });
   const gr = $('#gateRetry'); if(gr) gr.addEventListener('click', ()=>{ $('#gate').style.display='none'; setBoot('Waking…'); boot(); });
   setInterval(()=>{

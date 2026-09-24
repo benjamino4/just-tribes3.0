@@ -9,7 +9,7 @@ export async function listTrials(includeInactive = false){
   const r = await q(
     `SELECT id, slug, name, glyph, hint, reward_ember, reward_loyalty,
             cooldown_hours, max_per_window, window_hours, window_start_utc,
-            active, sort_order
+            active, sort_order, kind
        FROM trials
       ${includeInactive ? '' : 'WHERE active = true'}
       ORDER BY sort_order, id`

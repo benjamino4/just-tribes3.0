@@ -148,6 +148,15 @@ router.post('/trials/:slug', rateLimit('trial', 30), async (req,res,next)=>{ try
   const slug = String(req.params.slug || '').slice(0,32);
   const t = (await q('SELECT * FROM trials WHERE slug=$1 AND active=true', [slug])).rows[0];
   if (!t) return res.status(404).json({ error:'no such trial' });
+
+  // Rewarded-ad trials are placeholder-only until an ad network is wired.
+  // The client never sends anything for these — it shows a "coming soon"
+  // sheet. If a request does arrive, refuse politely so we don't grant
+  // a reward without an ad having played.
+  if (t.kind === 'rewarded_ad'){
+    return res.json({ ok:false, reason:'ad_not_configured' });
+  }
+
   const u = req.user;
   const av = trialAvailable(t, u.trials_state || {});
   if (!av.ok) return res.json({ ok:false, reason: av.reason, nextIn: av.nextIn || 0 });
