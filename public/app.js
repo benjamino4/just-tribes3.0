@@ -1021,7 +1021,10 @@ function renderBonfire(){
 let pushTimer = null;
 function startPushPoller(){
   if(pushTimer) return;
-  pushTimer = setInterval(()=>{ if(document.visibilityState==='visible') refresh(); }, 45000);
+  pushTimer = setInterval(()=>{
+    if(document.visibilityState!=='visible') return;
+    refresh();
+  }, 90000);
 }
 
 /* ---------- action registry ---------- */
