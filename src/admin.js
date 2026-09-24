@@ -256,6 +256,17 @@ export async function trialDelete(adminId, id){
   await audit(adminId, 'trialDelete', r.rows[0].slug);
   return { id, deleted:true };
 }
+export async function setTrialMinigame(adminId, slug, minigame){
+  const allowed = ['hold','stoke','feed','cry','sift','ad'];
+  if (!allowed.includes(minigame)) throw new Error('bad minigame: ' + allowed.join(', '));
+  const r = await q(
+    `UPDATE trials SET minigame=$1 WHERE slug=$2 RETURNING slug, name, minigame`,
+    [minigame, String(slug||'').slice(0,32)]
+  );
+  if (!r.rowCount) throw new Error('no such trial');
+  await audit(adminId, 'setTrialMinigame', `${r.rows[0].slug} → ${minigame}`);
+  return r.rows[0];
+}
 export async function trialResetAll(adminId){
   const r = await resetAllTrials();
   await audit(adminId, 'trialResetAll', r.reset_at);
@@ -537,7 +548,7 @@ A.post('/trials',       wrap(req=>trialCreate(who(req), req.body)));
 A.post('/trials/update',wrap(req=>trialUpdate(who(req), req.body.id, req.body)));
 A.post('/trials/delete',wrap(req=>trialDelete(who(req), req.body.id)));
 A.post('/trials/reset', wrap(()=>trialResetAll(who(req))));
-
+A.post('/trial/minigame', wrap(req=>setTrialMinigame(who(req), req.body.slug, req.body.minigame)));
 A.get('/bonfires',      wrap(()=>bonfireList()));
 A.post('/bonfires',     wrap(req=>bonfireCreate(who(req), req.body)));
 A.post('/bonfires/end', wrap(req=>bonfireEnd(who(req), req.body.id)));
