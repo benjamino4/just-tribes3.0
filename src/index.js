@@ -20,7 +20,23 @@ app.disable('x-powered-by');
 
 // SSE — must be before express.json so the stream isn't buffered by the parser.
 app.get('/api/kiva/stream', (req,res)=>kivaSse(req,res));
-
+// ---------------------------------------------------------------
+// Boot-time backfill: ensure every active war has its fronts.
+// Idempotent — safe to run every boot.
+// ---------------------------------------------------------------
+async function backfillWarFronts(){
+  try{
+    const r = await q(`
+      INSERT INTO war_fronts (war_id, idx, name)
+      SELECT w.id, i, (ARRAY['North','Center','South'])[i+1]
+        FROM wars w
+       CROSS JOIN generate_series(0, COALESCE(w.front_count,3)-1) AS i
+       WHERE w.status='active'
+         AND NOT EXISTS (SELECT 1 FROM war_fronts f WHERE f.war_id = w.id AND f.idx = i)
+    `);
+    if (r.rowCount) console.log(`[war] backfilled ${r.rowCount} war fronts`);
+  }catch(e){ console.warn('[war] backfill skipped:', e.message); }
+}
 app.use(express.json({ limit:'256kb' }));
 app.use((req,res,next)=>{ res.removeHeader('X-Frame-Options'); next(); });
 
@@ -106,6 +122,7 @@ const PORT = process.env.PORT || 3000;
 export { app };
 if (process.env.TRIBES_TEST !== '1') {
   initDb()
+        .then(()=> backfillWarFronts())
     .then(()=> loadConfig(q))
     .then(()=> startFlusher(Number(process.env.PUSH_FLUSH_SECONDS)||20))
     .catch(e=>console.error('[boot]', e.message))
