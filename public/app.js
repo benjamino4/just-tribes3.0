@@ -125,10 +125,14 @@ async function api(path, body, opts){
   const headers = { 'Content-Type':'application/json' };
   if(TG && TG.initData) headers['X-Init-Data'] = TG.initData;
   headers['X-Guest-Id'] = GUEST;
+  const READ_PATHS = ['/state','/health','/war','/tribes','/tribe/names','/kiva','/bonfire','/cosmetics','/trials'];
+  const m = opts.method
+    || (body !== undefined ? 'POST'
+        : (READ_PATHS.some(p => path === p || path.startsWith(p + '?') || path.startsWith(p + '/')) ? 'GET' : 'POST'));
   const r = await fetch('/api'+path, {
-    method: body ? 'POST' : 'GET',
+    method: m,
     headers,
-    body: body ? JSON.stringify(body) : undefined,
+    body: m === 'POST' ? JSON.stringify(body ?? {}) : undefined,
   });
   let j={}; try{ j = await r.json(); }catch(e){}
   if(!r.ok){
