@@ -101,10 +101,13 @@ app.use(express.static(PUBLIC, {
   extensions:['html'],
   maxAge:'1h',
   setHeaders(res, filePath){
-    if (filePath.endsWith('.html') || filePath.endsWith('index.html')) {
+    if (filePath.endsWith('.html')){
       res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
+    } else {
+      // JS/CSS are versioned via ?v=N so we can cache them hard.
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
     }
   },
 }));
