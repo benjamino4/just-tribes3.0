@@ -1,6 +1,6 @@
 /* =====================================================================
    TRIBES — Mini App client. Obsidian Glass UI.
-   Batch 2: War UI (fronts, actions, momentum, legendary, defender, cry).
+   Batch 3 Part 1: trial mini-games (stoke, feed, cry, sift).
 ===================================================================== */
 'use strict';
 window.addEventListener('error', function(e){ var b = document.getElementById('bootMsg'); if (b && b.style.display !== 'none') b.textContent = 'Error: ' + (e.message || 'unknown'); });
@@ -23,7 +23,6 @@ const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&
 const haptic = (t='light') => { try{ TG&&TG.HapticFeedback&&TG.HapticFeedback.impactOccurred(t); }catch(e){} };
 const PERF = window.__tribes_perf || null;
 
-/* ---------- toast ---------- */
 function toast(msg, kind='', ico){
   ico = ico || (kind==='good'?'✓':kind==='bad'?'✕':kind==='warn'?'!':'✦');
   const t = el('div','toast '+kind, `<span class="t-ico">${ico}</span><span>${esc(msg)}</span>`);
@@ -31,7 +30,6 @@ function toast(msg, kind='', ico){
   setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),320); }, 2600);
 }
 
-/* ---------- fx ---------- */
 const fxRoot = () => $('#fxRoot');
 function fxPop(text, x, y){
   const p = el('div','fx-pop', esc(text));
@@ -97,11 +95,9 @@ function animateCounter(node, to, dur=520){
   requestAnimationFrame(step);
 }
 
-/* ---------- guest id ---------- */
 let GUEST = localStorage.getItem('tribes.guest');
 if(!GUEST){ GUEST='g'+String(Math.floor(Math.random()*9e9)+1e9); localStorage.setItem('tribes.guest',GUEST); }
 
-/* ---------- API ---------- */
 async function api(path, body, opts){
   opts = opts || {};
   const headers = { 'Content-Type':'application/json' };
@@ -124,7 +120,6 @@ async function api(path, body, opts){
   return j;
 }
 
-/* ---------- SVG art ---------- */
 const ART = {
   totem:'<svg viewBox="0 0 60 80"><rect x="20" y="8" width="20" height="64" rx="6" fill="#5a3a24"/><circle cx="30" cy="24" r="8" fill="url(#gGold)"/><circle cx="27" cy="23" r="1.6" fill="#2a1408"/><circle cx="33" cy="23" r="1.6" fill="#2a1408"/><path d="M22 44h16M22 56h16" stroke="#ffd77a" stroke-width="3"/></svg>',
   skull:'<svg viewBox="0 0 60 80"><path d="M30 8c13 0 20 9 20 22 0 8-4 12-4 18l-4 4h-4l-2-6-2 6h-4l-2-6-2 6h-4l-4-4c0-6-4-10-4-18C14 17 17 8 30 8z" fill="#e8dcc4"/><circle cx="22" cy="36" r="5" fill="#2a1408"/><circle cx="38" cy="36" r="5" fill="#2a1408"/><path d="M30 44l-3 8h6z" fill="#2a1408"/></svg>',
@@ -143,12 +138,11 @@ function artSvg(k){ return ART[k] || ART.totem; }
 const sleep = ms => new Promise(r=>setTimeout(r,ms));
 let S = null, TAB = 'fire';
 
-/* ---------- TON Connect ---------- */
 let tonUI = null, tonAddr = null;
 function initTon(){
   try{
     const NS = window.TON_CONNECT_UI;
-    if(!NS){ console.warn('TON Connect UI not loaded'); return; }
+    if(!NS) return;
     tonUI = new NS.TonConnectUI({ manifestUrl: location.origin + '/tonconnect-manifest.json' });
     tonUI.onStatusChange(async w => {
       tonAddr = (w && w.account) ? w.account.address : null;
@@ -166,11 +160,9 @@ function updateTonChip(){
 }
 async function tonToggle(){
   if(!tonUI){ toast('TON wallet not available here','warn'); return; }
-  try{ if(tonAddr) await tonUI.disconnect(); else await tonUI.openModal(); }
-  catch(e){ console.warn(e); }
+  try{ if(tonAddr) await tonUI.disconnect(); else await tonUI.openModal(); }catch(e){}
 }
 
-/* ---------- payments ---------- */
 async function buyStars(itemId){
   if(!TG){ toast('Open in Telegram to pay with Stars','warn'); return; }
   let link;
@@ -189,10 +181,8 @@ async function buyTon(itemId){
   try{ intent = (await api('/ton/intent', { itemId })).intent; }
   catch(e){ return toast(e.message,'bad'); }
   try{
-    await tonUI.sendTransaction({
-      validUntil: Math.floor(Date.now()/1000)+600,
-      messages:[{ address: intent.to, amount: String(intent.amountNano) }],
-    });
+    await tonUI.sendTransaction({ validUntil: Math.floor(Date.now()/1000)+600,
+      messages:[{ address: intent.to, amount: String(intent.amountNano) }] });
   }catch(e){ return toast('Transaction cancelled','warn'); }
   toast('Confirming on-chain…');
   let ok = false;
@@ -204,7 +194,6 @@ async function buyTon(itemId){
   else toast('Still settling — rewards arrive once the tx confirms','warn');
 }
 
-/* ---------- boot ---------- */
 function setBoot(msg, retry){
   $('#bootMsg').textContent = msg;
   $('#retryBtn').style.display = retry ? 'inline-flex' : 'none';
@@ -231,13 +220,8 @@ async function boot(){
     if(e.status===403 && e.data && e.data.error==='banned'){ setBoot('You were banished: '+(e.data.reason||''), false); return; }
     setBoot('The fire could not be reached — '+(e.message||'try again.'), true); return;
   }
-  try {
-    initTon(); applyPalette(); renderAll();
-  } catch (err) {
-    setBoot('Error: ' + (err && err.message ? err.message : String(err)));
-    console.error('BOOT ERROR:', err);
-    return;
-  }
+  try { initTon(); applyPalette(); renderAll(); }
+  catch (err) { setBoot('Error: ' + (err && err.message ? err.message : String(err))); console.error('BOOT ERROR:', err); return; }
   showApp();
   startBonfireTicker();
   startPushPoller();
@@ -255,7 +239,6 @@ async function refresh(){
 }
 window.refresh = refresh;
 
-/* ---------- palette ---------- */
 function applyPalette(){
   const p = (S && S.tribe && S.tribe.palette) || 'ember';
   document.documentElement.setAttribute('data-palette', p);
@@ -263,7 +246,6 @@ function applyPalette(){
   document.documentElement.style.setProperty('--thue', hue+'deg');
 }
 
-/* ---------- topbar ---------- */
 function renderTop(){
   const u = S.user, t = S.tribe;
   $('#crestArt').innerHTML = artSvg(t ? t.crest : 'totem');
@@ -273,7 +255,6 @@ function renderTop(){
   updateTonChip();
 }
 
-/* ---------- nav ---------- */
 function setTab(tab){
   TAB = tab;
   $$('.nav-i').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
@@ -304,7 +285,6 @@ function renderScreen(tab){
   if(tab==='store') return renderStore(box);
 }
 
-/* ---------- helpers ---------- */
 async function doAct(btn, fn){
   if(btn && btn.disabled) return;
   if(btn){ btn.disabled=true; btn.style.opacity=.6; }
@@ -318,7 +298,6 @@ function fmtDur(ms){
   return d>0 ? `${d}d ${h}h` : h>0 ? `${h}h ${m}m` : `${m}m`;
 }
 
-/* ---------- FIRE ---------- */
 function fireReadyIn(){
   const u = S.user;
   const last = u.last_checkin ? new Date(u.last_checkin).getTime() : 0;
@@ -329,7 +308,6 @@ function renderFire(box){
   const readyIn = fireReadyIn();
   const ready = readyIn <= 0;
   const pct = clamp(100*(1 - readyIn/(20*3600*1000)), 0, 100);
-
   box.innerHTML = `
   <div class="hero-fire">
     <div class="campfire ${ready?'ready':''}" id="campfire" data-act="tapFire" role="button" aria-label="Feed the fire">
@@ -343,7 +321,6 @@ function renderFire(box){
       ${ready ? 'Tap the fire to feed it 🔥' : 'Next blessing in ' + fmtDur(readyIn)}
     </div>
   </div>
-
   <div class="card">
     <div class="checkin">
       <div class="dial" style="--p:${ready?100:pct.toFixed(0)}"><b>${u.streak||0}<i>STREAK</i></b></div>
@@ -353,7 +330,6 @@ function renderFire(box){
       </div>
     </div>
   </div>
-
   <div class="card">
     <div class="hd" style="margin:0 0 10px"><h2 style="font-size:1.05rem">The Ash Pit</h2><span class="pill pill-gold">Idle · Ash → Ember</span></div>
     <p class="tiny" style="margin:0 0 12px">Cinders gather while you're away — ${S.config.ashCap} charges × ${S.ashUnit} Ember.</p>
@@ -364,11 +340,9 @@ function renderFire(box){
       </button>
     </div>
   </div>
-
   <div class="hd"><h2>Trials</h2><span class="sub">earn Ember & Loyalty</span></div>
   <div class="trials">${renderTrialsRows()}</div>`;
 }
-
 function renderTrialsRows(){
   const ts = S.trials || [];
   if(!ts.length) return '<p class="tiny">No trials right now. Check back soon.</p>';
@@ -388,14 +362,11 @@ function renderTrialsRows(){
   }).join('');
 }
 
-/* ---------- fire actions ---------- */
 let tapLock = false;
 function tapFire(campfire){
   if(tapLock) return;
   tapLock = true; setTimeout(()=>tapLock=false, 420);
-  campfire.classList.remove('tap');
-  void campfire.offsetWidth;
-  campfire.classList.add('tap');
+  campfire.classList.remove('tap'); void campfire.offsetWidth; campfire.classList.add('tap');
   const rect = campfire.getBoundingClientRect();
   const cx = rect.left + rect.width/2;
   const cy = rect.top + rect.height/2;
@@ -423,13 +394,313 @@ async function actAsh(btn){
   });
 }
 
+/* ================= TRIAL DISPATCHER ================= */
 function actTrial(btn, slug){
   const t = (S.trials || []).find(x => x.slug === slug);
   if (!t) return;
   if (t.kind === 'rewarded_ad') return openAdSheet(t);
+  const mg = t.minigame || 'hold';
+  if (mg === 'stoke') return openStokeSheet(t);
+  if (mg === 'feed')  return openFeedSheet(t);
+  if (mg === 'cry')   return openCryTapSheet(t);
+  if (mg === 'sift')  return openSiftSheet(t);
   return openHoldSheet(t);
 }
 
+/* ---------- 1) Stoke the Fire — drag logs into the fire ---------- */
+function openStokeSheet(trial){
+  const LOGS = 4;
+  sheet(`
+    <h3>${esc(trial.name)}</h3>
+    <div class="sub">Drag ${LOGS} logs into the fire</div>
+    <div class="stoke-wrap">
+      <div class="stoke-logs" id="stokeLogs">
+        ${Array.from({length:LOGS}).map((_,i)=>`
+          <div class="stoke-log" data-log="${i}" data-act="stokeGrab">
+            <svg viewBox="0 0 40 16" width="48" height="20">
+              <rect x="2" y="4" width="36" height="8" rx="4" fill="#6b4326"/>
+              <rect x="2" y="4" width="36" height="3" rx="1.5" fill="#8a5a1c"/>
+            </svg>
+          </div>`).join('')}
+      </div>
+      <div class="stoke-fire" id="stokeFire">
+        <div class="stoke-pit"></div>
+        <div class="stoke-flame" id="stokeFlame"></div>
+      </div>
+      <div class="stoke-progress" id="stokeProgress">0 / ${LOGS}</div>
+    </div>
+    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>
+  `);
+  setTimeout(()=>attachStokeDrag(trial), 20);
+}
+let stokeCount = 0;
+function attachStokeDrag(trial){
+  stokeCount = 0;
+  const fire = $('#stokeFire');
+  const progress = $('#stokeProgress');
+  const total = 4;
+  if(!fire) return;
+  $$('.stoke-log').forEach(log=>{
+    let dragging=false, sx=0, sy=0, ox=0, oy=0, moved=false;
+    const onDown = e => {
+      if(log.dataset.used) return;
+      dragging=true; moved=false;
+      const p = e.touches ? e.touches[0] : e;
+      sx=p.clientX; sy=p.clientY;
+      const r = log.getBoundingClientRect();
+      ox=r.left; oy=r.top;
+      log.style.position='fixed'; log.style.left=ox+'px'; log.style.top=oy+'px';
+      log.style.zIndex=9999; log.style.pointerEvents='none';
+      log.classList.add('dragging');
+      e.preventDefault();
+    };
+    const onMove = e => {
+      if(!dragging) return;
+      const p = e.touches ? e.touches[0] : e;
+      const dx=p.clientX-sx, dy=p.clientY-sy;
+      if(Math.abs(dx)+Math.abs(dy)>6) moved=true;
+      log.style.left=(ox+dx)+'px'; log.style.top=(oy+dy)+'px';
+      const fr = fire.getBoundingClientRect();
+      const inFire = p.clientX>fr.left && p.clientX<fr.right && p.clientY>fr.top && p.clientY<fr.bottom;
+      fire.classList.toggle('over', inFire);
+      e.preventDefault();
+    };
+    const onUp = e => {
+      if(!dragging) return;
+      dragging=false;
+      const p = e.changedTouches ? e.changedTouches[0] : e;
+      const fr = fire.getBoundingClientRect();
+      const inFire = p.clientX>fr.left && p.clientX<fr.right && p.clientY>fr.top && p.clientY<fr.bottom;
+      log.classList.remove('dragging');
+      fire.classList.remove('over');
+      if(inFire && !moved){
+        // treat simple tap as "yes drop it"
+      }
+      if(inFire){
+        log.style.opacity='0';
+        log.dataset.used='1';
+        stokeCount++;
+        haptic('medium');
+        const flame = $('#stokeFlame');
+        if(flame) flame.setAttribute('data-logs', String(stokeCount));
+        burstAt(fire, 12);
+        if(progress) progress.textContent = `${stokeCount} / ${total}`;
+        if(stokeCount >= total){
+          // complete
+          haptic('heavy');
+          burstAt(fire, 30);
+          api('/trials/'+encodeURIComponent(trial.slug)).then(r=>{
+            if(!r.ok){ toast('Not ready','warn'); return; }
+            const parts=[];
+            if(r.reward_ember) parts.push('+'+fmt(r.reward_ember)+' Ember');
+            if(r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
+            toast('Stoked! '+parts.join(' · '),'good');
+            closeSheet(); refresh();
+          }).catch(e=>toast(e.message,'bad'));
+        }
+      } else {
+        // snap back
+        log.style.position=''; log.style.left=''; log.style.top=''; log.style.zIndex=''; log.style.pointerEvents='';
+      }
+      e.preventDefault();
+    };
+    log.addEventListener('pointerdown', onDown);
+    log.addEventListener('pointermove', onMove);
+    log.addEventListener('pointerup', onUp);
+    log.addEventListener('pointercancel', onUp);
+  });
+}
+
+/* ---------- 2) Feed the Kin — hold a bowl, bites fill ---------- */
+function openFeedSheet(trial){
+  const BITES = 3;
+  sheet(`
+    <h3>${esc(trial.name)}</h3>
+    <div class="sub">Hold the bowl to feed the kin</div>
+    <div class="feed-wrap">
+      <div class="feed-bowl" id="feedBowl" data-act="feedHold">
+        <div class="feed-fill" id="feedFill"></div>
+        <div class="feed-emoji">🥣</div>
+      </div>
+      <div class="feed-bites" id="feedBites">
+        ${Array.from({length:BITES}).map((_,i)=>`<span class="fb" data-i="${i}">🥩</span>`).join('')}
+      </div>
+    </div>
+    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>
+  `);
+  setTimeout(()=>attachFeed(trial), 20);
+}
+let feedRAF=null, feedStart=0, feedBites=0, feedDone=false;
+function attachFeed(trial){
+  const bowl = $('#feedBowl'); if(!bowl) return;
+  const fill = $('#feedFill');
+  const bites = $$('#feedBites .fb');
+  feedBites=0; feedDone=false;
+  const BITE_MS = 800;
+  const down = e => {
+    if(feedDone) return;
+    feedStart = performance.now();
+    bowl.classList.add('holding');
+    haptic('light');
+    const paint = () => {
+      if(feedDone) return;
+      const el = performance.now() - feedStart;
+      const pct = Math.min(100, (el/BITE_MS)*100);
+      if(fill) fill.style.height = pct + '%';
+      if(pct >= 100){
+        feedBites++;
+        if(bites[feedBites-1]) bites[feedBites-1].classList.add('on');
+        haptic('medium');
+        if(fill) fill.style.height = '0%';
+        burstAt(bowl, 8);
+        if(feedBites >= bites.length){
+          feedDone = true;
+          haptic('heavy');
+          api('/trials/'+encodeURIComponent(trial.slug)).then(r=>{
+            if(!r.ok){ toast('Not ready','warn'); return; }
+            const parts=[];
+            if(r.reward_ember) parts.push('+'+fmt(r.reward_ember)+' Ember');
+            if(r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
+            toast('Fed the kin! '+parts.join(' · '),'good');
+            closeSheet(); refresh();
+          }).catch(e=>toast(e.message,'bad'));
+          return;
+        }
+        feedStart = performance.now();
+      }
+      feedRAF = requestAnimationFrame(paint);
+    };
+    feedRAF = requestAnimationFrame(paint);
+    e.preventDefault();
+  };
+  const up = () => {
+    if(feedRAF){ cancelAnimationFrame(feedRAF); feedRAF=null; }
+    bowl.classList.remove('holding');
+    if(fill) fill.style.height = '0%';
+  };
+  bowl.addEventListener('pointerdown', down);
+  document.addEventListener('pointerup', up);
+  document.addEventListener('pointercancel', up);
+  document.addEventListener('pointerleave', up);
+}
+
+/* ---------- 3) Dawn Cry — tap the drum on the beat 3 times ---------- */
+function openCryTapSheet(trial){
+  const BEATS = 3;
+  sheet(`
+    <h3>${esc(trial.name)}</h3>
+    <div class="sub">Tap the drum on the beat</div>
+    <div class="cry-wrap">
+      <div class="cry-beat" id="cryBeat"></div>
+      <button class="cry-drum" id="cryDrum" data-act="cryTap" type="button">
+        <span class="cry-drum-ico">🥁</span>
+      </button>
+      <div class="cry-score" id="cryScore">0 / ${BEATS}</div>
+    </div>
+    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>
+  `);
+  setTimeout(()=>attachCry(trial), 20);
+}
+let cryBeatTimer=null, cryScore=0, cryBeatOn=false, cryListening=false;
+function attachCry(trial){
+  const drum = $('#cryDrum'); if(!drum) return;
+  const beat = $('#cryBeat');
+  const scoreEl = $('#cryScore');
+  cryScore = 0;
+  const BEATS = 3;
+  const BEAT_MS = 900;
+  const ON_WINDOW = 260;
+  let cycleT = performance.now();
+  const loop = () => {
+    const now = performance.now();
+    const phase = ((now - cycleT) % BEAT_MS);
+    const on = phase < ON_WINDOW;
+    if(on !== cryBeatOn){
+      cryBeatOn = on;
+      if(beat) beat.classList.toggle('on', on);
+    }
+    cryBeatTimer = requestAnimationFrame(loop);
+  };
+  cryBeatTimer = requestAnimationFrame(loop);
+
+  const tap = () => {
+    if(cryScore >= BEATS) return;
+    if(cryBeatOn){
+      cryScore++;
+      haptic('medium');
+      burstAt(drum, 10);
+      if(scoreEl) scoreEl.textContent = cryScore + ' / ' + BEATS;
+      if(cryScore >= BEATS){
+        cancelAnimationFrame(cryBeatTimer); cryBeatTimer=null;
+        haptic('heavy');
+        api('/trials/'+encodeURIComponent(trial.slug)).then(r=>{
+          if(!r.ok){ toast('Not ready','warn'); return; }
+          const parts=[];
+          if(r.reward_ember) parts.push('+'+fmt(r.reward_ember)+' Ember');
+          if(r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
+          toast('Dawn Cry raised! '+parts.join(' · '),'good');
+          closeSheet(); refresh();
+        }).catch(e=>toast(e.message,'bad'));
+      }
+    } else {
+      // miss
+      haptic('soft');
+      cryScore = 0;
+      if(scoreEl) scoreEl.textContent = '0 / ' + BEATS;
+    }
+  };
+  drum.addEventListener('pointerdown', e=>{ e.preventDefault(); tap(); });
+}
+function cleanupCry(){
+  if(cryBeatTimer){ cancelAnimationFrame(cryBeatTimer); cryBeatTimer=null; }
+}
+
+/* ---------- 4) Sift the Ash — pick one of 5 piles ---------- */
+function openSiftSheet(trial){
+  sheet(`
+    <h3>${esc(trial.name)}</h3>
+    <div class="sub">Pick a pile. One hides an ember.</div>
+    <div class="sift-grid">
+      ${Array.from({length:5}).map((_,i)=>`
+        <button class="sift-pile" data-act="siftPick" data-val="${i}">
+          <span class="sift-ico">🪨</span>
+          <span class="sift-dust"></span>
+        </button>`).join('')}
+    </div>
+    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>
+  `);
+}
+async function doSift(btn, idx){
+  const pile = btn.closest('.sift-pile') || btn;
+  if(pile.disabled) return;
+  $$('.sift-pile').forEach(p=>p.disabled=true);
+  try{
+    const t = (S.trials || []).find(x => (x.minigame === 'sift'));
+    if(!t){ toast('No sift trial available','warn'); return; }
+    const r = await api('/trials/'+encodeURIComponent(t.slug), { pick: Number(idx) });
+    if(r.hit){
+      pile.classList.add('hit');
+      pile.querySelector('.sift-ico').textContent = '💎';
+      haptic('heavy');
+      burstAt(pile, 30);
+      const parts=[];
+      if(r.reward_ember) parts.push('+'+fmt(r.reward_ember)+' Ember');
+      if(r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
+      toast('Ember found! '+parts.join(' · '),'good');
+      setTimeout(()=>{ closeSheet(); refresh(); }, 900);
+    } else {
+      pile.classList.add('miss');
+      pile.querySelector('.sift-ico').textContent = '🖤';
+      haptic('soft');
+      // reveal where the ember actually was
+      const correct = $$('.sift-pile')[r.correct];
+      if(correct){ correct.classList.add('reveal'); correct.querySelector('.sift-ico').textContent = '💎'; }
+      setTimeout(()=>{ closeSheet(); refresh(); }, 1100);
+    }
+  }catch(e){ toast(e.message,'bad'); }
+}
+
+/* ---------- fallback: hold-to-confirm ---------- */
 function openHoldSheet(trial){
   const rewardParts = [];
   if (trial.reward_ember)   rewardParts.push('🔥 +'+fmt(trial.reward_ember));
@@ -451,7 +722,6 @@ function openHoldSheet(trial){
     <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:14px">Cancel</button>
   `);
 }
-
 let holdTimer = null, holdRAF = null, holdStartAt = 0;
 function holdStart(btn, slug){
   const HOLD_MS = 2000;
@@ -474,8 +744,7 @@ function holdStart(btn, slug){
         if (r.reward_ember)   parts.push('+'+fmt(r.reward_ember)+' Ember');
         if (r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
         toast(`Trial complete: ${parts.join(' · ')}`,'good');
-        closeSheet();
-        refresh();
+        closeSheet(); refresh();
       }).catch(e => toast(e.message,'bad'));
       return;
     }
@@ -506,7 +775,6 @@ function openAdSheet(trial){
     <div class="ad-placeholder">
       <div class="ad-ico">📺</div>
       <p class="tiny" style="margin:8px 0 0">Rewarded ads are coming soon.</p>
-      <p class="tiny" style="opacity:.7">Once an ad network is connected, tapping the button below will play a short ad and grant the reward.</p>
     </div>
     <button class="btn btn-stone btn-block" disabled style="margin-top:14px">Watch ad — coming soon</button>
     <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Close</button>
@@ -526,10 +794,9 @@ async function actShare(btn){
   });
 }
 
-/* ---------- TRIBE ---------- */
+/* ---------- TRIBE (unchanged) ---------- */
 const CRESTS = ['totem','skull','drum','flame','torch','idol','sun','moon','horn'];
 let pickedCrest='totem', pickedPalette='ember', pickedBanner='sun', pickedNameId=null;
-
 function renderTribe(box){
   const u = S.user, t = S.tribe;
   if(t){
@@ -552,13 +819,11 @@ function renderTribe(box){
         <span class="pill pill-blood">💀 ${t.losses||0}L</span>
       </div>
     </div>
-
     <div class="wmeta" style="margin-bottom:14px">
       <div class="box"><b>${fmt(t.treasury)}</b><span>Great Pyre</span></div>
       <div class="box"><b>${fmt(t.loyalty_total)}</b><span>Loyalty</span></div>
       <div class="box"><b>${t.members||0}/${cap}</b><span>Kin</span></div>
     </div>
-
     <div class="card">
       <div class="hd" style="margin:0 0 10px"><h2 style="font-size:1.05rem">Kiva</h2><span class="sub">tribe talk</span></div>
       <div class="kiva-hero" data-act="openKiva">
@@ -567,13 +832,11 @@ function renderTribe(box){
         <div class="kh-badge" id="kivaBadge" style="display:none">0</div>
       </div>
     </div>
-
     <div class="card">
       <h3>Stoke the Great Pyre</h3>
       <p class="tiny" style="margin:0 0 14px">Donate your Ember to the tribe treasury. A deep Pyre wins wars — and every gift earns you Loyalty.</p>
       <button class="btn btn-primary btn-shine btn-block" data-act="openDonate">🔥 Donate Ember to the Pyre</button>
     </div>
-
     <div class="card">
       <h3>Level Up</h3>
       <p class="tiny" style="margin:0 0 10px">
@@ -587,7 +850,6 @@ function renderTribe(box){
            </button>`
         : ''}
     </div>
-
     <button class="btn btn-danger btn-block" data-act="leave" style="margin-top:4px">Leave the Tribe</button>
     <p class="tiny" style="text-align:center;margin-top:12px">${wl ? ('Battle record · '+t.wins+' won, '+t.losses+' lost') : 'Your tribe has yet to taste war.'}</p>`;
     return;
@@ -613,33 +875,27 @@ function renderTribe(box){
       </div></div>`).join('');
   }).catch(()=>{ const h=$('#joinList'); if(h) h.innerHTML='<p class="tiny">Could not reach the other fires.</p>'; });
 }
-
 async function actUpgrade(btn){
   await doAct(btn, async () => {
     const r = await api('/tribe/upgrade');
-    haptic('heavy');
-    toast(`Risen to ${r.name}!`,'good');
-    await refresh();
+    haptic('heavy'); toast(`Risen to ${r.name}!`,'good'); await refresh();
   });
 }
 async function actJoin(btn, id){
-  await doAct(btn, async () => {
-    await api('/tribe/join', { tribeId: Number(id) });
-    haptic(); toast('You joined the fire!','good'); await refresh();
-  });
+  await doAct(btn, async () => { await api('/tribe/join', { tribeId: Number(id) }); haptic(); toast('You joined the fire!','good'); await refresh(); });
 }
 async function actLeave(btn){
-  await doAct(btn, async () => {
-    await api('/tribe/leave');
-    toast('You left the tribe','warn'); await refresh();
-  });
+  await doAct(btn, async () => { await api('/tribe/leave'); toast('You left the tribe','warn'); await refresh(); });
 }
 
 /* ---------- sheets ---------- */
 function sheet(html){
   $('#sheetRoot').innerHTML = `<div class="sheet-bg" data-act="bgClose"><div class="sheet"><div class="handle"></div>${html}</div></div>`;
 }
-function closeSheet(){ $('#sheetRoot').innerHTML=''; }
+function closeSheet(){
+  cleanupCry();
+  $('#sheetRoot').innerHTML='';
+}
 
 async function openCreate(){
   pickedCrest='totem'; pickedPalette='ember'; pickedBanner='sun'; pickedNameId=null;
@@ -661,27 +917,14 @@ async function openCreate(){
     const d = await api('/tribe/names');
     const grid = $('#nameGrid'); if(!grid) return;
     const names = (d.names||[]).slice(0,60);
-    if(!names.length){ grid.innerHTML = '<p class="tiny" style="grid-column:span 2">All names are claimed. Ask an admin to add more.</p>'; return; }
+    if(!names.length){ grid.innerHTML = '<p class="tiny" style="grid-column:span 2">All names are claimed.</p>'; return; }
     grid.innerHTML = names.map(n=>`<button class="btn btn-stone" data-act="pickName" data-val="${n.id}" style="padding:10px;font-size:.82rem">${esc(n.name)}</button>`).join('');
-  }catch(e){
-    const grid = $('#nameGrid'); if(grid) grid.innerHTML = '<p class="tiny" style="grid-column:span 2">Could not load names.</p>';
-  }
+  }catch(e){ const grid = $('#nameGrid'); if(grid) grid.innerHTML = '<p class="tiny" style="grid-column:span 2">Could not load names.</p>'; }
 }
-function bannerGlyph(b){
-  return ({ sun:'☀️', moon:'🌙', wolf:'🐺', bear:'🐻', spear:'🗡️', shield:'🛡️', tree:'🌳', flame:'🔥' })[b] || '🏴';
-}
-function pickName(btn,val){
-  pickedNameId = Number(val);
-  $$('#nameGrid .btn').forEach(b=>b.style.borderColor = (Number(b.dataset.val)===pickedNameId ? 'var(--gold)' : 'var(--line)'));
-}
-function pickPalette(btn,val){
-  pickedPalette = val;
-  $$('#paletteGrid .btn').forEach(b=>b.style.borderColor = (b.dataset.val===val ? 'var(--gold)' : 'var(--line)'));
-}
-function pickBanner(btn,val){
-  pickedBanner = val;
-  $$('#bannerGrid .btn').forEach(b=>b.style.borderColor = (b.dataset.val===val ? 'var(--gold)' : 'var(--line)'));
-}
+function bannerGlyph(b){ return ({ sun:'☀️', moon:'🌙', wolf:'🐺', bear:'🐻', spear:'🗡️', shield:'🛡️', tree:'🌳', flame:'🔥' })[b] || '🏴'; }
+function pickName(btn,val){ pickedNameId = Number(val); $$('#nameGrid .btn').forEach(b=>b.style.borderColor = (Number(b.dataset.val)===pickedNameId ? 'var(--gold)' : 'var(--line)')); }
+function pickPalette(btn,val){ pickedPalette = val; $$('#paletteGrid .btn').forEach(b=>b.style.borderColor = (b.dataset.val===val ? 'var(--gold)' : 'var(--line)')); }
+function pickBanner(btn,val){ pickedBanner = val; $$('#bannerGrid .btn').forEach(b=>b.style.borderColor = (b.dataset.val===val ? 'var(--gold)' : 'var(--line)')); }
 async function doCreate(btn){
   await doAct(btn, async () => {
     if(!pickedNameId){ toast('Pick a name','warn'); return; }
@@ -690,7 +933,6 @@ async function doCreate(btn){
     closeSheet(); haptic('medium'); toast('Your tribe is born!','good'); await refresh();
   });
 }
-
 function openDonate(){
   sheet(`<h3>Stoke the Great Pyre</h3><div class="sub">You hold ${fmt(S.user.ember)} Ember</div>
     <div class="field"><input id="dAmt" type="number" min="1" placeholder="Ember to donate"/></div>
@@ -705,13 +947,11 @@ async function doDonate(btn){
     const amt = Math.floor(Number($('#dAmt')?.value)||0);
     if(amt<1){ toast('Enter an amount','warn'); return; }
     const r = await api('/tribe/donate', { amount: amt });
-    closeSheet(); haptic('medium');
-    toast('Donated '+fmt(r.donated)+' Ember to the Pyre','good');
-    await refresh();
+    closeSheet(); haptic('medium'); toast('Donated '+fmt(r.donated)+' Ember to the Pyre','good'); await refresh();
   });
 }
 
-/* ---------- KIVA ---------- */
+/* ---------- KIVA (unchanged) ---------- */
 let kivaEs = null, kivaPoll = null, kivaLastId = 0, kivaOpen = false;
 async function openKiva(){
   if(!S.tribe) return;
@@ -764,12 +1004,7 @@ function kivaMsgHtml(m){
     </div>
   </div>`;
 }
-function fmtTime(t){
-  try{
-    const d = new Date(t);
-    return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
-  }catch(e){ return ''; }
-}
+function fmtTime(t){ try{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }catch(e){ return ''; } }
 function connectKivaStream(){
   if(!S.tribe) return;
   try{
@@ -827,13 +1062,8 @@ async function pinKiva(messageId){
   }catch(e){ toast(e.message,'bad'); }
 }
 
-/* ================= WAR (Batch 2 — full UI) ================= */
-let warState = null;
-let warTimer = null;
-let warData = null;
-let selectedFront = 0;
-let defenderPanelOpen = false;
-
+/* ================= WAR (patched render) ================= */
+let warState = null, warTimer = null, warData = null, selectedFront = 0;
 function stopWarTicker(){ if(warTimer){ clearInterval(warTimer); warTimer=null; } }
 function startWarTicker(endAt){
   stopWarTicker();
@@ -845,7 +1075,6 @@ function startWarTicker(endAt){
   tick();
   warTimer = setInterval(tick, 1000);
 }
-
 function warWrap(box){
   if (!warState || warState.wrap.parentNode !== box){
     warState = { wrap: document.createElement('div'), mode: null };
@@ -854,19 +1083,13 @@ function warWrap(box){
   return warState.wrap;
 }
 function setMode(mode){
-  if (warState.mode !== mode){
-    warState.wrap.replaceChildren();
-    warState.mode = mode;
-  }
+  if (warState.mode !== mode){ warState.wrap.replaceChildren(); warState.mode = mode; }
 }
-
 async function renderWar(box){
   const u = S.user;
   const wrap = warWrap(box);
-
   if(!u.tribe_id){
-    stopWarTicker();
-    setMode('no-tribe');
+    stopWarTicker(); setMode('no-tribe');
     if (warState.rendered === 'no-tribe') return;
     warState.rendered = 'no-tribe';
     wrap.innerHTML = `<div class="empty"><span class="big">⚔️</span>
@@ -875,7 +1098,6 @@ async function renderWar(box){
       <button class="btn btn-primary btn-shine btn-block" data-act="gotoTribe">Go to Tribe</button>`;
     return;
   }
-
   if (!warData){
     setMode('loading');
     if (warState.rendered !== 'loading'){
@@ -883,33 +1105,25 @@ async function renderWar(box){
       wrap.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
     }
   }
-
   let war = null;
   try{ war = (await api('/war')).war; }
   catch(e){
     if (TAB==='war'){
       setMode('error');
-      if (warState.rendered !== 'error'){
-        warState.rendered = 'error';
-        wrap.innerHTML = '<p class="tiny">Could not reach the war drums.</p>';
-      }
+      if (warState.rendered !== 'error'){ warState.rendered = 'error'; wrap.innerHTML = '<p class="tiny">Could not reach the war drums.</p>'; }
     }
     return;
   }
   if (TAB !== 'war') return;
   warData = war;
-
   if (!war){ renderWarNone(wrap); return; }
   if (war.status === 'resolved'){ renderWarDone(wrap, war); return; }
   renderWarActive(wrap, war);
 }
-
 function renderWarNone(wrap){
-  stopWarTicker();
-  setMode('none');
+  stopWarTicker(); setMode('none');
   const can = ['Chief','Head','Elder'].includes(S.user.role);
   const stances = (S.config.war_stances||[]);
-
   if (warState.rendered === 'none'){
     const btn = wrap.querySelector('[data-act="declareWar"]');
     if (btn){
@@ -923,16 +1137,12 @@ function renderWarNone(wrap){
   wrap.innerHTML = `
   <div class="war-arena">
     <div class="war-emblem"><div class="vs">WAR DRUMS</div>
-      <p class="tiny" style="margin:6px 0 14px">Declare war to be matched against a random rival tribe. You'll choose your stance first.</p></div>
+      <p class="tiny" style="margin:6px 0 14px">Declare war to be matched against a random rival tribe. Choose a stance first.</p></div>
     <div class="stance-row">
-      ${stances.map(s=>`
-        <button class="stance-card" data-act="pickStance" data-val="${esc(s.id)}">
-          <b>${esc(s.name)}</b><span>${esc(s.desc)}</span>
-        </button>`).join('')}
+      ${stances.map(s=>`<button class="stance-card" data-act="pickStance" data-val="${esc(s.id)}">
+        <b>${esc(s.name)}</b><span>${esc(s.desc)}</span></button>`).join('')}
     </div>
-    <div class="stance-chosen" id="stanceChosen" data-val="${esc((stances[0]||{}).id||'')}">
-      Selected: <b>${esc((stances[0]||{}).name||'—')}</b>
-    </div>
+    <div class="stance-chosen" id="stanceChosen" data-val="${esc((stances[0]||{}).id||'')}">Selected: <b>${esc((stances[0]||{}).name||'—')}</b></div>
     <button class="btn ${can?'btn-danger btn-shine':'btn-stone'} btn-block" ${can?'data-act="declareWar"':'disabled'} style="margin-top:14px">
       ${can ? '⚔️ Declare War' : 'Only Elders, Heads & the Chief may declare war'}
     </button>
@@ -944,7 +1154,6 @@ function renderWarNone(wrap){
         <div class="tiny">${esc(c.desc)}</div></div>
       <span class="pill pill-blood">${c.days}d · ${c.stake}%</span></div></div>`).join('')}`;
 }
-
 function renderWarActive(wrap, war){
   const mineA = war.mine === 'attacker';
   const me = mineA ? war.attacker : war.defender;
@@ -952,17 +1161,11 @@ function renderWarActive(wrap, war){
   const fronts = war.fronts || [];
   const momentum = war.momentum || [];
   const legendary = war.legendary;
-
   const sameWar = warState.rendered === 'active' && warState.warId === war.id;
-
   if (!sameWar){
-    setMode('active');
-    warState.rendered = 'active';
-    warState.warId = war.id;
-    selectedFront = 0;
+    setMode('active'); warState.rendered = 'active'; warState.warId = war.id; selectedFront = 0;
     const meMom = momentum.find(m => Number(m.tribe_id) === Number(me.id)) || { tokens:0, on_rout:false };
     const foeMom = momentum.find(m => Number(m.tribe_id) === Number(foe.id)) || { tokens:0, on_rout:false };
-
     wrap.innerHTML = `
     <div class="war-arena">
       <div class="war-emblem"><div class="vs">⚔️ WAR ⚔️</div>
@@ -992,40 +1195,28 @@ function renderWarActive(wrap, war){
         <div class="box"><b>${war.stake_pct||20}%</b><span>Stake</span></div>
       </div>
     </div>
-
     <div class="fronts-wrap" id="frontsWrap">
       ${fronts.map((f, i) => frontHtml(f, i, me, foe)).join('')}
     </div>
-
     <div class="war-action-panel">
       <div class="wact-head">Push a front</div>
       <div class="wact-front-pick" id="frontPick">
         ${fronts.map((f, i) => `<button class="fp-btn ${i===0?'active':''}" data-act="pickFront" data-val="${i}">${esc(f.name)}</button>`).join('')}
       </div>
       <div class="wact-btns">
-        <button class="wact-btn" data-act="warAction" data-val="rally">
-          <b>Rally</b><span>+25 pts</span>
-        </button>
-        <button class="wact-btn" data-act="warAction" data-val="chant">
-          <b>Chant</b><span>+150 pts</span>
-        </button>
-        <button class="wact-btn raid" data-act="warAction" data-val="raid">
-          <b>Raid</b><span>+800 pts · cd 4h</span>
-        </button>
+        <button class="wact-btn" data-act="warAction" data-val="rally"><b>Rally</b><span>+25 pts</span></button>
+        <button class="wact-btn" data-act="warAction" data-val="chant"><b>Chant</b><span>+150 pts</span></button>
+        <button class="wact-btn raid" data-act="warAction" data-val="raid"><b>Raid</b><span>+800 pts</span></button>
       </div>
       <div class="wact-foot">Spend from the tribe's war chest.</div>
     </div>
-
     <div class="war-extra-row">
       <button class="btn btn-ghost" data-act="openChronicle">📜 Chronicle</button>
       <button class="btn btn-ghost" data-act="openLeaderboard">🏅 Top warriors</button>
-      ${['Chief','Head','Elder'].includes(S.user.role) && !war.cry_used
-        ? `<button class="btn btn-primary" data-act="openCry">📣 Raise a Cry</button>` : ''}
+      ${['Chief','Head','Elder'].includes(S.user.role) && !war.cry_used ? `<button class="btn btn-primary" data-act="openCry">📣 Raise a Cry</button>` : ''}
     </div>`;
     startWarTicker(new Date(war.end_at).getTime());
   }
-
-  // Patch front scores
   fronts.forEach((f, i) => {
     const r = wrap.querySelector(`[data-front="${i}"]`);
     if(!r) return;
@@ -1039,14 +1230,7 @@ function renderWarActive(wrap, war){
     if(aScore) aScore.textContent = fmt(f.attacker_score);
     if(dScore) dScore.textContent = fmt(f.defender_score);
   });
-  const leaderEl = wrap.querySelector('[data-war="lead"]');
-  if (leaderEl){
-    const totalA = fronts.reduce((s, f)=>s+f.attacker_score, 0);
-    const totalD = fronts.reduce((s, f)=>s+f.defender_score, 0);
-    leaderEl.textContent = totalA>totalD ? 'You lead' : totalA<totalD ? 'You trail' : 'Dead even';
-  }
 }
-
 function frontHtml(f, i, me, foe){
   const aPct = clamp((f.attacker_score / Math.max(1, f.attacker_score + f.defender_score)) * 100, 0, 100);
   return `<div class="front-card" data-front="${i}">
@@ -1054,14 +1238,10 @@ function frontHtml(f, i, me, foe){
       <span class="front-name">${esc(f.name)}</span>
       <span class="front-scores"><b data-fr="as">${fmt(f.attacker_score)}</b> vs <b data-fr="ds">${fmt(f.defender_score)}</b></span>
     </div>
-    <div class="front-bar">
-      <i data-fr="a" style="width:${aPct}%"></i>
-      <i data-fr="d" style="width:${100-aPct}%"></i>
-    </div>
+    <div class="front-bar"><i data-fr="a" style="width:${aPct}%"></i><i data-fr="d" style="width:${100-aPct}%"></i></div>
     ${f.fortify_until && new Date(f.fortify_until).getTime() > Date.now() ? `<div class="front-fortified">🛡️ Fortified</div>` : ''}
   </div>`;
 }
-
 function renderWarDone(wrap, war){
   stopWarTicker();
   const myId = S.tribe ? Number(S.tribe.id) : null;
@@ -1072,8 +1252,7 @@ function renderWarDone(wrap, war){
   const big = draw?'🤝':won?'🏆':'💀';
   setMode('done');
   if (warState.rendered === 'done' && warState.warId === war.id) return;
-  warState.rendered = 'done';
-  warState.warId = war.id;
+  warState.rendered = 'done'; warState.warId = war.id;
   wrap.innerHTML = `
   <div class="war-arena" style="text-align:center">
     <div class="war-emblem"><div class="vs">${draw?'STALEMATE':won?'VICTORY':'DEFEAT'}</div></div>
@@ -1085,8 +1264,6 @@ function renderWarDone(wrap, war){
   <button class="btn btn-primary btn-shine btn-block" data-act="declareWar" ${['Chief','Head','Elder'].includes(S.user.role)?'':'disabled'}>⚔️ Rally for a New War</button>
   <button class="btn btn-ghost btn-block" data-act="openChronicle" style="margin-top:8px">📜 View Chronicle</button>`;
 }
-
-// ---- actions ----
 function pickStance(btn, id){
   $$('.stance-card').forEach(b=>b.classList.toggle('active', b.dataset.val===id));
   const c = $('#stanceChosen');
@@ -1098,92 +1275,63 @@ function pickFront(btn, idx){
   $$('.fp-btn').forEach(b=>b.classList.toggle('active', Number(b.dataset.val)===selectedFront));
   haptic('light');
 }
-
 async function actWarAction(btn, kind){
   await doAct(btn, async () => {
     const r = await api('/war/action', { front: selectedFront, kind });
-    haptic('heavy');
-    burstAt(btn, 18);
-    popAt(btn, '+'+fmt(r.points));
+    haptic('heavy'); burstAt(btn, 18); popAt(btn, '+'+fmt(r.points));
     toast(`${kind} · +${fmt(r.points)} on ${r.front}${r.multiplier>1?' (×'+r.multiplier.toFixed(2)+')':''}`,'good');
-    // Refresh the war so scores update
-    warData = null;
-    await refresh();
-    renderScreen('war');
+    warData = null; await refresh(); renderScreen('war');
   });
 }
-
 function openCrySheet(){
   const cries = (S.config.war_cries||[]);
-  sheet(`
-    <h3>Raise a War Cry</h3>
-    <div class="sub">Announced in both tribes' Kivas. One per war.</div>
-    ${cries.map(c=>`
-      <button class="cry-card" data-act="doCry" data-val="${esc(c.id)}">
-        <b>${esc(c.name)}</b>
-        <span>${esc(c.desc||('Cost: '+fmt(c.cost)+' Ember'))}</span>
-        <span class="cry-cost">${fmt(c.cost)} Ember</span>
-      </button>`).join('')}
-    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Cancel</button>
-  `);
+  sheet(`<h3>Raise a War Cry</h3><div class="sub">Announced in both tribes' Kivas. One per war.</div>
+    ${cries.map(c=>`<button class="cry-card" data-act="doCry" data-val="${esc(c.id)}">
+      <b>${esc(c.name)}</b><span>${esc(c.desc||'')}</span>
+      <span class="cry-cost">${fmt(c.cost)} Ember</span>
+    </button>`).join('')}
+    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Cancel</button>`);
 }
 async function doCry(btn, id){
   await doAct(btn, async () => {
     await api('/war/cry', { cry: id });
-    haptic('heavy');
-    toast('War Cry raised!','good');
-    closeSheet();
-    warData = null;
-    await refresh();
-    renderScreen('war');
+    haptic('heavy'); toast('War Cry raised!','good'); closeSheet();
+    warData = null; await refresh(); renderScreen('war');
   });
 }
-
 async function openChronicle(){
   try{
     const d = await api('/war/chronicle');
     const rows = d.chronicles || [];
-    sheet(`<div class="chronicle-sheet">
-      <h3>Chronicle</h3>
-      <div class="sub">Permanent record of your wars.</div>
-      ${rows.length ? rows.map(c=>`
-        <div class="chron-card">
-          <div class="chron-top"><b>${esc(c.attacker_name||'?')}</b> vs <b>${esc(c.defender_name||'?')}</b></div>
-          <div class="chron-scores">${fmt(c.score_a||0)} — ${fmt(c.score_d||0)}</div>
-          <div class="tiny">Stance ${esc(c.stance||'—')} · Tribute ${fmt(c.tribute||0)}${c.is_rivalry?' · RIVALRY':''}</div>
-        </div>`).join('') : '<p class="tiny">No wars yet.</p>'}
+    sheet(`<div class="chronicle-sheet"><h3>Chronicle</h3><div class="sub">Permanent record of your wars.</div>
+      ${rows.length ? rows.map(c=>`<div class="chron-card">
+        <div class="chron-top"><b>${esc(c.attacker_name||'?')}</b> vs <b>${esc(c.defender_name||'?')}</b></div>
+        <div class="chron-scores">${fmt(c.score_a||0)} — ${fmt(c.score_d||0)}</div>
+        <div class="tiny">Stance ${esc(c.stance||'—')} · Tribute ${fmt(c.tribute||0)}</div>
+      </div>`).join('') : '<p class="tiny">No wars yet.</p>'}
       <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Close</button>
     </div>`);
   }catch(e){ toast(e.message,'bad'); }
 }
-
 async function openLeaderboard(){
   try{
     const d = await api('/war/leaderboard');
     const rows = d.rows || [];
-    sheet(`<div class="chronicle-sheet">
-      <h3>Top Warriors</h3>
-      <div class="sub">Contribution in the current war.</div>
-      ${rows.length ? rows.map((r,i)=>`
-        <div class="chron-card">
-          <div class="chron-top">#${i+1} <b>${esc(r.first_name||r.username||'Kin')}</b> <span class="pill pill-blood">${esc(r.side)}</span></div>
-          <div class="chron-scores">${fmt(r.points)} pts</div>
-        </div>`).join('') : '<p class="tiny">No actions yet.</p>'}
+    sheet(`<div class="chronicle-sheet"><h3>Top Warriors</h3><div class="sub">Contribution in the current war.</div>
+      ${rows.length ? rows.map((r,i)=>`<div class="chron-card">
+        <div class="chron-top">#${i+1} <b>${esc(r.first_name||r.username||'Kin')}</b> <span class="pill pill-blood">${esc(r.side)}</span></div>
+        <div class="chron-scores">${fmt(r.points)} pts</div>
+      </div>`).join('') : '<p class="tiny">No actions yet.</p>'}
       <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Close</button>
     </div>`);
   }catch(e){ toast(e.message,'bad'); }
 }
-
 async function actDeclare(btn){
   await doAct(btn, async () => {
     const chosen = ($('#stanceChosen')||{}).dataset?.val || ((S.config.war_stances||[{}])[0].id);
     const r = await api('/war/declare', { stance: chosen });
-    haptic('heavy');
-    toast('War declared against '+r.war.defender.name+'!','good');
-    warData = null;
-    warState.rendered = null;
-    await refresh();
-    renderScreen('war');
+    haptic('heavy'); toast('War declared against '+r.war.defender.name+'!','good');
+    warData = null; warState.rendered = null; await refresh(); renderScreen('war');
   });
 }
 
@@ -1193,30 +1341,19 @@ function buildRanksScreen(){
   const p = PERF || null;
   const e = (tag, props, ...kids) => p ? p.h(tag, props, ...kids) : (()=>{
     const n=document.createElement(tag);
-    if(props){ for(const k in props){
-      if(k==='class') n.className=props[k];
-      else if(k==='text') n.textContent=props[k];
-      else n.setAttribute(k, props[k]);
-    }}
+    if(props){ for(const k in props){ if(k==='class') n.className=props[k]; else if(k==='text') n.textContent=props[k]; else n.setAttribute(k, props[k]); }}
     for(const c of kids.flat()) if(c) n.appendChild(typeof c==='string'?document.createTextNode(c):c);
     return n;
   })();
   const list = e('div', { class:'ranks-list', id:'ranksList' });
-  const root = e('div', { class:'ranks-wrap' },
-    e('div', { class:'hd' }, e('h2', { text:'Hall of Tribes' }), e('span', { class:'sub', text:'ranked by loyalty' })),
-    list
-  );
+  const root = e('div', { class:'ranks-wrap' }, e('div', { class:'hd' }, e('h2', { text:'Hall of Tribes' }), e('span', { class:'sub', text:'ranked by loyalty' })), list);
   return { root, listEl: list, rows: new Map() };
 }
 function buildRanksRow(t, i, top, mineId){
   const p = PERF || null;
   const e = (tag, props, ...kids) => p ? p.h(tag, props, ...kids) : (()=>{
     const n=document.createElement(tag);
-    if(props){ for(const k in props){
-      if(k==='class') n.className=props[k];
-      else if(k==='text') n.textContent=props[k];
-      else n.setAttribute(k, props[k]);
-    }}
+    if(props){ for(const k in props){ if(k==='class') n.className=props[k]; else if(k==='text') n.textContent=props[k]; else n.setAttribute(k, props[k]); }}
     for(const c of kids.flat()) if(c) n.appendChild(typeof c==='string'?document.createTextNode(c):c);
     return n;
   })();
@@ -1270,19 +1407,10 @@ function renderRanks(box){
   const lb = S.leaderboard || [];
   const top = lb.length ? (Number(lb[0].loyalty_total)||1) : 1;
   const mine = S.tribe ? Number(S.tribe.id) : null;
-  if (!ranksState){
-    ranksState = buildRanksScreen();
-    box.replaceChildren(ranksState.root);
-  }
+  if (!ranksState){ ranksState = buildRanksScreen(); box.replaceChildren(ranksState.root); }
   if (!lb.length){
-    ranksState.listEl.replaceChildren(
-      PERF.h('div', { class:'empty' },
-        PERF.h('span', { class:'big', text:'🏆' }),
-        PERF.h('p', { class:'tiny', text:'No tribes have risen yet.' })
-      )
-    );
-    ranksState.rows.clear();
-    return;
+    ranksState.listEl.replaceChildren(PERF.h('div', { class:'empty' }, PERF.h('span', { class:'big', text:'🏆' }), PERF.h('p', { class:'tiny', text:'No tribes have risen yet.' })));
+    ranksState.rows.clear(); return;
   }
   const seen = new Set();
   lb.forEach((t, i) => {
@@ -1296,9 +1424,7 @@ function renderRanks(box){
     } else {
       patchRanksRow(row, t, i, top, mine);
       const expectedNode = ranksState.listEl.children[i];
-      if (expectedNode !== row.card){
-        ranksState.listEl.insertBefore(row.card, expectedNode || null);
-      }
+      if (expectedNode !== row.card) ranksState.listEl.insertBefore(row.card, expectedNode || null);
     }
   });
   for (const [id, row] of [...ranksState.rows]){
@@ -1306,7 +1432,7 @@ function renderRanks(box){
   }
 }
 
-/* ---------- STORE ---------- */
+/* ---------- STORE (unchanged) ---------- */
 const ART_FOR = { spark:'flame', flame:'torch', blaze:'firestone', inferno:'sun', charm:'charm', auto:'torch', firestone:'firestone', boneidol:'idol', sundisc:'sun', moonshard:'moon', name_color_ember:'flame', name_color_jade:'flame', name_color_void:'moon', glow_ember:'flame', glow_frost:'moon', war_chest_topup:'firestone', rally_burst:'flame' };
 function storeSectionFor(key, it){
   if(key==='starter_bundle') return 'featured';
@@ -1330,34 +1456,25 @@ function renderStore(box){
   }
   box.innerHTML = `<div class="hd"><h2>Trading Post</h2><span class="sub">⭐ Stars · ◈ TON</span></div>
     ${!TG ? '<p class="tiny" style="margin-bottom:12px">Open inside Telegram to pay with Stars.</p>' : ''}
-    ${featured ? `
-      <div class="featured">
-        <span class="ft-badge">ONE-TIME</span>
-        <div class="ft-art">${artSvg('firestone')}</div>
-        <h3>${esc(featured.title)}</h3>
-        <p>${esc(featured.desc)}</p>
-        <div class="ft-price">
-          <button class="b" data-act="buyStars" data-val="${featuredKey}">⭐ ${fmt(featured.stars)}</button>
-        </div>
-      </div>` : ''}
+    ${featured ? `<div class="featured"><span class="ft-badge">ONE-TIME</span><div class="ft-art">${artSvg('firestone')}</div>
+      <h3>${esc(featured.title)}</h3><p>${esc(featured.desc)}</p>
+      <div class="ft-price"><button class="b" data-act="buyStars" data-val="${featuredKey}">⭐ ${fmt(featured.stars)}</button></div>
+    </div>` : ''}
     <div class="shop-tabs">
       ${Object.keys(sections).filter(s=>sections[s].length).map((s,i)=>`<button class="shop-tab ${i===0?'active':''}" data-act="shopTab" data-val="${s}">${({ember:'Ember Packs',relics:'Relics',boosts:'Tribe Boosts',war:'War',cosmetics:'Cosmetics'})[s]}</button>`).join('')}
     </div>
     ${Object.entries(sections).map(([s,arr])=>`
       <div class="shop-section" data-section="${s}" style="${s==='ember'?'':'display:none'}">
-        <div class="shop-rail">
-          ${arr.map(([k,it])=>{
-            const hasTon = p.tonEnabled && ton[k];
-            const rar = (it.grant&&it.grant.relic)?'<span class="rar pill pill-gold">Relic</span>':(it.grant&&it.grant.cosmetic)?'<span class="rar pill pill-jade">Look</span>':(s==='war')?'<span class="rar pill pill-blood">War</span>':'';
-            return `<div class="shop-card">${rar}
-              <div class="sc-art">${artSvg(ART_FOR[k]||'flame')}</div>
-              <b>${esc(it.title)}</b><p>${esc(it.desc)}</p>
-              <div class="sc-price">
-                <button class="b star" data-act="buyStars" data-val="${k}">⭐ ${fmt(it.stars)}</button>
-                ${hasTon?`<button class="b ton" data-act="buyTon" data-val="${k}">◈ ${ton[k].ton}</button>`:''}
-              </div></div>`;
-          }).join('') || '<p class="tiny">Coming soon.</p>'}
-        </div>
+        <div class="shop-rail">${arr.map(([k,it])=>{
+          const hasTon = p.tonEnabled && ton[k];
+          const rar = (it.grant&&it.grant.relic)?'<span class="rar pill pill-gold">Relic</span>':(it.grant&&it.grant.cosmetic)?'<span class="rar pill pill-jade">Look</span>':(s==='war')?'<span class="rar pill pill-blood">War</span>':'';
+          return `<div class="shop-card">${rar}
+            <div class="sc-art">${artSvg(ART_FOR[k]||'flame')}</div>
+            <b>${esc(it.title)}</b><p>${esc(it.desc)}</p>
+            <div class="sc-price"><button class="b star" data-act="buyStars" data-val="${k}">⭐ ${fmt(it.stars)}</button>
+            ${hasTon?`<button class="b ton" data-act="buyTon" data-val="${k}">◈ ${ton[k].ton}</button>`:''}</div>
+          </div>`;
+        }).join('') || '<p class="tiny">Coming soon.</p>'}</div>
       </div>`).join('')}
     <p class="tiny" style="text-align:center;margin-top:16px">Secured by Telegram Stars &amp; the TON blockchain.</p>`;
 }
@@ -1366,7 +1483,6 @@ function shopTab(btn, key){
   $$('.shop-section').forEach(s=>s.style.display = (s.dataset.section===key ? '' : 'none'));
 }
 
-/* ---------- bonfire banner ---------- */
 let bonfireTimer = null;
 function startBonfireTicker(){
   if(bonfireTimer) clearInterval(bonfireTimer);
@@ -1385,8 +1501,6 @@ function renderBonfire(){
     <span class="bf-text"><b>${esc(bf.title)}</b> · ${esc(bf.metric)} ×${bf.multiplier}</span>
     <span class="bf-cd" id="bfCd">${fmtDur(ms)}</span>`;
 }
-
-/* ---------- push poller ---------- */
 let pushTimer = null;
 function startPushPoller(){
   if(pushTimer) return;
@@ -1399,6 +1513,7 @@ const ACTS = {
   ash:       actAsh,
   trial:     actTrial,
   holdStart: (b,v)=>holdStart(b,v),
+  siftPick:  (b,v)=>doSift(b, v),
   share:     actShare,
   openCreate, pickName, pickPalette, pickBanner,
   doCreate, join: actJoin, leave: actLeave,
@@ -1419,7 +1534,6 @@ const ACTS = {
   bgClose:(b,v,e)=>{ if(e&&e.target&&e.target.classList&&e.target.classList.contains('sheet-bg')) closeSheet(); },
 };
 
-/* ---------- init ---------- */
 function init(){
   document.addEventListener('click', e=>{
     const b = e.target.closest('[data-act]');
@@ -1438,7 +1552,6 @@ function init(){
   document.addEventListener('pointerup', holdCancel);
   document.addEventListener('pointercancel', holdCancel);
   document.addEventListener('pointerleave', holdCancel);
-
   const rb = $('#retryBtn'); if(rb) rb.addEventListener('click', ()=>{ setBoot('Waking the ancestors…'); boot(); });
   const gr = $('#gateRetry'); if(gr) gr.addEventListener('click', ()=>{ $('#gate').style.display='none'; setBoot('Waking…'); boot(); });
   setInterval(()=>{

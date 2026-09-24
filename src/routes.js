@@ -154,11 +154,33 @@ router.post('/trials/:slug', rateLimit('trial', 30), async (req,res,next)=>{ try
   const u = req.user;
   const av = trialAvailable(t, u.trials_state || {});
   if (!av.ok) return res.json({ ok:false, reason: av.reason, nextIn: av.nextIn || 0 });
+
+  // ---- Sift the Ash: verify the pick server-side ----
+  // The reward pile position is derived from a daily seed per user.
+  // The client sends `pick` (0-4). We compute the correct index and
+  // only grant if they match. This prevents spoofing the choice.
+  if (t.minigame === 'sift'){
+    const pick = Math.max(0, Math.min(4, Number(req.body?.pick)));
+    const seedStr = `${u.id}:${new Date().toISOString().slice(0,10)}`;
+    // Simple deterministic hash → 0..4
+    let h = 5381;
+    for (let i = 0; i < seedStr.length; i++) h = ((h * 33) ^ seedStr.charCodeAt(i)) >>> 0;
+    const correct = h % 5;
+    if (pick !== correct){
+      // Cooldown still applies — the miss counts.
+      await completeTrial(u, t);
+      if (u.tribe_id) await q('UPDATE tribes SET quests_total = quests_total + 1 WHERE id=$1', [u.tribe_id]);
+      return res.json({ ok:true, hit:false, correct, reward_ember:0, reward_loyalty:0 });
+    }
+    const reward = await completeTrial(u, t);
+    if (u.tribe_id) await q('UPDATE tribes SET quests_total = quests_total + 1 WHERE id=$1', [u.tribe_id]);
+    return res.json({ ok:true, hit:true, correct, reward_ember: reward.reward_ember, reward_loyalty: reward.reward_loyalty });
+  }
+
   const reward = await completeTrial(u, t);
   if (u.tribe_id) await q('UPDATE tribes SET quests_total = quests_total + 1 WHERE id=$1', [u.tribe_id]);
   res.json({ ok:true, reward_ember: reward.reward_ember, reward_loyalty: reward.reward_loyalty });
 }catch(e){ next(e); }});
-
 // ================= CHECKIN / ASH / SHARE =================
 router.post('/checkin', rateLimit('checkin', 10), async (req,res,next)=>{ try{
   const u = req.user;
