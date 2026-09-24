@@ -106,9 +106,9 @@ app.use(express.static(PUBLIC, {
       res.setHeader('Pragma', 'no-cache');
       res.setHeader('Expires', '0');
     } else {
-      // JS/CSS are versioned via ?v=N so we can cache them hard.
-      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
-    }
+  // JS/CSS are versioned via ?v=N — cache for a day, revalidate after.
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+}
   },
 }));
 app.get('*', (req,res)=>{
