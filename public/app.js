@@ -1,9 +1,10 @@
 /* =====================================================================
    TRIBES — Mini App client. Obsidian Glass UI.
    Talks to /api/* with Telegram initData auth.
-   Ranks screen uses build-once/update-in-place via window.__tribes_perf.
+   Ranks + War screens use build-once/update-in-place via window.__tribes_perf.
 ===================================================================== */
 'use strict';
+window.addEventListener('error', function(e){ var b = document.getElementById('bootMsg'); if (b) b.textContent = 'Error: ' + (e.message || 'unknown'); });
 const TG = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 try{
   if(TG){
@@ -350,7 +351,7 @@ function renderFire(box){
 
   <div class="card">
     <div class="hd" style="margin:0 0 10px"><h2 style="font-size:1.05rem">The Ash Pit</h2><span class="pill pill-gold">Idle · Ash → Ember</span></div>
-    <p class="tiny" style="margin:0 0 12px">Cinders gather while you’re away — ${S.config.ashCap} charges × ${S.ashUnit} Ember.</p>
+    <p class="tiny" style="margin:0 0 12px">Cinders gather while you're away — ${S.config.ashCap} charges × ${S.ashUnit} Ember.</p>
     <div style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:14px">
       <div class="dial" style="--p:${((S.ashPending/S.config.ashCap)*100).toFixed(0)}"><b>${S.ashPending}<i>ASH</i></b></div>
       <button class="btn ${S.ashPending>0?'btn-primary btn-shine':'btn-stone'} btn-block" data-act="ash">
@@ -428,9 +429,7 @@ async function actAsh(btn){
     await refresh();
   });
 }
-// Trial tap: open the appropriate sheet instead of instantly claiming.
-//   standard      → hold-to-confirm sheet (2s hold)
-//   rewarded_ad   → placeholder ad sheet ("coming soon")
+
 function actTrial(btn, slug){
   const t = (S.trials || []).find(x => x.slug === slug);
   if (!t) return;
@@ -438,7 +437,7 @@ function actTrial(btn, slug){
   return openHoldSheet(t);
 }
 
-// ---------- hold-to-confirm sheet ----------
+/* ---------- hold-to-confirm ---------- */
 function openHoldSheet(trial){
   const rewardParts = [];
   if (trial.reward_ember)   rewardParts.push('🔥 +'+fmt(trial.reward_ember));
@@ -462,17 +461,12 @@ function openHoldSheet(trial){
   `);
 }
 
-// The hold logic: press → start a 2000ms timer that fills the ring; on
-// release (or if the timer never completes) → cancel. On complete → fire
-// the API call and close the sheet.
 let holdTimer = null, holdRAF = null, holdStartAt = 0;
 function holdStart(btn, slug){
   const HOLD_MS = 2000;
   const ring = btn.querySelector('.hold-ring');
-  const txt  = btn.querySelector('.hold-txt');
   if (!ring) return;
-
-    holdStartAt = performance.now();
+  holdStartAt = performance.now();
   btn.classList.add('holding');
   haptic('light');
 
@@ -481,11 +475,9 @@ function holdStart(btn, slug){
     const pct = Math.min(100, (elapsed / HOLD_MS) * 100);
     ring.style.setProperty('--p', pct.toFixed(1));
     if (pct >= 100){
-      // complete
       holdCancelSilent();
       haptic('heavy');
       burstAt(btn, 12);
-      // fire the API
       api('/trials/'+encodeURIComponent(slug)).then(r => {
         if (!r.ok){ toast('Not ready yet','warn'); return; }
         const parts=[];
@@ -517,7 +509,6 @@ function holdCancelSilent(){
   }
 }
 
-// ---------- rewarded-ad placeholder sheet ----------
 function openAdSheet(trial){
   sheet(`
     <h3>${esc(trial.name)}</h3>
@@ -531,6 +522,7 @@ function openAdSheet(trial){
     <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Close</button>
   `);
 }
+
 async function actShare(btn){
   await doAct(btn, async () => {
     await api('/share');
@@ -642,6 +634,22 @@ async function actUpgrade(btn){
   });
 }
 
+async function actJoin(btn, id){
+  await doAct(btn, async () => {
+    await api('/tribe/join', { tribeId: Number(id) });
+    haptic();
+    toast('You joined the fire!','good');
+    await refresh();
+  });
+}
+async function actLeave(btn){
+  await doAct(btn, async () => {
+    await api('/tribe/leave');
+    toast('You left the tribe','warn');
+    await refresh();
+  });
+}
+
 /* ---------- sheets ---------- */
 function sheet(html){
   $('#sheetRoot').innerHTML = `<div class="sheet-bg" data-act="bgClose"><div class="sheet"><div class="handle"></div>${html}</div></div>`;
@@ -700,23 +708,153 @@ async function doCreate(btn){
     await refresh();
   });
 }
-/* ---------- WAR (patched render) ---------- */
-// The War screen builds its arena DOM once and patches it on every
-// render. The 20s ticker no longer rebuilds the whole arena — it
-// just calls updateWarScreen(), which touches a handful of nodes.
-//
-// State machine (kept in warState.mode):
-//   'loading'  → skeleton cards
-//   'none'     → no war; declare button + trials of war
-//   'active'   → war in progress
-//   'done'     → war resolved
-//
-// When the mode changes we swap the inner content of the wrap element.
-// When the mode stays the same we patch in place.
 
-let warState = null;    // { wrap, mode, ...refs }
+function openDonate(){
+  sheet(`<h3>Stoke the Great Pyre</h3><div class="sub">You hold ${fmt(S.user.ember)} Ember</div>
+    <div class="field"><input id="dAmt" type="number" min="1" placeholder="Ember to donate"/></div>
+    <div style="display:flex;gap:8px;margin-bottom:14px">
+      ${[500,2500,10000].map(v=>`<button class="btn btn-stone" style="flex:1;padding:12px 8px;font-size:.82rem" data-act="setDon" data-val="${v}">${fmt(v)}</button>`).join('')}</div>
+    <button class="btn btn-primary btn-shine btn-block" data-act="doDonate">Donate to the Pyre</button>
+    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Cancel</button>`);
+}
+function setDon(btn, v){ const i=$('#dAmt'); if(i) i.value = v; }
+async function doDonate(btn){
+  await doAct(btn, async () => {
+    const amt = Math.floor(Number($('#dAmt')?.value)||0);
+    if(amt<1){ toast('Enter an amount','warn'); return; }
+    const r = await api('/tribe/donate', { amount: amt });
+    closeSheet();
+    haptic('medium');
+    toast('Donated '+fmt(r.donated)+' Ember to the Pyre','good');
+    await refresh();
+  });
+}
+
+/* ---------- KIVA ---------- */
+let kivaEs = null, kivaPoll = null, kivaLastId = 0, kivaOpen = false;
+
+async function openKiva(){
+  if(!S.tribe) return;
+  kivaOpen = true;
+  sheet(`<div class="kiva-sheet">
+    <div class="kiva-head"><b>${esc(S.tribe.name)} — Kiva</b>
+      <button class="btn btn-ghost" data-act="closeKiva" style="padding:6px 10px;font-size:.72rem">Close</button></div>
+    <div class="kiva-feed" id="kivaFeed"><div class="skeleton" style="height:44px"></div></div>
+    <div class="kiva-compose">
+      <input id="kivaInput" maxlength="280" placeholder="Say something to the tribe…"/>
+      <button class="send" data-act="sendKiva">➤</button>
+    </div>
+  </div>`);
+  await loadKiva();
+  connectKivaStream();
+}
+function closeKiva(){
+  kivaOpen = false;
+  if(kivaEs){ try{ kivaEs.close(); }catch(e){} kivaEs=null; }
+  if(kivaPoll){ clearInterval(kivaPoll); kivaPoll=null; }
+  closeSheet();
+}
+async function loadKiva(){
+  try{
+    const d = await api('/kiva');
+    const rows = d.messages || [];
+    kivaLastId = rows.length ? rows[rows.length-1].id : 0;
+    renderKivaFeed(rows);
+  }catch(e){ const f=$('#kivaFeed'); if(f) f.innerHTML = '<p class="tiny">Could not reach the Kiva.</p>'; }
+}
+function renderKivaFeed(rows){
+  const feed = $('#kivaFeed'); if(!feed) return;
+  feed.innerHTML = rows.map(m => kivaMsgHtml(m)).join('');
+  feed.scrollTop = feed.scrollHeight;
+}
+function kivaMsgHtml(m){
+  if(m.kind==='system' || m.kind==='war' || m.kind==='level'){
+    return `<div class="kiva-msg system"><b>${esc(m.body)}</b></div>`;
+  }
+  const mine = S.user && m.user_id === S.user.id;
+  const role = (m.role||'').toLowerCase();
+  const roleTag = (role && role!=='toddler') ? `<span class="km-role">${esc(m.role)}</span>` : '';
+  const pin = m.pinned ? '📌 ' : '';
+  const canPin = ['Chief','Head','Elder'].includes(S.user.role);
+  return `<div class="kiva-msg ${mine?'self':''} ${m.pinned?'pinned':''}" data-mid="${m.id}">
+    <div class="km-av" style="${m.name_color?('color:'+m.name_color):''}">${esc((m.first_name||'?').slice(0,1).toUpperCase())}</div>
+    <div class="km-body">
+      <div class="km-meta"><span class="km-name">${esc(m.first_name||m.username||'Kin')}</span>${roleTag}<span>${fmtTime(m.created_at)}</span></div>
+      <div class="km-text">${pin}${esc(m.body)}</div>
+      ${canPin?`<div class="km-actions"><button data-act="pinKiva" data-val="${m.id}">${m.pinned?'Unpin':'Pin'}</button></div>`:''}
+    </div>
+  </div>`;
+}
+function fmtTime(t){
+  try{
+    const d = new Date(t);
+    const hh = String(d.getHours()).padStart(2,'0');
+    const mm = String(d.getMinutes()).padStart(2,'0');
+    return hh+':'+mm;
+  }catch(e){ return ''; }
+}
+function connectKivaStream(){
+  if(!S.tribe) return;
+  try{
+    kivaEs = new EventSource('/api/kiva/stream?tribeId='+encodeURIComponent(S.tribe.id));
+    let opened = false;
+    const guard = setTimeout(()=>{ if(!opened && kivaEs){ kivaEs.close(); kivaEs=null; startKivaPoll(); } }, 3000);
+    kivaEs.onopen = ()=>{ opened = true; clearTimeout(guard); if(kivaPoll){ clearInterval(kivaPoll); kivaPoll=null; } };
+    kivaEs.onmessage = ev => {
+      try{
+        const msg = JSON.parse(ev.data);
+        if(msg.type==='message' && msg.message && msg.message.id > kivaLastId){
+          kivaLastId = msg.message.id;
+          const feed = $('#kivaFeed');
+          if(feed){ feed.insertAdjacentHTML('beforeend', kivaMsgHtml(msg.message)); feed.scrollTop = feed.scrollHeight; }
+        } else if(msg.type==='pin'){
+          const node = document.querySelector(`[data-mid="${msg.id}"]`);
+          if(node) node.classList.toggle('pinned', !!msg.pinned);
+        }
+      }catch(e){}
+    };
+  }catch(e){ startKivaPoll(); }
+}
+function startKivaPoll(){
+  if(kivaPoll) return;
+  kivaPoll = setInterval(async ()=>{
+    if(!kivaOpen){ clearInterval(kivaPoll); kivaPoll=null; return; }
+    try{
+      const d = await api('/kiva?since='+kivaLastId);
+      const rows = d.messages || [];
+      if(rows.length){
+        const feed = $('#kivaFeed');
+        for(const m of rows){
+          if(m.id > kivaLastId){
+            kivaLastId = m.id;
+            if(feed){ feed.insertAdjacentHTML('beforeend', kivaMsgHtml(m)); feed.scrollTop = feed.scrollHeight; }
+          }
+        }
+      }
+    }catch(e){}
+  }, 6000);
+}
+async function sendKiva(){
+  const inp = $('#kivaInput'); if(!inp) return;
+  const body = inp.value.trim();
+  if(!body) return;
+  inp.value = '';
+  try{ await api('/kiva', { body }); haptic(); }
+  catch(e){ toast(e.message,'bad'); inp.value = body; }
+}
+async function pinKiva(messageId){
+  try{
+    const node = document.querySelector(`[data-mid="${messageId}"]`);
+    const pinned = node ? !node.classList.contains('pinned') : true;
+    await api('/kiva/pin', { id: Number(messageId), pinned });
+    if(node) node.classList.toggle('pinned', pinned);
+  }catch(e){ toast(e.message,'bad'); }
+}
+
+/* ---------- WAR (patched render) ---------- */
+let warState = null;
 let warTimer = null;
-let warData = null;     // last-known war object
+let warData = null;
 
 function stopWarTicker(){ if(warTimer){ clearInterval(warTimer); warTimer=null; } }
 function startWarTicker(endAt){
@@ -729,7 +867,6 @@ function startWarTicker(endAt){
   tick();
   warTimer = setInterval(tick, 1000);
 }
-
 function warWrap(box){
   if (!warState || warState.wrap.parentNode !== box){
     warState = { wrap: document.createElement('div'), mode: null };
@@ -737,14 +874,12 @@ function warWrap(box){
   }
   return warState.wrap;
 }
-
 function setMode(mode){
   if (warState.mode !== mode){
     warState.wrap.replaceChildren();
     warState.mode = mode;
   }
 }
-
 async function renderWar(box){
   const u = S.user;
   const wrap = warWrap(box);
@@ -752,8 +887,8 @@ async function renderWar(box){
   if(!u.tribe_id){
     stopWarTicker();
     setMode('no-tribe');
-    if (warState.mode === 'no-tribe' && warState.rendered) return;
-    warState.rendered = true;
+    if (warState.rendered === 'no-tribe') return;
+    warState.rendered = 'no-tribe';
     wrap.innerHTML = `<div class="empty"><span class="big">⚔️</span>
       <h2 style="margin:0;color:var(--gold);font-weight:800">No banner to raise</h2>
       <p class="tiny" style="margin-top:8px">You must belong to a tribe before you can wage war.</p></div>
@@ -761,8 +896,6 @@ async function renderWar(box){
     return;
   }
 
-  // Show loading only on first load; subsequent refreshes keep the arena
-  // visible and patch in place.
   if (!warData){
     setMode('loading');
     if (warState.rendered !== 'loading'){
@@ -798,7 +931,6 @@ function renderWarNone(wrap){
   const can = ['Chief','Head','Elder'].includes(S.user.role);
 
   if (warState.rendered === 'none'){
-    // Same mode already rendered → patch just what can change.
     const btn = wrap.querySelector('[data-act="declareWar"]');
     if (btn){
       btn.disabled = !can;
@@ -836,7 +968,6 @@ function renderWarActive(wrap, war){
   const mePct = clamp(myScore / tot * 100, 0, 100);
   const leadTxt = myScore>foeScore ? 'You lead' : myScore<foeScore ? 'You trail' : 'Dead even';
 
-  // Rebuild only when switching into active mode, or when the war id changes.
   const sameWar = warState.rendered === 'active' && warState.warId === war.id;
 
   if (!sameWar){
@@ -870,7 +1001,6 @@ function renderWarActive(wrap, war){
     startWarTicker(new Date(war.end_at).getTime());
   }
 
-  // Patch values (identical logic whether we just built or are re-rendering)
   const q = (k)=>wrap.querySelector(`[data-war="${k}"]`);
   const setT = (node, v)=>{ if(node && node.textContent !== String(v)) node.textContent = String(v); };
   setT(q('me-name'), me.name);
@@ -909,7 +1039,6 @@ function renderWarDone(wrap, war){
       :('Your tribe fell to '+esc(foe.name)+', paying '+fmt(war.tribute)+' Ember in tribute.')}</p>
   </div>
   <button class="btn btn-primary btn-shine btn-block" data-act="declareWar" ${['Chief','Head','Elder'].includes(S.user.role)?'':'disabled'}>⚔️ Rally for a New War</button>`;
-  if (won) setTimeout(()=>{ try{ if (window.__tribesCeremony) window.__tribesCeremony('🏆','VICTORY','Your tribe stands.',2400); }catch(e){} }, 300);
 }
 
 async function actDeclare(btn){
@@ -917,17 +1046,14 @@ async function actDeclare(btn){
     const r = await api('/war/declare');
     haptic('heavy');
     toast('War declared against '+r.war.defender.name+'!','good');
-    // Force the War screen to re-fetch and rebuild for the new war id.
     warData = null;
     warState.rendered = null;
     await refresh();
     renderScreen('war');
   });
 }
-/* ================= RANKS — patched render ================= */
-// Builds the Ranks screen DOM once, then patches it on every render.
-// If perf.js didn't load, falls back to innerHTML rendering.
 
+/* ================= RANKS — patched render ================= */
 let ranksState = null;
 
 function buildRanksScreen(){
@@ -1001,7 +1127,6 @@ function patchRanksRow(row, t, i, top, mineId){
 }
 
 function renderRanks(box){
-  // Fallback if perf.js is not loaded — use the old innerHTML path.
   if (!PERF){
     const lb = S.leaderboard||[];
     const top = lb.length ? (Number(lb[0].loyalty_total)||1) : 1;
@@ -1026,7 +1151,6 @@ function renderRanks(box){
   const top = lb.length ? (Number(lb[0].loyalty_total)||1) : 1;
   const mine = S.tribe ? Number(S.tribe.id) : null;
 
-  // Build once
   if (!ranksState){
     ranksState = buildRanksScreen();
     box.replaceChildren(ranksState.root);
@@ -1043,7 +1167,6 @@ function renderRanks(box){
     return;
   }
 
-  // Reconcile rows: add, patch, remove
   const seen = new Set();
   lb.forEach((t, i) => {
     seen.add(String(t.id));
@@ -1055,7 +1178,6 @@ function renderRanks(box){
       patchRanksRow(built, t, i, top, mine);
     } else {
       patchRanksRow(row, t, i, top, mine);
-      // Ensure correct order: if the row is not in position, move it.
       const expectedNode = ranksState.listEl.children[i];
       if (expectedNode !== row.card){
         ranksState.listEl.insertBefore(row.card, expectedNode || null);
@@ -1063,7 +1185,6 @@ function renderRanks(box){
     }
   });
 
-  // Remove rows for tribes that dropped off the list
   for (const [id, row] of [...ranksState.rows]){
     if (!seen.has(id)){
       row.card.remove();
@@ -1191,14 +1312,13 @@ function init(){
     if(e.target.closest('#tonBtn')){ tonToggle(); return; }
   });
 
-  // Hold-to-confirm: pointer events so it works on touch and mouse.
   document.addEventListener('pointerdown', e=>{
     const btn = e.target.closest('.hold-btn');
     if(!btn) return;
     e.preventDefault();
     holdStart(btn, btn.dataset.val);
   });
-  document.addEventListener('pointerup',   holdCancel);
+  document.addEventListener('pointerup', holdCancel);
   document.addEventListener('pointercancel', holdCancel);
   document.addEventListener('pointerleave', holdCancel);
 
