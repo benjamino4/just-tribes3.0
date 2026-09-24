@@ -1,10 +1,9 @@
 /* =====================================================================
    TRIBES — Mini App client. Obsidian Glass UI.
-   Talks to /api/* with Telegram initData auth.
-   Ranks + War screens use build-once/update-in-place via window.__tribes_perf.
+   Batch 2: War UI (fronts, actions, momentum, legendary, defender, cry).
 ===================================================================== */
 'use strict';
-window.addEventListener('error', function(e){ var b = document.getElementById('bootMsg'); if (b) b.textContent = 'Error: ' + (e.message || 'unknown'); });
+window.addEventListener('error', function(e){ var b = document.getElementById('bootMsg'); if (b && b.style.display !== 'none') b.textContent = 'Error: ' + (e.message || 'unknown'); });
 const TG = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 try{
   if(TG){
@@ -22,7 +21,6 @@ const fmt = n => { n=Number(n)||0; return n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(
 const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
 const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const haptic = (t='light') => { try{ TG&&TG.HapticFeedback&&TG.HapticFeedback.impactOccurred(t); }catch(e){} };
-
 const PERF = window.__tribes_perf || null;
 
 /* ---------- toast ---------- */
@@ -233,7 +231,14 @@ async function boot(){
     if(e.status===403 && e.data && e.data.error==='banned'){ setBoot('You were banished: '+(e.data.reason||''), false); return; }
     setBoot('The fire could not be reached — '+(e.message||'try again.'), true); return;
   }
-  initTon(); applyPalette(); renderAll(); showApp();
+  try {
+    initTon(); applyPalette(); renderAll();
+  } catch (err) {
+    setBoot('Error: ' + (err && err.message ? err.message : String(err)));
+    console.error('BOOT ERROR:', err);
+    return;
+  }
+  showApp();
   startBonfireTicker();
   startPushPoller();
 }
@@ -388,28 +393,16 @@ let tapLock = false;
 function tapFire(campfire){
   if(tapLock) return;
   tapLock = true; setTimeout(()=>tapLock=false, 420);
-
   campfire.classList.remove('tap');
   void campfire.offsetWidth;
   campfire.classList.add('tap');
-
   const rect = campfire.getBoundingClientRect();
   const cx = rect.left + rect.width/2;
   const cy = rect.top + rect.height/2;
-
   burstEmbers(cx, cy, 16, 130);
-
-  if(fireReadyIn() > 0){
-    haptic('soft');
-    fxPop('⏳', cx, cy-30);
-    return;
-  }
+  if(fireReadyIn() > 0){ haptic('soft'); fxPop('⏳', cx, cy-30); return; }
   api('/checkin').then(r => {
-    if(!r.ok){
-      haptic('soft');
-      fxPop('⏳', cx, cy-30);
-      return;
-    }
+    if(!r.ok){ haptic('soft'); fxPop('⏳', cx, cy-30); return; }
     haptic('heavy');
     burstEmbers(cx, cy, 24, 170);
     fxPop('+'+fmt(r.reward), cx, cy-40);
@@ -437,13 +430,11 @@ function actTrial(btn, slug){
   return openHoldSheet(t);
 }
 
-/* ---------- hold-to-confirm ---------- */
 function openHoldSheet(trial){
   const rewardParts = [];
   if (trial.reward_ember)   rewardParts.push('🔥 +'+fmt(trial.reward_ember));
   if (trial.reward_loyalty) rewardParts.push('❤ +'+fmt(trial.reward_loyalty));
   const rewardText = rewardParts.join(' · ') || 'Reward';
-
   sheet(`
     <h3>${esc(trial.name)}</h3>
     <div class="sub">${esc(trial.hint||'')}</div>
@@ -469,7 +460,6 @@ function holdStart(btn, slug){
   holdStartAt = performance.now();
   btn.classList.add('holding');
   haptic('light');
-
   const paint = () => {
     const elapsed = performance.now() - holdStartAt;
     const pct = Math.min(100, (elapsed / HOLD_MS) * 100);
@@ -602,7 +592,6 @@ function renderTribe(box){
     <p class="tiny" style="text-align:center;margin-top:12px">${wl ? ('Battle record · '+t.wins+' won, '+t.losses+' lost') : 'Your tribe has yet to taste war.'}</p>`;
     return;
   }
-
   box.innerHTML = `
   <div class="empty"><span class="big">🪨</span>
     <h2 style="margin:0;color:var(--gold);font-weight:800">You wander alone</h2>
@@ -633,20 +622,16 @@ async function actUpgrade(btn){
     await refresh();
   });
 }
-
 async function actJoin(btn, id){
   await doAct(btn, async () => {
     await api('/tribe/join', { tribeId: Number(id) });
-    haptic();
-    toast('You joined the fire!','good');
-    await refresh();
+    haptic(); toast('You joined the fire!','good'); await refresh();
   });
 }
 async function actLeave(btn){
   await doAct(btn, async () => {
     await api('/tribe/leave');
-    toast('You left the tribe','warn');
-    await refresh();
+    toast('You left the tribe','warn'); await refresh();
   });
 }
 
@@ -702,10 +687,7 @@ async function doCreate(btn){
     if(!pickedNameId){ toast('Pick a name','warn'); return; }
     const motto = ($('#tMotto')?.value || '').trim();
     await api('/tribe/create', { nameId: pickedNameId, motto, palette: pickedPalette, banner: pickedBanner, crest: pickedCrest });
-    closeSheet();
-    haptic('medium');
-    toast('Your tribe is born!','good');
-    await refresh();
+    closeSheet(); haptic('medium'); toast('Your tribe is born!','good'); await refresh();
   });
 }
 
@@ -723,8 +705,7 @@ async function doDonate(btn){
     const amt = Math.floor(Number($('#dAmt')?.value)||0);
     if(amt<1){ toast('Enter an amount','warn'); return; }
     const r = await api('/tribe/donate', { amount: amt });
-    closeSheet();
-    haptic('medium');
+    closeSheet(); haptic('medium');
     toast('Donated '+fmt(r.donated)+' Ember to the Pyre','good');
     await refresh();
   });
@@ -732,7 +713,6 @@ async function doDonate(btn){
 
 /* ---------- KIVA ---------- */
 let kivaEs = null, kivaPoll = null, kivaLastId = 0, kivaOpen = false;
-
 async function openKiva(){
   if(!S.tribe) return;
   kivaOpen = true;
@@ -745,8 +725,7 @@ async function openKiva(){
       <button class="send" data-act="sendKiva">➤</button>
     </div>
   </div>`);
-  await loadKiva();
-  connectKivaStream();
+  await loadKiva(); connectKivaStream();
 }
 function closeKiva(){
   kivaOpen = false;
@@ -788,9 +767,7 @@ function kivaMsgHtml(m){
 function fmtTime(t){
   try{
     const d = new Date(t);
-    const hh = String(d.getHours()).padStart(2,'0');
-    const mm = String(d.getMinutes()).padStart(2,'0');
-    return hh+':'+mm;
+    return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0');
   }catch(e){ return ''; }
 }
 function connectKivaStream(){
@@ -836,8 +813,7 @@ function startKivaPoll(){
 }
 async function sendKiva(){
   const inp = $('#kivaInput'); if(!inp) return;
-  const body = inp.value.trim();
-  if(!body) return;
+  const body = inp.value.trim(); if(!body) return;
   inp.value = '';
   try{ await api('/kiva', { body }); haptic(); }
   catch(e){ toast(e.message,'bad'); inp.value = body; }
@@ -851,10 +827,12 @@ async function pinKiva(messageId){
   }catch(e){ toast(e.message,'bad'); }
 }
 
-/* ---------- WAR (patched render) ---------- */
+/* ================= WAR (Batch 2 — full UI) ================= */
 let warState = null;
 let warTimer = null;
 let warData = null;
+let selectedFront = 0;
+let defenderPanelOpen = false;
 
 function stopWarTicker(){ if(warTimer){ clearInterval(warTimer); warTimer=null; } }
 function startWarTicker(endAt){
@@ -867,6 +845,7 @@ function startWarTicker(endAt){
   tick();
   warTimer = setInterval(tick, 1000);
 }
+
 function warWrap(box){
   if (!warState || warState.wrap.parentNode !== box){
     warState = { wrap: document.createElement('div'), mode: null };
@@ -880,6 +859,7 @@ function setMode(mode){
     warState.mode = mode;
   }
 }
+
 async function renderWar(box){
   const u = S.user;
   const wrap = warWrap(box);
@@ -917,7 +897,6 @@ async function renderWar(box){
     return;
   }
   if (TAB !== 'war') return;
-
   warData = war;
 
   if (!war){ renderWarNone(wrap); return; }
@@ -929,6 +908,7 @@ function renderWarNone(wrap){
   stopWarTicker();
   setMode('none');
   const can = ['Chief','Head','Elder'].includes(S.user.role);
+  const stances = (S.config.war_stances||[]);
 
   if (warState.rendered === 'none'){
     const btn = wrap.querySelector('[data-act="declareWar"]');
@@ -939,13 +919,21 @@ function renderWarNone(wrap){
     }
     return;
   }
-
   warState.rendered = 'none';
   wrap.innerHTML = `
   <div class="war-arena">
     <div class="war-emblem"><div class="vs">WAR DRUMS</div>
-      <p class="tiny" style="margin:6px 0 14px">Declare war to be matched against a random rival tribe. Winner seizes Ember and tribute.</p></div>
-    <button class="btn ${can?'btn-danger btn-shine':'btn-stone'} btn-block" ${can?'data-act="declareWar"':'disabled'}>
+      <p class="tiny" style="margin:6px 0 14px">Declare war to be matched against a random rival tribe. You'll choose your stance first.</p></div>
+    <div class="stance-row">
+      ${stances.map(s=>`
+        <button class="stance-card" data-act="pickStance" data-val="${esc(s.id)}">
+          <b>${esc(s.name)}</b><span>${esc(s.desc)}</span>
+        </button>`).join('')}
+    </div>
+    <div class="stance-chosen" id="stanceChosen" data-val="${esc((stances[0]||{}).id||'')}">
+      Selected: <b>${esc((stances[0]||{}).name||'—')}</b>
+    </div>
+    <button class="btn ${can?'btn-danger btn-shine':'btn-stone'} btn-block" ${can?'data-act="declareWar"':'disabled'} style="margin-top:14px">
       ${can ? '⚔️ Declare War' : 'Only Elders, Heads & the Chief may declare war'}
     </button>
   </div>
@@ -961,12 +949,9 @@ function renderWarActive(wrap, war){
   const mineA = war.mine === 'attacker';
   const me = mineA ? war.attacker : war.defender;
   const foe = mineA ? war.defender : war.attacker;
-  const myScore = Number(mineA ? war.attacker_score : war.defender_score);
-  const foeScore = Number(mineA ? war.defender_score : war.attacker_score);
-  const goal = Number(war.goal);
-  const tot = myScore + foeScore || 1;
-  const mePct = clamp(myScore / tot * 100, 0, 100);
-  const leadTxt = myScore>foeScore ? 'You lead' : myScore<foeScore ? 'You trail' : 'Dead even';
+  const fronts = war.fronts || [];
+  const momentum = war.momentum || [];
+  const legendary = war.legendary;
 
   const sameWar = warState.rendered === 'active' && warState.warId === war.id;
 
@@ -974,47 +959,107 @@ function renderWarActive(wrap, war){
     setMode('active');
     warState.rendered = 'active';
     warState.warId = war.id;
+    selectedFront = 0;
+    const meMom = momentum.find(m => Number(m.tribe_id) === Number(me.id)) || { tokens:0, on_rout:false };
+    const foeMom = momentum.find(m => Number(m.tribe_id) === Number(foe.id)) || { tokens:0, on_rout:false };
+
     wrap.innerHTML = `
     <div class="war-arena">
-      <div class="war-emblem"><div class="vs">⚔️ WAR ⚔️</div></div>
-      <div class="versus">
-        <div class="war-totem"><div class="tm">${artSvg(me.crest)}</div><b data-war="me-name"></b><div class="sc" data-war="me-score"></div></div>
-        <div class="clash">🔥</div>
-        <div class="war-totem foe"><div class="tm">${artSvg(foe.crest)}</div><b data-war="foe-name"></b><div class="sc" data-war="foe-score"></div></div>
+      <div class="war-emblem"><div class="vs">⚔️ WAR ⚔️</div>
+        <div class="war-meta-line"><span class="pill pill-gold">Stance: ${esc(war.stance||'—')}</span>${war.cry_used?`<span class="pill pill-blood">Cry raised</span>`:''}</div>
       </div>
-      <div class="warbar"><i class="me" data-war="me-fill" style="width:0%"></i><i class="foe" data-war="foe-fill" style="width:0%"></i><span class="mid"></span></div>
-      <p class="tiny" style="text-align:center;margin:6px 0 0"><span data-war="lead"></span> · goal <span data-war="goal"></span></p>
+      <div class="versus">
+        <div class="war-totem"><div class="tm">${artSvg(me.crest)}</div><b>${esc(me.name)}</b></div>
+        <div class="clash">🔥</div>
+        <div class="war-totem foe"><div class="tm">${artSvg(foe.crest)}</div><b>${esc(foe.name)}</b></div>
+      </div>
+      <div class="momentum-row">
+        <div class="mom-pill ${meMom.on_rout?'rout':''}" data-war="me-mom">
+          <span class="mom-tok">${'●'.repeat(Math.min(6, meMom.tokens||0))}${'○'.repeat(Math.max(0, 6-(meMom.tokens||0)))}</span>
+          <b>${esc(me.name)}</b>${meMom.on_rout?' <span class="rout-tag">ON ROUT</span>':''}
+        </div>
+        <div class="mom-pill ${foeMom.on_rout?'rout':''}" data-war="foe-mom">
+          <span class="mom-tok">${'●'.repeat(Math.min(6, foeMom.tokens||0))}${'○'.repeat(Math.max(0, 6-(foeMom.tokens||0)))}</span>
+          <b>${esc(foe.name)}</b>${foeMom.on_rout?' <span class="rout-tag">ON ROUT</span>':''}
+        </div>
+      </div>
+      <div class="legend-row" id="legendRow" style="${legendary?'':'display:none'}">
+        <span class="leg-ico">⚡</span>
+        <span class="leg-text">LEGENDARY — all actions ×${legendary?legendary.multiplier:'3'}</span>
+      </div>
+      <div class="wmeta">
+        <div class="box"><b id="warCd" class="cd-live">…</b><span>Time left</span></div>
+        <div class="box"><b>${war.stake_pct||20}%</b><span>Stake</span></div>
+      </div>
     </div>
 
-    <div class="scroll">
-      <div class="cg">${war.challenge.glyph||'⚔️'}</div>
-      <div class="cn">${esc(war.challenge.name||'Trial of War')}</div>
-      <div class="cd">${esc(war.challenge.desc||'')}</div>
-      <div class="goal">First to <span data-war="goal2"></span> — or highest score when the fire dies — wins.</div>
+    <div class="fronts-wrap" id="frontsWrap">
+      ${fronts.map((f, i) => frontHtml(f, i, me, foe)).join('')}
     </div>
 
-    <div class="wmeta">
-      <div class="box"><b id="warCd" class="cd-live">…</b><span>Time left</span></div>
-      <div class="box"><b>${fmt(war.reward_ember)}</b><span>Reward</span></div>
-      <div class="box"><b>${war.stake_pct}%</b><span>Tribute</span></div>
+    <div class="war-action-panel">
+      <div class="wact-head">Push a front</div>
+      <div class="wact-front-pick" id="frontPick">
+        ${fronts.map((f, i) => `<button class="fp-btn ${i===0?'active':''}" data-act="pickFront" data-val="${i}">${esc(f.name)}</button>`).join('')}
+      </div>
+      <div class="wact-btns">
+        <button class="wact-btn" data-act="warAction" data-val="rally">
+          <b>Rally</b><span>+25 pts</span>
+        </button>
+        <button class="wact-btn" data-act="warAction" data-val="chant">
+          <b>Chant</b><span>+150 pts</span>
+        </button>
+        <button class="wact-btn raid" data-act="warAction" data-val="raid">
+          <b>Raid</b><span>+800 pts · cd 4h</span>
+        </button>
+      </div>
+      <div class="wact-foot">Spend from the tribe's war chest.</div>
+    </div>
+
+    <div class="war-extra-row">
+      <button class="btn btn-ghost" data-act="openChronicle">📜 Chronicle</button>
+      <button class="btn btn-ghost" data-act="openLeaderboard">🏅 Top warriors</button>
+      ${['Chief','Head','Elder'].includes(S.user.role) && !war.cry_used
+        ? `<button class="btn btn-primary" data-act="openCry">📣 Raise a Cry</button>` : ''}
     </div>`;
     startWarTicker(new Date(war.end_at).getTime());
   }
 
-  const q = (k)=>wrap.querySelector(`[data-war="${k}"]`);
-  const setT = (node, v)=>{ if(node && node.textContent !== String(v)) node.textContent = String(v); };
-  setT(q('me-name'), me.name);
-  setT(q('foe-name'), foe.name);
-  setT(q('me-score'), fmt(myScore));
-  setT(q('foe-score'), fmt(foeScore));
-  setT(q('lead'), leadTxt);
-  setT(q('goal'), fmt(goal));
-  setT(q('goal2'), fmt(goal));
+  // Patch front scores
+  fronts.forEach((f, i) => {
+    const r = wrap.querySelector(`[data-front="${i}"]`);
+    if(!r) return;
+    const aPct = clamp((f.attacker_score / Math.max(1, f.attacker_score + f.defender_score)) * 100, 0, 100);
+    const aBar = r.querySelector('[data-fr="a"]');
+    const dBar = r.querySelector('[data-fr="d"]');
+    const aScore = r.querySelector('[data-fr="as"]');
+    const dScore = r.querySelector('[data-fr="ds"]');
+    if(aBar) aBar.style.width = aPct + '%';
+    if(dBar) dBar.style.width = (100 - aPct) + '%';
+    if(aScore) aScore.textContent = fmt(f.attacker_score);
+    if(dScore) dScore.textContent = fmt(f.defender_score);
+  });
+  const leaderEl = wrap.querySelector('[data-war="lead"]');
+  if (leaderEl){
+    const totalA = fronts.reduce((s, f)=>s+f.attacker_score, 0);
+    const totalD = fronts.reduce((s, f)=>s+f.defender_score, 0);
+    leaderEl.textContent = totalA>totalD ? 'You lead' : totalA<totalD ? 'You trail' : 'Dead even';
+  }
+}
 
-  const meFill = q('me-fill');
-  const foeFill = q('foe-fill');
-  if (meFill) meFill.style.width = mePct.toFixed(1)+'%';
-  if (foeFill) foeFill.style.width = (100-mePct).toFixed(1)+'%';
+function frontHtml(f, i, me, foe){
+  const aPct = clamp((f.attacker_score / Math.max(1, f.attacker_score + f.defender_score)) * 100, 0, 100);
+  return `<div class="front-card" data-front="${i}">
+    <div class="front-head">
+      <span class="front-name">${esc(f.name)}</span>
+      <span class="front-scores"><b data-fr="as">${fmt(f.attacker_score)}</b> vs <b data-fr="ds">${fmt(f.defender_score)}</b></span>
+    </div>
+    <div class="front-bar">
+      <i data-fr="a" style="width:${aPct}%"></i>
+      <i data-fr="d" style="width:${100-aPct}%"></i>
+    </div>
+    ${f.fortify_until && new Date(f.fortify_until).getTime() > Date.now() ? `<div class="front-fortified">🛡️ Fortified</div>` : ''}
+  </div>`;
 }
 
 function renderWarDone(wrap, war){
@@ -1025,7 +1070,6 @@ function renderWarDone(wrap, war){
   const mineA = war.mine === 'attacker';
   const foe = mineA ? war.defender : war.attacker;
   const big = draw?'🤝':won?'🏆':'💀';
-
   setMode('done');
   if (warState.rendered === 'done' && warState.warId === war.id) return;
   warState.rendered = 'done';
@@ -1035,15 +1079,105 @@ function renderWarDone(wrap, war){
     <div class="war-emblem"><div class="vs">${draw?'STALEMATE':won?'VICTORY':'DEFEAT'}</div></div>
     <span style="font-size:3.2rem;display:block;margin:6px 0 4px">${big}</span>
     <p class="tiny" style="max-width:280px;margin:6px auto 0">${draw?'Neither fire could break the other.':won
-      ?('Your tribe crushed '+esc(foe.name)+', seizing '+fmt(war.reward_ember)+' Ember and '+fmt(war.tribute)+' tribute.')
-      :('Your tribe fell to '+esc(foe.name)+', paying '+fmt(war.tribute)+' Ember in tribute.')}</p>
+      ?('Your tribe crushed '+esc(foe.name)+', seizing '+fmt(war.reward_ember)+' Ember and '+fmt(war.tribute||0)+' tribute.')
+      :('Your tribe fell to '+esc(foe.name)+', paying '+fmt(war.tribute||0)+' Ember in tribute.')}</p>
   </div>
-  <button class="btn btn-primary btn-shine btn-block" data-act="declareWar" ${['Chief','Head','Elder'].includes(S.user.role)?'':'disabled'}>⚔️ Rally for a New War</button>`;
+  <button class="btn btn-primary btn-shine btn-block" data-act="declareWar" ${['Chief','Head','Elder'].includes(S.user.role)?'':'disabled'}>⚔️ Rally for a New War</button>
+  <button class="btn btn-ghost btn-block" data-act="openChronicle" style="margin-top:8px">📜 View Chronicle</button>`;
+}
+
+// ---- actions ----
+function pickStance(btn, id){
+  $$('.stance-card').forEach(b=>b.classList.toggle('active', b.dataset.val===id));
+  const c = $('#stanceChosen');
+  if(c){ c.dataset.val = id; const s = (S.config.war_stances||[]).find(x=>x.id===id); if(s) c.innerHTML = 'Selected: <b>'+esc(s.name)+'</b>'; }
+  haptic('light');
+}
+function pickFront(btn, idx){
+  selectedFront = Number(idx);
+  $$('.fp-btn').forEach(b=>b.classList.toggle('active', Number(b.dataset.val)===selectedFront));
+  haptic('light');
+}
+
+async function actWarAction(btn, kind){
+  await doAct(btn, async () => {
+    const r = await api('/war/action', { front: selectedFront, kind });
+    haptic('heavy');
+    burstAt(btn, 18);
+    popAt(btn, '+'+fmt(r.points));
+    toast(`${kind} · +${fmt(r.points)} on ${r.front}${r.multiplier>1?' (×'+r.multiplier.toFixed(2)+')':''}`,'good');
+    // Refresh the war so scores update
+    warData = null;
+    await refresh();
+    renderScreen('war');
+  });
+}
+
+function openCrySheet(){
+  const cries = (S.config.war_cries||[]);
+  sheet(`
+    <h3>Raise a War Cry</h3>
+    <div class="sub">Announced in both tribes' Kivas. One per war.</div>
+    ${cries.map(c=>`
+      <button class="cry-card" data-act="doCry" data-val="${esc(c.id)}">
+        <b>${esc(c.name)}</b>
+        <span>${esc(c.desc||('Cost: '+fmt(c.cost)+' Ember'))}</span>
+        <span class="cry-cost">${fmt(c.cost)} Ember</span>
+      </button>`).join('')}
+    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Cancel</button>
+  `);
+}
+async function doCry(btn, id){
+  await doAct(btn, async () => {
+    await api('/war/cry', { cry: id });
+    haptic('heavy');
+    toast('War Cry raised!','good');
+    closeSheet();
+    warData = null;
+    await refresh();
+    renderScreen('war');
+  });
+}
+
+async function openChronicle(){
+  try{
+    const d = await api('/war/chronicle');
+    const rows = d.chronicles || [];
+    sheet(`<div class="chronicle-sheet">
+      <h3>Chronicle</h3>
+      <div class="sub">Permanent record of your wars.</div>
+      ${rows.length ? rows.map(c=>`
+        <div class="chron-card">
+          <div class="chron-top"><b>${esc(c.attacker_name||'?')}</b> vs <b>${esc(c.defender_name||'?')}</b></div>
+          <div class="chron-scores">${fmt(c.score_a||0)} — ${fmt(c.score_d||0)}</div>
+          <div class="tiny">Stance ${esc(c.stance||'—')} · Tribute ${fmt(c.tribute||0)}${c.is_rivalry?' · RIVALRY':''}</div>
+        </div>`).join('') : '<p class="tiny">No wars yet.</p>'}
+      <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Close</button>
+    </div>`);
+  }catch(e){ toast(e.message,'bad'); }
+}
+
+async function openLeaderboard(){
+  try{
+    const d = await api('/war/leaderboard');
+    const rows = d.rows || [];
+    sheet(`<div class="chronicle-sheet">
+      <h3>Top Warriors</h3>
+      <div class="sub">Contribution in the current war.</div>
+      ${rows.length ? rows.map((r,i)=>`
+        <div class="chron-card">
+          <div class="chron-top">#${i+1} <b>${esc(r.first_name||r.username||'Kin')}</b> <span class="pill pill-blood">${esc(r.side)}</span></div>
+          <div class="chron-scores">${fmt(r.points)} pts</div>
+        </div>`).join('') : '<p class="tiny">No actions yet.</p>'}
+      <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Close</button>
+    </div>`);
+  }catch(e){ toast(e.message,'bad'); }
 }
 
 async function actDeclare(btn){
   await doAct(btn, async () => {
-    const r = await api('/war/declare');
+    const chosen = ($('#stanceChosen')||{}).dataset?.val || ((S.config.war_stances||[{}])[0].id);
+    const r = await api('/war/declare', { stance: chosen });
     haptic('heavy');
     toast('War declared against '+r.war.defender.name+'!','good');
     warData = null;
@@ -1053,9 +1187,8 @@ async function actDeclare(btn){
   });
 }
 
-/* ================= RANKS — patched render ================= */
+/* ================= RANKS (patched render) ================= */
 let ranksState = null;
-
 function buildRanksScreen(){
   const p = PERF || null;
   const e = (tag, props, ...kids) => p ? p.h(tag, props, ...kids) : (()=>{
@@ -1068,18 +1201,13 @@ function buildRanksScreen(){
     for(const c of kids.flat()) if(c) n.appendChild(typeof c==='string'?document.createTextNode(c):c);
     return n;
   })();
-
   const list = e('div', { class:'ranks-list', id:'ranksList' });
   const root = e('div', { class:'ranks-wrap' },
-    e('div', { class:'hd' },
-      e('h2', { text:'Hall of Tribes' }),
-      e('span', { class:'sub', text:'ranked by loyalty' })
-    ),
+    e('div', { class:'hd' }, e('h2', { text:'Hall of Tribes' }), e('span', { class:'sub', text:'ranked by loyalty' })),
     list
   );
   return { root, listEl: list, rows: new Map() };
 }
-
 function buildRanksRow(t, i, top, mineId){
   const p = PERF || null;
   const e = (tag, props, ...kids) => p ? p.h(tag, props, ...kids) : (()=>{
@@ -1092,11 +1220,9 @@ function buildRanksRow(t, i, top, mineId){
     for(const c of kids.flat()) if(c) n.appendChild(typeof c==='string'?document.createTextNode(c):c);
     return n;
   })();
-
   const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':('#'+(i+1));
   const isMe = mineId && Number(t.id)===Number(mineId);
   const pct = clamp(Number(t.loyalty_total)/top*100, 4, 100);
-
   const name = e('b', { class:'rk-name', html:'' });
   const meta = e('div', { class:'tiny' });
   const score = e('b', { class:'rk-score' });
@@ -1106,18 +1232,14 @@ function buildRanksRow(t, i, top, mineId){
   const info = e('div', { style:{ flex:'1', minWidth:'0' } }, name, meta);
   const topRow = e('div', { class:'row', style:{ border:'0', padding:'0 0 10px' } }, avatar, info, score);
   const card = e('div', { class:'card', style:{ padding:'14px', marginBottom:'10px', borderColor: isMe ? 'color-mix(in srgb, var(--gold) 40%, transparent)' : '' } }, topRow, bar);
-
   return { card, name, meta, score, barFill, avatar };
 }
-
 function patchRanksRow(row, t, i, top, mineId){
   const p = PERF || null;
   const setText = p ? p.setText : (el,v)=>{ if(el.textContent!==String(v)) el.textContent=String(v); };
-
   const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':('#'+(i+1));
   const isMe = mineId && Number(t.id)===Number(mineId);
   const pct = clamp(Number(t.loyalty_total)/top*100, 4, 100);
-
   setText(row.avatar, medal);
   row.name.innerHTML = `${esc(t.name)}${isMe?' · you':''}`;
   setText(row.meta, `${fmt(t.members)} kin · 🏆${t.wins||0} 💀${t.losses||0} · Pyre ${fmt(t.treasury)}`);
@@ -1125,7 +1247,6 @@ function patchRanksRow(row, t, i, top, mineId){
   if (row.barFill.style.width !== (pct.toFixed(1)+'%')) row.barFill.style.width = pct.toFixed(1)+'%';
   row.card.style.borderColor = isMe ? 'color-mix(in srgb, var(--gold) 40%, transparent)' : '';
 }
-
 function renderRanks(box){
   if (!PERF){
     const lb = S.leaderboard||[];
@@ -1146,16 +1267,13 @@ function renderRanks(box){
     }).join('') : '<div class="empty"><span class="big">🏆</span><p class="tiny">No tribes have risen yet.</p></div>'}`;
     return;
   }
-
   const lb = S.leaderboard || [];
   const top = lb.length ? (Number(lb[0].loyalty_total)||1) : 1;
   const mine = S.tribe ? Number(S.tribe.id) : null;
-
   if (!ranksState){
     ranksState = buildRanksScreen();
     box.replaceChildren(ranksState.root);
   }
-
   if (!lb.length){
     ranksState.listEl.replaceChildren(
       PERF.h('div', { class:'empty' },
@@ -1166,7 +1284,6 @@ function renderRanks(box){
     ranksState.rows.clear();
     return;
   }
-
   const seen = new Set();
   lb.forEach((t, i) => {
     seen.add(String(t.id));
@@ -1184,21 +1301,18 @@ function renderRanks(box){
       }
     }
   });
-
   for (const [id, row] of [...ranksState.rows]){
-    if (!seen.has(id)){
-      row.card.remove();
-      ranksState.rows.delete(id);
-    }
+    if (!seen.has(id)){ row.card.remove(); ranksState.rows.delete(id); }
   }
 }
 
 /* ---------- STORE ---------- */
-const ART_FOR = { spark:'flame', flame:'torch', blaze:'firestone', inferno:'sun', charm:'charm', auto:'torch', firestone:'firestone', boneidol:'idol', sundisc:'sun', moonshard:'moon', name_color_ember:'flame', name_color_jade:'flame', name_color_void:'moon', glow_ember:'flame', glow_frost:'moon' };
+const ART_FOR = { spark:'flame', flame:'torch', blaze:'firestone', inferno:'sun', charm:'charm', auto:'torch', firestone:'firestone', boneidol:'idol', sundisc:'sun', moonshard:'moon', name_color_ember:'flame', name_color_jade:'flame', name_color_void:'moon', glow_ember:'flame', glow_frost:'moon', war_chest_topup:'firestone', rally_burst:'flame' };
 function storeSectionFor(key, it){
   if(key==='starter_bundle') return 'featured';
   if(key.startsWith('name_color_')||key.startsWith('glow_')) return 'cosmetics';
   if(key==='pyreboost') return 'boosts';
+  if(key==='war_chest_topup'||key==='rally_burst') return 'war';
   if(['firestone','boneidol','sundisc','moonshard'].includes(key)) return 'relics';
   return 'ember';
 }
@@ -1208,13 +1322,12 @@ function renderStore(box){
   const ton = p.tonItems||{};
   const featuredKey = 'starter_bundle';
   const featured = star[featuredKey];
-  const sections = { ember:[], relics:[], boosts:[], cosmetics:[] };
+  const sections = { ember:[], relics:[], boosts:[], war:[], cosmetics:[] };
   for(const [k,it] of Object.entries(star)){
     if(k===featuredKey) continue;
     const s = storeSectionFor(k, it);
     if(sections[s]) sections[s].push([k,it]);
   }
-
   box.innerHTML = `<div class="hd"><h2>Trading Post</h2><span class="sub">⭐ Stars · ◈ TON</span></div>
     ${!TG ? '<p class="tiny" style="margin-bottom:12px">Open inside Telegram to pay with Stars.</p>' : ''}
     ${featured ? `
@@ -1228,14 +1341,14 @@ function renderStore(box){
         </div>
       </div>` : ''}
     <div class="shop-tabs">
-      ${Object.keys(sections).map((s,i)=>`<button class="shop-tab ${i===0?'active':''}" data-act="shopTab" data-val="${s}">${({ember:'Ember Packs',relics:'Relics',boosts:'Tribe Boosts',cosmetics:'Cosmetics'})[s]}</button>`).join('')}
+      ${Object.keys(sections).filter(s=>sections[s].length).map((s,i)=>`<button class="shop-tab ${i===0?'active':''}" data-act="shopTab" data-val="${s}">${({ember:'Ember Packs',relics:'Relics',boosts:'Tribe Boosts',war:'War',cosmetics:'Cosmetics'})[s]}</button>`).join('')}
     </div>
     ${Object.entries(sections).map(([s,arr])=>`
       <div class="shop-section" data-section="${s}" style="${s==='ember'?'':'display:none'}">
         <div class="shop-rail">
           ${arr.map(([k,it])=>{
             const hasTon = p.tonEnabled && ton[k];
-            const rar = (it.grant&&it.grant.relic)?'<span class="rar pill pill-gold">Relic</span>':(it.grant&&it.grant.cosmetic)?'<span class="rar pill pill-jade">Look</span>':'';
+            const rar = (it.grant&&it.grant.relic)?'<span class="rar pill pill-gold">Relic</span>':(it.grant&&it.grant.cosmetic)?'<span class="rar pill pill-jade">Look</span>':(s==='war')?'<span class="rar pill pill-blood">War</span>':'';
             return `<div class="shop-card">${rar}
               <div class="sc-art">${artSvg(ART_FOR[k]||'flame')}</div>
               <b>${esc(it.title)}</b><p>${esc(it.desc)}</p>
@@ -1295,6 +1408,11 @@ const ACTS = {
   buyStars:  (b,v)=>buyStars(v),
   buyTon:    (b,v)=>buyTon(v),
   declareWar:actDeclare,
+  pickStance, pickFront,
+  warAction: actWarAction,
+  openCry:   ()=>openCrySheet(),
+  doCry,
+  openChronicle, openLeaderboard,
   gotoTribe: ()=>setTab('tribe'),
   shopTab,
   closeSheet:()=>closeSheet(),
@@ -1311,7 +1429,6 @@ function init(){
     if(e.target.closest('#crestBtn')){ setTab('tribe'); return; }
     if(e.target.closest('#tonBtn')){ tonToggle(); return; }
   });
-
   document.addEventListener('pointerdown', e=>{
     const btn = e.target.closest('.hold-btn');
     if(!btn) return;
