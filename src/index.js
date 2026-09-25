@@ -5,6 +5,7 @@
 //   * Background push queue flusher when the instance is warm
 // ---------------------------------------------------------------------------
 import express from 'express';
+import { adminSse } from './admin.js';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import { initDb, pool, q } from './db.js';
@@ -20,6 +21,7 @@ app.disable('x-powered-by');
 
 // SSE — must be before express.json so the stream isn't buffered by the parser.
 app.get('/api/kiva/stream', (req,res)=>kivaSse(req,res));
+app.get('/api/admin/stream', (req,res)=> adminSse(req,res));
 // ---------------------------------------------------------------
 // Boot-time backfill: ensure every active war has its fronts.
 // Idempotent — safe to run every boot.

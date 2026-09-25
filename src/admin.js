@@ -2,6 +2,7 @@
 // TRIBES admin control plane. Batch 1 adds war-revamp settings endpoints.
 // ---------------------------------------------------------------------------
 import express from 'express';
+import { previewReset, backupToJSON, resetProgression, factoryReset } from './admin_reset.js';
 import { q } from './db.js';
 import { CFG, DEFAULTS, setConfig, resetConfig } from './config.js';
 import { CHALLENGES, pickChallenge, maybeResolve, getTribeMetric,
@@ -10,6 +11,21 @@ import { verifyInitData } from './auth.js';
 import { resetAllTrials } from './trials.js';
 import { enqueue as pushEnqueue } from './push.js';
 
+// ---------- SSE broadcaster for admin live updates ----------
+const adminSubscribers = new Set();
+
+export function broadcastAdmin(event){
+  const line = `data: ${JSON.stringify(event)}\n\n`;
+  for (const res of adminSubscribers){
+    try{ res.write(line); }catch(e){}
+  }
+}
+
+// Keep-alive ping for idle SSE connections
+setInterval(()=>{
+  for (const res of adminSubscribers){ try{ res.write(': ping\n\n'); }catch(e){} }
+}, 25000).unref();
+
 const ADMIN_BOT_TOKEN = process.env.ADMIN_BOT_TOKEN || '';
 const MAIN_BOT_TOKEN  = process.env.BOT_TOKEN || '';
 const WEB_TOKEN       = process.env.ADMIN_TOKEN || '';
@@ -17,6 +33,24 @@ const ADMIN_IDS = new Set((process.env.ADMIN_IDS || '').split(',').map(s=>s.trim
 const ROLES = ['Toddler','Kin','Hunter','Elder','Head','Chief'];
 
 export function isAdmin(id){ return ADMIN_IDS.has(String(id)); }
+export function adminSse(req,res){
+  // Auth: token in query string (SSE can't set headers)
+  const t = req.query.token || '';
+  const okWeb = WEB_TOKEN && t === WEB_TOKEN;
+  if (!okWeb) return res.status(401).end();
+
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.write('retry: 5000\n\n');
+  res.write(`data: ${JSON.stringify({ type:'hello', at: Date.now() })}\n\n`);
+
+  adminSubscribers.add(res);
+  res.on('close', ()=> adminSubscribers.delete(res));
+}
 export function adminBotConfigured(){ return !!ADMIN_BOT_TOKEN; }
 
 async function botSend(token, chatId, text){
@@ -27,7 +61,11 @@ async function botSend(token, chatId, text){
   }); }catch(e){ console.error('[admin] send', e.message); }
 }
 async function audit(adminId, action, detail){
-  try{ await q(`INSERT INTO audit(admin_id,action,detail) VALUES ($1,$2,$3)`, [adminId||null, action, detail||'']); }catch(e){}
+  try{
+    await q(`INSERT INTO audit(admin_id,action,detail) VALUES ($1,$2,$3)`,
+      [adminId||null, action, detail||'']);
+    broadcastAdmin({ type:'audit', action, detail: detail||'', adminId: adminId||null, at: Date.now() });
+  }catch(e){}
 }
 const n = v => Number(v)||0;
 const fmt = v => (Number(v)||0).toLocaleString('en-US');
@@ -384,6 +422,7 @@ const HELP = [
   '<b>🔥 TRIBES — Admin Console</b>',
   '',
   '/stats — overview',
+  '/resetprogress   ·   /factoryreset',
   '/find &lt;name|id&gt;   ·   /player &lt;id&gt;',
   '/grant &lt;id&gt; &lt;ember|loyalty&gt; &lt;amount&gt;',
   '/setrole &lt;id&gt; &lt;role&gt;   ·   /setloyalty &lt;id&gt; &lt;value&gt;',
@@ -405,6 +444,8 @@ const HELP = [
 
 const CMD_LIST = [
   {command:'stats',description:'Global overview'},{command:'find',description:'Find players'},
+  {command:'resetprogress',description:'Wipe progression (keep accounts)'},
+  {command:'factoryreset',description:'Wipe everything (keep accounts)'},
   {command:'player',description:'Player detail'},{command:'grant',description:'Grant ember/loyalty'},
   {command:'setrole',description:'Set a player role'},{command:'setloyalty',description:'Set loyalty'},
   {command:'ban',description:'Ban a player'},{command:'unban',description:'Unban'},
@@ -421,8 +462,45 @@ const CMD_LIST = [
   {command:'seasonend',description:'End current season'},{command:'help',description:'Command list'},
 ];
 
+// In-memory confirmation tracker for destructive commands.
+// Keyed by adminId. Cleared after 60s or on confirm/cancel.
+const pendingResets = new Map();
+
+function setPending(adminId, kind){
+  const t = setTimeout(()=> pendingResets.delete(String(adminId)), 60000);
+  pendingResets.set(String(adminId), { kind, timer: t, startedAt: Date.now() });
+}
+function clearPending(adminId){
+  const p = pendingResets.get(String(adminId));
+  if (p){ clearTimeout(p.timer); pendingResets.delete(String(adminId)); }
+}
+
 async function runCommand(adminId, cmd, a){
   switch(cmd){
+    case 'reset': {
+      const p = pendingResets.get(String(adminId));
+      if (!p || p.kind !== 'progression'){
+        return 'Nothing to reset. Send /resetprogress to start.';
+      }
+      clearPending(adminId);
+      const r = await resetProgression(adminId);
+      broadcastAdmin({ type:'reset', kind:'progression', at: Date.now() });
+      return `✅ <b>Progression reset complete.</b>\nRun /stats to verify.`;
+    }
+    case 'factory': {
+      const p = pendingResets.get(String(adminId));
+      if (!p || p.kind !== 'factory'){
+        return 'Nothing to reset. Send /factoryreset to start.';
+      }
+      clearPending(adminId);
+      const r = await factoryReset(adminId);
+      broadcastAdmin({ type:'reset', kind:'factory', at: Date.now() });
+      return `✅ <b>FACTORY RESET complete.</b>\nAll game data has been wiped. Users keep their accounts.`;
+    }
+    case 'cancel': {
+      clearPending(adminId);
+      return 'Cancelled.';
+    }
     case 'start': case 'help': return HELP;
     case 'stats': { const s=await stats();
       return `<b>📊 Overview</b>\nPlayers: <b>${fmt(s.users.n)}</b> (banned ${s.users.banned})\nEmber: <b>${fmt(s.users.ember)}</b>\nTribes: <b>${fmt(s.tribes.n)}</b> · Pyre ${fmt(s.tribes.pyre)}\nWars: <b>${s.wars.active}</b> active / ${s.wars.total}\nStar tx: ${s.payments.startx||s.payments.starTx||0} (${fmt(s.payments.stars)}⭐)\nMaintenance: <b>${s.maintenance?'ON':'off'}</b>`; }
@@ -463,6 +541,27 @@ async function runCommand(adminId, cmd, a){
     case 'delcode': { await codeDelete(adminId,a[0]); return `🗑 code ${String(a[0]||'').toUpperCase()} deleted`; }
     case 'seasonstart': { const s=await seasonStartNew(adminId); return `✅ season ${s.n} started`; }
     case 'seasonend': { const r=await seasonEndNow(adminId); return `✅ season ${r.season.n} ended · ${r.titled} titles awarded`; }
+        case 'resetprogress': {
+      const p = await previewReset();
+      setPending(adminId, 'progression');
+      return `⚠️ <b>Progression reset requested</b>\n\nThis will affect:\n` +
+        `• ${p.usersWithProgress} users with progress\n` +
+        `• ${p.tribes} tribes\n` +
+        `• ${p.activeWars} active wars\n\n` +
+        `To confirm, send <code>RESET</code> within 60 seconds.\n` +
+        `Send <code>CANCEL</code> to abort.`;
+    }
+    case 'factoryreset': {
+      const p = await previewReset();
+      setPending(adminId, 'factory');
+      return `🛑 <b>FACTORY RESET requested</b>\n\nThis will DELETE:\n` +
+        `• All ${p.tribes} tribes\n` +
+        `• All ${p.totalWars} wars\n` +
+        `• All ${p.kivaMessages} Kiva messages\n` +
+        `• All ${p.payments} payment records\n\n` +
+        `To confirm, send <code>FACTORY</code> within 60 seconds.\n` +
+        `Send <code>CANCEL</code> to abort.`;
+    }
     default: return 'Unknown command. Send /help.';
   }
 }
@@ -561,5 +660,17 @@ A.post('/names/delete', wrap(req=>nameDelete(who(req), req.body.id)));
 A.get('/seasons',       wrap(()=>seasonsList()));
 A.post('/seasons/start',wrap(()=>seasonStartNew(who(req))));
 A.post('/seasons/end',  wrap(()=>seasonEndNow(who(req))));
-
+A.get('/stream', (req,res)=> adminSse(req,res));
+A.post('/reset/preview',   wrap(()=>previewReset()));
+A.post('/reset/backup',    wrap(()=>backupToJSON(who(req))));
+A.post('/reset/progression', wrap(async (req)=>{ 
+  const r = await resetProgression(who(req)); 
+  broadcastAdmin({ type:'reset', kind:'progression', at: Date.now() });
+  return r;
+}));
+A.post('/reset/factory', wrap(async (req)=>{
+  const r = await factoryReset(who(req));
+  broadcastAdmin({ type:'reset', kind:'factory', at: Date.now() });
+  return r;
+}));
 A.get('/whoami',        wrap(req=>({ adminId: who(req) })));
