@@ -73,4 +73,4 @@ export async function verifyPayment(userId, nonce){
 
 export async function linkWallet(userId, address){
   await q('UPDATE users SET ton_address=$1 WHERE id=$2', [address, userId]);
-}s
+}

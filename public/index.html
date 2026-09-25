@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover"/>
+<title>TRIBES — Rise of the Tribes</title>
+<meta name="theme-color" content="#07060a"/>
+<script src="https://telegram.org/js/telegram-web-app.js"></script>
+<script src="https://unpkg.com/@tonconnect/ui@2.0.9/dist/tonconnect-ui.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@900&family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css?v=8000"/>
+<link rel="stylesheet" href="assets/emoji-anim.css?v=8000"/>
+<link rel="stylesheet" href="assets/notify.css?v=8000"/>
+</head>
+<body>
+
+<div class="world" aria-hidden="true">
+  <div class="heat"></div>
+  <div class="vig"></div>
+</div>
+
+<div id="boot" class="boot"><div id="bootMsg" class="boot-msg">loading</div></div>
+
+<div id="gate" class="gate" style="display:none">
+  <div class="gate-card">
+    <div class="gate-icon"><span data-icon="profile-user" data-icon-size="48"></span></div>
+    <h2>Set a Telegram Username</h2>
+    <p class="tiny">Tribes require a name to march under. Set a <b>@username</b> in Telegram, then return here.</p>
+    <a href="tg://settings" id="gateLink" class="btn btn-primary btn-shine btn-block" target="_blank" rel="noopener">Open Telegram Settings</a>
+    <button id="gateRetry" class="btn btn-ghost btn-block" style="margin-top:8px">I've set it — retry</button>
+    <p class="tiny" style="margin-top:14px;opacity:.7">In Telegram: Settings → Username → set one → save. Then tap "I've set it".</p>
+  </div>
+</div>
+
+<div id="app" class="app" style="display:none">
+  <header class="topbar">
+    <button id="crestBtn" class="chip crest-chip">
+      <span id="crestArt" class="crest-art"></span>
+      <span class="crest-meta"><b id="tribeName">No Tribe</b><i id="roleName">Wanderer</i></span>
+    </button>
+    <div class="wallets">
+      <span class="chip purse" title="Ember">
+        <span class="pico"><span data-icon="res-ember" data-icon-size="14"></span></span>
+        <b id="emberVal">0</b>
+      </span>
+      <button id="tonBtn" class="chip ton-chip">Connect</button>
+    </div>
+  </header>
+
+  <div id="bonfireBanner" class="bonfire-banner" style="display:none"></div>
+
+  <main id="screens" class="screens"></main>
+
+  <nav class="tabbar" aria-label="Primary"></nav>
+</div>
+
+<div id="sheetRoot"></div>
+<div id="toastRoot" class="toast-root"></div>
+<div id="fxRoot" aria-hidden="true"></div>
+
+<script src="strings.js?v=8000"></script>
+<script src="assets/icons.js?v=8000"></script>
+<script src="assets/notify.js?v=8000"></script>
+<script src="perf.js?v=8000"></script>
+<script src="app.js?v=8000"></script>
+<script src="miniapp-extra.js?v=8000"></script>
+</body>
+</html>

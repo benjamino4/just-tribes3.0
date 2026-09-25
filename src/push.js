@@ -70,4 +70,4 @@ export function startFlusher(intervalSec = 20){
   if (timer) return;
   timer = setInterval(() => { flushQueue().catch(() => {}); }, intervalSec * 1000);
   timer.unref?.();
-}s
+}
