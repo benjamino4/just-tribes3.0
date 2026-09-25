@@ -196,8 +196,10 @@ async function boot(){
     if (e.status===403 && e.data && e.data.error==='banned'){ setBoot('You were banished: '+(e.data.reason||''), false); return; }
     setBoot('The fire could not be reached — ' + (e.message || 'try again.'), true); return;
   }
-   try { initTon(); applyPalette(); }
+     try { initTon(); applyPalette(); }
   catch(err){ setBoot('A: ' + (err && err.message ? err.message : String(err))); console.error(err); return; }
+  try { renderAll(); }
+  catch(err){ setBoot('B: ' + (err && err.message ? err.message : String(err))); console.error(err); return; }
   try { renderAll(); }
   catch(err){ setBoot('B: ' + (err && err.message ? err.message : String(err))); console.error(err); return; }
   await playBootThenShow();
