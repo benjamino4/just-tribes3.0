@@ -1,341 +1,637 @@
-// TRIBES Warden Console — web dashboard client.
-// Token login via X-Admin-Token. All dynamic text escaped.
+/* =====================================================================
+   TRIBES Warden Console — Batch 3 Part 2B
+   Two-column layout, real widgets, SSE live stream, reset UI.
+===================================================================== */
 (function(){
 'use strict';
 var KEY = 'tribes_admin_token';
 var token = localStorage.getItem(KEY) || '';
+var SSE = null;
 
 function esc(s){return String(s==null?'':s).replace(/[&<>\"']/g,function(c){
   return {'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c];});}
 function fmt(n){return (Number(n)||0).toLocaleString('en-US');}
 function $(s){return document.querySelector(s);}
-function toast(msg,bad){var t=$('#toast');t.textContent=msg;t.className='toast show'+(bad?' bad':'');
-  clearTimeout(t._t);t._t=setTimeout(function(){t.className='toast';},2600);}
-
-function api(path,opts){
-  opts=opts||{};opts.headers=opts.headers||{};
-  opts.headers['X-Admin-Token']=token;
-  if(opts.body){opts.headers['Content-Type']='application/json';opts.body=JSON.stringify(opts.body);}
-  return fetch('/api/admin'+path,opts).then(function(r){
-    return r.json().then(function(j){if(!r.ok||j.ok===false)throw new Error(j.error||('HTTP '+r.status));return j.data;});});
+function $$(s){return [...document.querySelectorAll(s)];}
+function h(tag, props, kids){
+  var el = document.createElement(tag);
+  if (props){
+    for (var k in props){
+      if (k === 'class') el.className = props[k];
+      else if (k === 'text') el.textContent = props[k];
+      else if (k === 'html') el.innerHTML = props[k];
+      else if (k === 'onclick') el.addEventListener('click', props[k]);
+      else if (k === 'oninput') el.addEventListener('input', props[k]);
+      else el.setAttribute(k, props[k]);
+    }
+  }
+  if (kids){
+    (Array.isArray(kids) ? kids : [kids]).forEach(function(c){
+      if (c == null) return;
+      el.appendChild(typeof c === 'string' ? document.createTextNode(c) : c);
+    });
+  }
+  return el;
 }
-function act(path,body,msg){return api(path,{method:'POST',body:body}).then(function(d){
-  toast(msg||'Done');return d;}).catch(function(e){toast(e.message,true);throw e;});}
+function toast(msg, bad){
+  var t = $('#toast');
+  t.textContent = msg; t.className = 'toast show' + (bad ? ' bad' : '');
+  clearTimeout(t._t); t._t = setTimeout(function(){ t.className = 'toast'; }, 2400);
+}
+function api(path, opts){
+  opts = opts || {};
+  opts.headers = opts.headers || {};
+  opts.headers['X-Admin-Token'] = token;
+  if (opts.body){ opts.headers['Content-Type'] = 'application/json'; opts.body = JSON.stringify(opts.body); }
+  return fetch('/api/admin' + path, opts).then(function(r){
+    return r.json().then(function(j){
+      if (!r.ok || j.ok === false) throw new Error(j.error || ('HTTP ' + r.status));
+      return j.data;
+    });
+  });
+}
+function act(path, body, msg){
+  return api(path, { method: 'POST', body: body || {} }).then(function(d){
+    if (msg) toast(msg);
+    return d;
+  }).catch(function(e){ toast(e.message, true); throw e; });
+}
 
-// ---- login ----
-function showConsole(){$('#login').hidden=true;$('#console').hidden=false;loadStats();refreshFlag();}
+/* ---------- login ---------- */
+function showConsole(){
+  $('#login').hidden = true;
+  $('#console').hidden = false;
+  openSSE();
+  renderNav();
+  openPanel('overview');
+}
 function doLogin(){
-  var t=$('#token').value.trim(); if(!t) return;
-  token=t;
-  api('/stats').then(function(){localStorage.setItem(KEY,token);showConsole();})
-    .catch(function(e){$('#loginErr').textContent = e.message==='bad admin token' ? 'That token was rejected.' : e.message;});
-}
-$('#enterBtn').addEventListener('click',doLogin);
-$('#token').addEventListener('keydown',function(e){if(e.key==='Enter')doLogin();});
-$('#logoutBtn').addEventListener('click',function(){localStorage.removeItem(KEY);token='';location.reload();});
-
-// ---- tabs ----
-var loaders = {
-  stats: loadStats,
-  players: function(){}, tribes: loadTribes, wars: loadWars,
-  payments: loadPayments, economy: loadEcon,
-  trials: loadTrials, bonfire: loadBonfire, names: loadNames,
-  codes: loadCodes, control: function(){}
-};
-document.querySelectorAll('.tab').forEach(function(b){
-  b.addEventListener('click', function(){
-    document.querySelectorAll('.tab').forEach(function(x){x.classList.remove('active');});
-    document.querySelectorAll('.panel').forEach(function(x){x.classList.remove('active');});
-    b.classList.add('active');
-    var name = b.getAttribute('data-tab');
-    $('#tab-'+name).classList.add('active');
-    (loaders[name]||function(){})();
+  var t = $('#token').value.trim();
+  if (!t) return;
+  token = t;
+  api('/stats').then(function(){
+    localStorage.setItem(KEY, token);
+    showConsole();
+  }).catch(function(e){
+    $('#loginErr').textContent = e.message === 'bad admin token' ? 'That token was rejected.' : e.message;
   });
+}
+$('#enterBtn').addEventListener('click', doLogin);
+$('#token').addEventListener('keydown', function(e){ if (e.key === 'Enter') doLogin(); });
+$('#logoutBtn').addEventListener('click', function(){
+  localStorage.removeItem(KEY);
+  if (SSE) try { SSE.close(); } catch(e){}
+  location.reload();
 });
 
-function refreshFlag(){
-  api('/econ').then(function(c){
-    var on = Number(c.maintenance) ? true : false;
-    var f = $('#maintFlag');
-    f.textContent = on ? '🔧 Maintenance ON' : '● Live';
-    f.className = 'pill' + (on ? ' hot' : '');
-  }).catch(function(){});
-}
-
-// ---- stats ----
-function loadStats(){
-  api('/stats').then(function(s){
-    var cards = [
-      ['Players', fmt(s.users.n), s.users.banned+' banned'],
-      ['Ember in play', fmt(s.users.ember), ''],
-      ['Tribes', fmt(s.tribes.n), 'Pyre '+fmt(s.tribes.pyre)],
-      ['Loyalty', fmt(s.tribes.loyalty), ''],
-      ['Wars', fmt(s.wars.active), s.wars.total+' all-time'],
-      ['Star tx', fmt(s.payments.startx||s.payments.starTx||0), fmt(s.payments.stars)+' ⭐'],
-      ['TON tx', fmt(s.payments.tontx||s.payments.tonTx||0), '']
-    ];
-    $('#statCards').innerHTML = cards.map(function(c){
-      return '<div class="stat"><div class="k">'+esc(c[0])+'</div><div class="v">'+esc(c[1])+'</div><div class="sub">'+esc(c[2])+'</div></div>';
-    }).join('');
-    refreshFlag();
-  }).catch(function(e){ toast(e.message,true); });
-}
-
-// ---- players ----
-function searchPlayers(){
-  api('/players?q='+encodeURIComponent($('#pQuery').value.trim())).then(function(rows){
-    $('#playerCard').innerHTML = '';
-    if(!rows.length){ $('#playerList').innerHTML = '<p class="muted">No players found.</p>'; return; }
-    $('#playerList').innerHTML = rows.map(function(r){
-      return '<div class="item" data-pid="'+esc(r.id)+'"><div><div class="name">'+esc(r.first_name||'')+' <span class="m">@'+esc(r.username||'?')+'</span></div><div class="m">#'+esc(r.id)+' · '+esc(r.role)+' · '+fmt(r.ember)+'E · '+fmt(r.loyalty)+'❤</div></div>'+(r.banned?'<span class="badge ban">banned</span>':'<span class="badge">'+esc(r.role)+'</span>')+'</div>';
-    }).join('');
-    document.querySelectorAll('#playerList .item').forEach(function(it){
-      it.addEventListener('click', function(){ openPlayer(it.getAttribute('data-pid')); });
-    });
-  }).catch(function(e){ toast(e.message,true); });
-}
-function openPlayer(id){
-  api('/player/'+id).then(function(p){
-    if(!p){ toast('No such player',true); return; }
-    var roles = ['Toddler','Kin','Hunter','Elder','Head','Chief'];
-    $('#playerCard').innerHTML = '<div class="dcard"><h3>'+esc(p.first_name||'')+' <span class="m">@'+esc(p.username||'?')+'</span></h3>' +
-      '<div class="kv"><span class="l">ID</span><span>'+esc(p.id)+'</span>' +
-      '<span class="l">Role</span><span>'+esc(p.role)+'</span>' +
-      '<span class="l">Ember</span><span>'+fmt(p.ember)+'</span>' +
-      '<span class="l">Loyalty</span><span>'+fmt(p.loyalty)+'</span>' +
-      '<span class="l">Streak</span><span>'+esc(p.streak)+'</span>' +
-      '<span class="l">Tribe</span><span>'+esc(p.tribe_name||'—')+'</span>' +
-      '<span class="l">Banned</span><span>'+(p.banned?('yes — '+esc(p.ban_reason||'')):'no')+'</span></div>' +
-      '<div class="acts">' +
-        '<input id="gA" type="number" placeholder="amount"><select id="gK"><option>ember</option><option>loyalty</option></select>' +
-        '<button class="btn tiny" data-a="grant">Grant</button>' +
-        '<select id="rS">'+roles.map(function(x){return '<option'+(x===p.role?' selected':'')+'>'+x+'</option>';}).join('')+'</select>' +
-        '<button class="btn tiny" data-a="role">Set role</button>' +
-        (p.banned?'<button class="btn tiny" data-a="unban">Unban</button>':'<input id="bR" placeholder="reason"><button class="btn tiny danger" data-a="ban">Ban</button>') +
-      '</div></div>';
-    var pid = p.id;
-    $('#playerCard').querySelectorAll('[data-a]').forEach(function(btn){
-      btn.addEventListener('click', function(){
-        var a = btn.getAttribute('data-a');
-        if(a==='grant') act('/grant',{id:pid,kind:$('#gK').value,amount:$('#gA').value},'Granted').then(function(){ openPlayer(pid); });
-        else if(a==='role') act('/role',{id:pid,role:$('#rS').value},'Role set').then(function(){ openPlayer(pid); });
-        else if(a==='ban') act('/ban',{id:pid,reason:($('#bR')||{}).value||''},'Banned').then(function(){ openPlayer(pid); });
-        else if(a==='unban') act('/unban',{id:pid},'Unbanned').then(function(){ openPlayer(pid); });
-      });
-    });
-  }).catch(function(e){ toast(e.message,true); });
-}
-$('#pSearch').addEventListener('click',searchPlayers);
-$('#pQuery').addEventListener('keydown',function(e){ if(e.key==='Enter') searchPlayers(); });
-
-// ---- tribes ----
-function loadTribes(){
-  api('/tribes').then(function(rows){
-    $('#tribeCard').innerHTML = '';
-    if(!rows.length){ $('#tribeList').innerHTML = '<p class="muted">No tribes yet.</p>'; return; }
-    $('#tribeList').innerHTML = rows.map(function(t){
-      return '<div class="item" data-tid="'+esc(t.id)+'"><div><div class="name">'+esc(t.name)+'</div><div class="m">#'+esc(t.id)+' · '+fmt(t.members)+' kin · '+fmt(t.loyalty_total)+'❤ · Pyre '+fmt(t.treasury)+'</div></div><span class="badge win">'+esc(t.wins)+'W/'+esc(t.losses)+'L</span></div>';
-    }).join('');
-    document.querySelectorAll('#tribeList .item').forEach(function(it){
-      it.addEventListener('click', function(){ openTribe(it.getAttribute('data-tid')); });
-    });
-  }).catch(function(e){ toast(e.message,true); });
-}
-function openTribe(id){
-  api('/tribe/'+id).then(function(t){
-    if(!t){ toast('No such tribe',true); return; }
-    var roster = (t.roster||[]).map(function(m){
-      return '<div class="m">• #'+esc(m.id)+' '+esc(m.first_name||'')+' ('+esc(m.role)+', '+fmt(m.loyalty)+'❤)</div>';
-    }).join('');
-    $('#tribeCard').innerHTML = '<div class="dcard"><h3>'+esc(t.name)+'</h3><div class="kv">' +
-      '<span class="l">ID</span><span>'+esc(t.id)+'</span>' +
-      '<span class="l">Level</span><span>'+esc(t.level||1)+'</span>' +
-      '<span class="l">Kin</span><span>'+fmt(t.members)+'</span>' +
-      '<span class="l">Loyalty</span><span>'+fmt(t.loyalty_total)+'</span>' +
-      '<span class="l">Pyre</span><span>'+fmt(t.treasury)+'</span>' +
-      '<span class="l">Record</span><span>'+esc(t.wins)+'W / '+esc(t.losses)+'L</span></div>' +
-      '<div class="acts"><input id="tN" placeholder="new name"><button class="btn tiny" data-a="rename">Rename</button>' +
-      '<input id="tT" type="number" placeholder="treasury"><button class="btn tiny" data-a="treasury">Set Pyre</button>' +
-      '<button class="btn tiny danger" data-a="disband">Disband</button></div>' +
-      (roster?'<div style="margin-top:12px">'+roster+'</div>':'') + '</div>';
-    var tid = t.id;
-    $('#tribeCard').querySelectorAll('[data-a]').forEach(function(btn){
-      btn.addEventListener('click', function(){
-        var a = btn.getAttribute('data-a');
-        if(a==='rename') act('/tribe/rename',{id:tid,name:$('#tN').value},'Renamed').then(loadTribes);
-        else if(a==='treasury') act('/tribe/treasury',{id:tid,value:$('#tT').value},'Pyre set').then(function(){ openTribe(tid); });
-        else if(a==='disband'){ if(confirm('Disband this tribe? Members are freed.')) act('/tribe/disband',{id:tid},'Disbanded').then(loadTribes); }
-      });
-    });
-  }).catch(function(e){ toast(e.message,true); });
-}
-
-// ---- wars ----
-function loadWars(){
-  api('/wars').then(function(rows){
-    if(!rows.length){ $('#warList').innerHTML = '<p class="muted">No active wars.</p>'; return; }
-    $('#warList').innerHTML = rows.map(function(w){
-      return '<div class="item" style="cursor:default"><div><div class="name">'+esc(w.a_name)+' <span class="m">'+fmt(w.attacker_score)+' vs '+fmt(w.defender_score)+'</span> '+esc(w.d_name)+'</div><div class="m">war #'+esc(w.id)+' · '+esc(w.challenge_id)+' · goal '+fmt(w.goal)+'</div></div><div style="display:flex;gap:6px"><button class="btn tiny" data-rw="'+esc(w.id)+'">Resolve</button><button class="btn tiny danger" data-cw="'+esc(w.id)+'">Cancel</button></div></div>';
-    }).join('');
-    $('#warList').querySelectorAll('[data-rw]').forEach(function(b){ b.addEventListener('click', function(){ act('/war/resolve',{id:b.getAttribute('data-rw')},'Resolved').then(loadWars); }); });
-    $('#warList').querySelectorAll('[data-cw]').forEach(function(b){ b.addEventListener('click', function(){ act('/war/cancel',{id:b.getAttribute('data-cw')},'Cancelled').then(loadWars); }); });
-  }).catch(function(e){ toast(e.message,true); });
-}
-$('#waStart').addEventListener('click', function(){
-  act('/war/start',{attacker:$('#waAtk').value,defender:$('#waDef').value},'War started').then(loadWars);
-});
-
-// ---- payments ----
-function loadPayments(){
-  api('/payments').then(function(rows){
-    if(!rows.length){ $('#payList').innerHTML = '<p class="muted">No payments.</p>'; return; }
-    $('#payList').innerHTML = rows.map(function(p){
-      return '<div class="item" style="cursor:default"><div><div class="name">'+esc(p.kind)+' '+fmt(p.amount)+(p.currency==='XTR'?' ⭐':'')+'</div><div class="m">user '+esc(p.user_id)+' · '+esc(p.status)+' · '+esc(p.charge_id)+'</div></div>'+(p.refunded?'<span class="badge ban">refunded</span>':'<button class="btn tiny" data-rf="'+esc(p.charge_id)+'">Refund</button>')+'</div>';
-    }).join('');
-    $('#payList').querySelectorAll('[data-rf]').forEach(function(b){
-      b.addEventListener('click', function(){ if(confirm('Refund this payment?')) act('/refund',{chargeId:b.getAttribute('data-rf')},'Refunded').then(loadPayments); });
-    });
-  }).catch(function(e){ toast(e.message,true); });
-}
-
-// ---- economy ----
-function loadEcon(){
-  api('/econ').then(function(c){
-    var defs = c._defaults || {};
-    $('#econGrid').innerHTML = Object.keys(defs).map(function(k){
-      return '<div class="efield"><label>'+esc(k)+'</label><div class="def">default '+esc(defs[k])+'</div><div class="er"><input value="'+esc(c[k])+'" data-k="'+esc(k)+'"><button class="btn tiny" data-save="'+esc(k)+'">Save</button></div></div>';
-    }).join('');
-    $('#econGrid').querySelectorAll('[data-save]').forEach(function(b){
-      b.addEventListener('click', function(){
-        var k = b.getAttribute('data-save');
-        var inp = $('#econGrid [data-k="'+k+'"]');
-        act('/econ',{key:k,value:inp.value},k+' saved').then(refreshFlag);
-      });
-    });
-  }).catch(function(e){ toast(e.message,true); });
-}
-$('#econReset').addEventListener('click', function(){
-  if(confirm('Reset all economy values to defaults?')) act('/econ/reset',{},'Economy reset').then(loadEcon);
-});
-
-// ---- trials ----
-function loadTrials(){
-  api('/trials').then(function(rows){
-    $('#trialsEditor').innerHTML = '';
-    if(!rows.length){ $('#trialsList').innerHTML = '<p class="muted">No trials yet.</p>'; return; }
-    $('#trialsList').innerHTML = rows.map(function(t){
-      return '<div class="item" style="cursor:default"><div><div class="name">'+esc(t.glyph)+' '+esc(t.name)+' <span class="m">'+esc(t.slug)+'</span></div><div class="m">+'+fmt(t.reward_ember)+'E +'+fmt(t.reward_loyalty)+'❤ · cd '+esc(t.cooldown_hours)+'h'+(t.active?'':' · <b>inactive</b>')+'</div></div><div style="display:flex;gap:5px"><button class="btn tiny" data-te="'+esc(t.id)+'">Edit</button><button class="btn tiny danger" data-td="'+esc(t.id)+'">Delete</button></div></div>';
-    }).join('');
-    $('#trialsList').querySelectorAll('[data-te]').forEach(function(b){
-      b.addEventListener('click', function(){
-        var id = b.getAttribute('data-te');
-        api('/trials').then(function(all){ editTrial(all.find(function(x){return String(x.id)===String(id);})); });
-      });
-    });
-    $('#trialsList').querySelectorAll('[data-td]').forEach(function(b){
-      b.addEventListener('click', function(){ if(confirm('Delete this trial?')) act('/trials/delete',{id:b.getAttribute('data-td')},'Deleted').then(loadTrials); });
-    });
-  }).catch(function(e){ toast(e.message,true); });
-}
-function editTrial(t){
-  t = t || { slug:'', name:'', glyph:'🔥', hint:'', reward_ember:100, reward_loyalty:10, cooldown_hours:20, max_per_window:1, window_hours:0, window_start_utc:0, active:true, sort_order:100 };
-  $('#trialsEditor').innerHTML = '<div class="dcard"><h3>'+(t.id?'Edit':'New')+' trial</h3>' +
-    '<div class="row"><input id="tt_slug" placeholder="slug (a-z_0-9)" value="'+esc(t.slug)+'" '+(t.id?'disabled':'')+'><input id="tt_name" placeholder="name" value="'+esc(t.name)+'"></div>' +
-    '<div class="row"><input id="tt_glyph" placeholder="glyph" value="'+esc(t.glyph)+'" maxlength="4"><input id="tt_hint" placeholder="hint" value="'+esc(t.hint)+'"></div>' +
-    '<div class="row"><input id="tt_re" type="number" placeholder="reward ember" value="'+esc(t.reward_ember)+'"><input id="tt_rl" type="number" placeholder="reward loyalty" value="'+esc(t.reward_loyalty)+'"></div>' +
-    '<div class="row"><input id="tt_cd" type="number" placeholder="cooldown hours" value="'+esc(t.cooldown_hours)+'"><input id="tt_mw" type="number" placeholder="max per window" value="'+esc(t.max_per_window)+'"></div>' +
-    '<div class="row"><input id="tt_wh" type="number" placeholder="window hours (0=off)" value="'+esc(t.window_hours)+'"><input id="tt_ws" type="number" placeholder="window start UTC" value="'+esc(t.window_start_utc)+'"></div>' +
-    '<div class="row"><label style="flex:1"><input type="checkbox" id="tt_act" '+(t.active?'checked':'')+'> active</label><input id="tt_so" type="number" placeholder="sort order" value="'+esc(t.sort_order)+'"></div>' +
-    '<div class="acts"><button class="btn tiny" id="tt_save">Save</button><button class="btn tiny" id="tt_cancel">Cancel</button></div></div>';
-  $('#tt_cancel').addEventListener('click', loadTrials);
-  $('#tt_save').addEventListener('click', function(){
-    var data = {
-      slug: ($('#tt_slug').value||'').trim(),
-      name: $('#tt_name').value, glyph: $('#tt_glyph').value, hint: $('#tt_hint').value,
-      reward_ember: $('#tt_re').value, reward_loyalty: $('#tt_rl').value,
-      cooldown_hours: $('#tt_cd').value, max_per_window: $('#tt_mw').value,
-      window_hours: $('#tt_wh').value, window_start_utc: $('#tt_ws').value,
-      active: $('#tt_act').checked, sort_order: $('#tt_so').value,
+/* ---------- SSE ---------- */
+function openSSE(){
+  try {
+    SSE = new EventSource('/api/admin/stream?token=' + encodeURIComponent(token));
+    SSE.onmessage = function(ev){
+      try {
+        var msg = JSON.parse(ev.data);
+        if (msg.type === 'stats') renderLiveStats(msg);
+        if (msg.type === 'audit') { /* could append to feed later */ }
+        if (msg.type === 'reset') toast('Reset complete: ' + msg.kind);
+      } catch(e){}
     };
-    var p = t.id ? act('/trials/update', Object.assign({ id:t.id }, data), 'Updated') : act('/trials', data, 'Created');
-    p.then(loadTrials);
+  } catch(e){ console.warn('SSE failed', e); }
+}
+function renderLiveStats(s){
+  var el = $('#liveStats');
+  if (!el) return;
+  el.className = 'pill stat-pill live';
+  el.textContent = '👥 ' + fmt(s.users || 0) + '  ·  ⚔️ ' + fmt(s.wars || 0);
+}
+
+/* ---------- nav ---------- */
+var SECTIONS = [
+  { id: 'overview',   label: 'Overview',      ico: '📊' },
+  { id: 'war-core',   label: 'War — Core',    ico: '⚔️' },
+  { id: 'war-actions',label: 'War — Actions', ico: '⚡' },
+  { id: 'war-spoils', label: 'War — Spoils',  ico: '🪙' },
+  { id: 'war-seasons',label: 'War — Seasons', ico: '🏆' },
+  { id: 'trials',     label: 'Trials',        ico: '🔥' },
+  { id: 'economy',    label: 'Economy',       ico: '⚙️' },
+  { id: 'bonfire',    label: 'Bonfire',       ico: '🕯️' },
+  { id: 'names',      label: 'Names Pool',    ico: '📜' },
+  { id: 'codes',      label: 'Gift Codes',    ico: '🎁' },
+  { id: 'players',    label: 'Players',       ico: '👤' },
+  { id: 'tribes',     label: 'Tribes',        ico: '🛖' },
+  { id: 'payments',   label: 'Payments',      ico: '⭐' },
+  { id: 'control',    label: 'Control',       ico: '🔧' },
+  { id: 'danger',     label: 'Danger Zone',   ico: '⚠️', danger: true },
+];
+function renderNav(){
+  var tree = $('#navTree'); tree.innerHTML = '';
+  SECTIONS.forEach(function(s){
+    var btn = h('button', {
+      class: 'nav-item' + (s.danger ? ' danger' : ''),
+      'data-id': s.id,
+      onclick: function(){ openPanel(s.id); }
+    });
+    btn.innerHTML = '<span class="ico">' + s.ico + '</span><span>' + s.label + '</span>';
+    tree.appendChild(btn);
+  });
+  var search = $('#navSearch');
+  search.oninput = function(){
+    var q = search.value.toLowerCase();
+    $$('#navTree .nav-item').forEach(function(b){
+      var label = b.textContent.toLowerCase();
+      b.style.display = (!q || label.indexOf(q) !== -1) ? '' : 'none';
+    });
+  };
+}
+
+function openPanel(id){
+  $$('#navTree .nav-item').forEach(function(b){
+    b.classList.toggle('active', b.getAttribute('data-id') === id);
+  });
+  var s = SECTIONS.find(function(x){ return x.id === id; }) || SECTIONS[0];
+  $('#panelTitle').textContent = s.label;
+  $('#panelSub').textContent = '';
+  var panel = $('#panel');
+  panel.innerHTML = '<div class="loading">Loading…</div>';
+  (PANELS[id] || PANELS.overview)(panel);
+}
+
+/* ---------- widgets ---------- */
+function widget(label, hint, control, key, opts){
+  var row = h('div', { class: 'wrow' });
+  var l = h('div', { class: 'wlbl' });
+  l.innerHTML = '<b>' + esc(label) + '</b>' + (hint ? '<span>' + esc(hint) + '</span>' : '');
+  row.appendChild(l);
+
+  var ctl = h('div', { class: 'wctl' });
+  ctl.appendChild(control);
+  if (key){
+    var saved = h('span', { class: 'saved' }, '✓');
+    saved.setAttribute('data-saved', key);
+    ctl.appendChild(saved);
+    if (opts && opts.default !== undefined){
+      ctl.appendChild(h('button', {
+        class: 'wreset', title: 'Reset to default', text: '↺',
+        onclick: function(){ saveCfg(key, opts.default); }
+      }));
+    }
+  }
+  row.appendChild(ctl);
+  return row;
+}
+function slider(label, hint, key, value, min, max, step, opts){
+  var inp = h('input', { type: 'range', min: min, max: max, step: step || 1, value: value });
+  var val = h('span', { class: 'wval' }, String(value));
+  inp.addEventListener('input', function(){ val.textContent = inp.value; });
+  inp.addEventListener('change', function(){ saveCfg(key, inp.value); });
+  var ctl = h('div', { class: 'wslider' }, inp);
+  return widget(label, hint, ctl, key, Object.assign({}, opts, { default: value }));
+}
+function toggle(label, hint, key, value){
+  var t = h('div', { class: 'wtog' + (Number(value) ? ' on' : '') });
+  t.addEventListener('click', function(){
+    var on = !t.classList.contains('on');
+    t.classList.toggle('on', on);
+    saveCfg(key, on ? 1 : 0);
+  });
+  return widget(label, hint, t, key);
+}
+function stepper(label, hint, key, value, min, max, step){
+  var v = h('span', { class: 'v' }, String(value));
+  var minus = h('button', { text: '−', onclick: function(){
+    var n = Math.max(min, Number(v.textContent) - (step || 1));
+    v.textContent = String(n); saveCfg(key, n);
+  }});
+  var plus = h('button', { text: '+', onclick: function(){
+    var n = Math.min(max, Number(v.textContent) + (step || 1));
+    v.textContent = String(n); saveCfg(key, n);
+  }});
+  var ctl = h('div', { class: 'wstep' }, [minus, v, plus]);
+  return widget(label, hint, ctl, key);
+}
+function seg(label, hint, key, value, options){
+  var ctl = h('div', { class: 'wseg' });
+  options.forEach(function(o){
+    var b = h('button', { text: o.label, class: o.value === value ? 'active' : '' });
+    b.addEventListener('click', function(){
+      $$('.wseg button', ctl).forEach(function(x){ x.classList.remove('active'); });
+      b.classList.add('active');
+      saveCfg(key, o.value);
+    });
+    ctl.appendChild(b);
+  });
+  return widget(label, hint, ctl, key);
+}
+function textRow(label, hint, key, value){
+  var inp = h('input', { class: 'winput', value: value || '' });
+  inp.addEventListener('change', function(){ saveCfg(key, inp.value); });
+  return widget(label, hint, inp, key);
+}
+
+function saveCfg(key, value){
+  var saved = $$('[data-saved="' + key + '"]')[0];
+  if (saved){ saved.className = 'saved show'; saved.textContent = 'saving…'; }
+  api('/econ', { method: 'POST', body: { key: key, value: value } }).then(function(){
+    if (saved){ saved.className = 'saved show'; saved.textContent = '✓ Saved'; }
+  }).catch(function(e){
+    if (saved){ saved.className = 'saved err'; saved.textContent = '✕ Failed'; }
   });
 }
-$('#trialsNew').addEventListener('click', function(){ editTrial(null); });
-$('#trialsReset').addEventListener('click', function(){
-  if(confirm('Clear every user\u2019s trial cooldowns?')) act('/trials/reset',{},'Trials reset');
-});
 
-// ---- bonfire ----
-function loadBonfire(){
-  api('/bonfires').then(function(rows){
-    if(!rows.length){ $('#bfList').innerHTML = '<p class="muted">No bonfires.</p>'; return; }
-    $('#bfList').innerHTML = rows.map(function(b){
-      var active = new Date(b.start_at) <= new Date() && new Date(b.end_at) > new Date();
-      return '<div class="item" style="cursor:default"><div><div class="name">'+esc(b.title)+' <span class="m">'+esc(b.metric)+' ×'+esc(b.multiplier)+'</span></div><div class="m">'+esc(String(b.start_at).slice(0,16))+' → '+esc(String(b.end_at).slice(0,16))+(active?' · ACTIVE':'')+'</div></div>'+(active?'<button class="btn tiny danger" data-be="'+esc(b.id)+'">End now</button>':'')+'</div>';
-    }).join('');
-    $('#bfList').querySelectorAll('[data-be]').forEach(function(b){
-      b.addEventListener('click', function(){ act('/bonfires/end',{id:b.getAttribute('data-be')},'Bonfire ended').then(loadBonfire); });
+/* ---------- panels ---------- */
+var PANELS = {};
+
+PANELS.overview = function(panel){
+  api('/stats').then(function(s){
+    panel.innerHTML = '';
+    var g = h('div', { class: 'wgroup' });
+    g.innerHTML = '<h3>Live</h3>';
+    var grid = h('div', { style: 'display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px' });
+    [
+      ['Players', s.users.n, s.users.banned + ' banned'],
+      ['Ember', fmt(s.users.ember), ''],
+      ['Tribes', s.tribes.n, 'Pyre ' + fmt(s.tribes.pyre)],
+      ['Wars', s.wars.active, s.wars.total + ' all-time'],
+      ['Stars tx', fmt(s.payments.startx || s.payments.starTx || 0), fmt(s.payments.stars) + '⭐'],
+    ].forEach(function(row){
+      var box = h('div', { style: 'padding:12px;background:rgba(0,0,0,.25);border-radius:12px;border:1px solid var(--line)' });
+      box.innerHTML = '<div style="font-size:11px;color:var(--mut);text-transform:uppercase;letter-spacing:.06em">' + esc(row[0]) + '</div>' +
+        '<div style="font-size:22px;font-weight:800;color:var(--gold);margin-top:2px">' + esc(String(row[1])) + '</div>' +
+        '<div style="font-size:11px;color:var(--mut)">' + esc(String(row[2])) + '</div>';
+      grid.appendChild(box);
     });
-  }).catch(function(e){ toast(e.message,true); });
-}
-$('#bfStart').addEventListener('click', function(){
-  var hours = Number($('#bfHours').value) || 2;
-  var start = new Date();
-  var end = new Date(Date.now() + hours*3600*1000);
-  act('/bonfires', { title: $('#bfTitle').value, metric: $('#bfMetric').value, multiplier: $('#bfMult').value, start_at: start.toISOString(), end_at: end.toISOString() }, 'Bonfire started').then(loadBonfire);
-});
+    g.appendChild(grid);
+    panel.appendChild(g);
+    $('#panelSub').textContent = 'Live stats — updates via SSE';
+  }).catch(function(e){ panel.innerHTML = '<div class="loading">' + esc(e.message) + '</div>'; });
+};
 
-// ---- names pool ----
-function loadNames(){
-  api('/names').then(function(rows){
-    if(!rows.length){ $('#nmList').innerHTML = '<p class="muted">No names in the pool.</p>'; return; }
-    $('#nmList').innerHTML = rows.map(function(n){
-      var claimed = n.claimed_by_tribe_id ? (' · <b>claimed by '+esc(n.claimed_by_name||'#'+n.claimed_by_tribe_id)+'</b>') : '';
-      return '<div class="item" style="cursor:default"><div><div class="name">'+esc(n.name)+'</div><div class="m">#'+esc(n.id)+(n.is_seed?' · seed':'')+claimed+'</div></div>'+(n.claimed_by_tribe_id?'':'<button class="btn tiny danger" data-nd="'+esc(n.id)+'">Delete</button>')+'</div>';
-    }).join('');
-    $('#nmList').querySelectorAll('[data-nd]').forEach(function(b){
-      b.addEventListener('click', function(){ if(confirm('Delete this name?')) act('/names/delete',{id:b.getAttribute('data-nd')},'Deleted').then(loadNames); });
+PANELS['war-core'] = function(panel){ configPanel(panel, [
+  { group: 'Duration', items: [
+    { k: 'war_cap_hours', label: 'War cap', hint: 'Hours a war lasts', type: 'slider', min: 6, max: 336 },
+  ]},
+  { group: 'Fronts', items: [
+    { k: 'war_front_count', label: 'Front count', hint: 'Number of fronts per war', type: 'stepper', min: 2, max: 5 },
+    { k: 'war_front_names', label: 'Front names', hint: 'JSON array of names', type: 'text' },
+  ]},
+  { group: 'Stakes', items: [
+    { k: 'war_stake_min', label: 'Minimum stake %', hint: '', type: 'slider', min: 5, max: 50 },
+    { k: 'war_stake_max', label: 'Maximum stake %', hint: '', type: 'slider', min: 10, max: 80 },
+    { k: 'war_stake_by_level', label: 'Stake by tribe level', hint: '10 numbers (JSON array)', type: 'text' },
+    { k: 'war_defender_bonus_pct', label: 'Defender bonus %', hint: '', type: 'slider', min: 0, max: 30 },
+  ]},
+]); };
+
+PANELS['war-actions'] = function(panel){ configPanel(panel, [
+  { group: 'Rally', items: [
+    { k: 'war_action_rally_cost', label: 'Rally cost', hint: 'Ember', type: 'slider', min: 100, max: 5000 },
+    { k: 'war_action_rally_points', label: 'Rally points', hint: '', type: 'slider', min: 5, max: 100 },
+  ]},
+  { group: 'Chant', items: [
+    { k: 'war_action_chant_cost', label: 'Chant cost', hint: 'Ember', type: 'slider', min: 500, max: 20000 },
+    { k: 'war_action_chant_points', label: 'Chant points', hint: '', type: 'slider', min: 50, max: 500 },
+  ]},
+  { group: 'Raid', items: [
+    { k: 'war_action_raid_cost', label: 'Raid cost', hint: 'Ember', type: 'slider', min: 2000, max: 50000 },
+    { k: 'war_action_raid_points', label: 'Raid points', hint: '', type: 'slider', min: 200, max: 3000 },
+    { k: 'war_action_raid_cooldown_h', label: 'Raid cooldown', hint: 'Hours', type: 'slider', min: 0, max: 24 },
+  ]},
+]); };
+
+PANELS['war-spoils'] = function(panel){ configPanel(panel, [
+  { group: 'Tribute Split', items: [
+    { k: 'war_spoils_pyre_pct', label: 'To Pyre %', hint: '', type: 'slider', min: 0, max: 100 },
+    { k: 'war_spoils_contrib_pct', label: 'To contributors %', hint: '', type: 'slider', min: 0, max: 100 },
+    { k: 'war_spoils_chest_pct', label: 'To war chest %', hint: '', type: 'slider', min: 0, max: 100 },
+  ]},
+  { group: 'Contributor Pool', items: [
+    { k: 'war_spoils_top_count', label: 'Top contributors', hint: 'How many share the pool', type: 'stepper', min: 1, max: 20 },
+  ]},
+]); };
+
+PANELS['war-seasons'] = function(panel){
+  panel.innerHTML = '';
+  api('/seasons').then(function(list){
+    var g = h('div', { class: 'wgroup' });
+    g.innerHTML = '<h3>Seasons</h3><p class="wsub">' + (list.length ? list.length + ' seasons on record' : 'No seasons yet') + '</p>';
+    var btn = h('button', { class: 'btn primary', text: '▶ Start a new season' });
+    btn.addEventListener('click', function(){ act('/seasons/start', {}, 'Season started'); });
+    g.appendChild(btn);
+    panel.appendChild(g);
+    configPanel(panel, [
+      { group: 'Config', items: [
+        { k: 'season_length_weeks', label: 'Season length', hint: 'Weeks', type: 'slider', min: 2, max: 16 },
+        { k: 'season_titles_count', label: 'Titles awarded', hint: 'Top N tribes', type: 'stepper', min: 1, max: 20 },
+        { k: 'season_pass_stars_price', label: 'Season Pass price', hint: 'Stars', type: 'slider', min: 100, max: 3000 },
+      ]},
+    ]);
+  }).catch(function(){});
+};
+
+PANELS.trials = function(panel){
+  panel.innerHTML = '';
+  api('/trials').then(function(list){
+    var g = h('div', { class: 'wgroup' });
+    g.innerHTML = '<h3>Trials</h3><p class="wsub">Edit reward, cooldown, and minigame per trial.</p>';
+    list.forEach(function(t){
+      var row = h('div', { class: 'wlist-row' });
+      row.innerHTML = '<span class="wl-ico">' + esc(t.glyph || '🔥') + '</span>' +
+        '<div class="wl-body"><b>' + esc(t.name) + ' <span style="color:var(--mut);font-weight:600">(' + esc(t.slug) + ')</span></b>' +
+        '<span>+' + fmt(t.reward_ember) + 'E · +' + fmt(t.reward_loyalty) + '❤ · cd ' + esc(t.cooldown_hours) + 'h · ' + esc(t.minigame || 'hold') + '</span></div>';
+      var mg = h('select', { class: 'winput', style: 'min-width:100px' });
+      ['hold','stoke','feed','cry','sift','ad'].forEach(function(m){
+        var o = h('option', { value: m, text: m });
+        if ((t.minigame || 'hold') === m) o.selected = true;
+        mg.appendChild(o);
+      });
+      mg.addEventListener('change', function(){
+        act('/trial/minigame', { slug: t.slug, minigame: mg.value }, t.slug + ' → ' + mg.value)
+          .then(function(){ PANELS.trials(panel); });
+      });
+      row.appendChild(mg);
+      g.appendChild(row);
     });
-  }).catch(function(e){ toast(e.message,true); });
-}
-$('#nmAdd').addEventListener('click', function(){
-  var n = $('#nmName').value.trim();
-  if(!n){ toast('Enter a name',true); return; }
-  act('/names/add',{name:n},'Added').then(function(){ $('#nmName').value=''; loadNames(); });
-});
+    panel.appendChild(g);
+    $('#panelSub').textContent = list.length + ' trials';
+  }).catch(function(e){ panel.innerHTML = '<div class="loading">' + esc(e.message) + '</div>'; });
+};
 
-// ---- codes ----
-function loadCodes(){
-  api('/codes').then(function(rows){
-    if(!rows.length){ $('#cdList').innerHTML = '<p class="muted">No codes yet.</p>'; return; }
-    $('#cdList').innerHTML = rows.map(function(c){
-      return '<div class="item" style="cursor:default"><div><div class="name">'+esc(c.code)+'</div><div class="m">'+fmt(c.amount)+' '+esc(c.kind)+' · used '+esc(c.uses)+(c.max_uses?('/'+esc(c.max_uses)):'')+(c.expires_at?(' · exp '+esc(String(c.expires_at).slice(0,10))):'')+'</div></div><button class="btn tiny danger" data-dc="'+esc(c.code)+'">Delete</button></div>';
-    }).join('');
-    $('#cdList').querySelectorAll('[data-dc]').forEach(function(b){
-      b.addEventListener('click', function(){ if(confirm('Delete this code?')) act('/codes/delete',{code:b.getAttribute('data-dc')},'Deleted').then(loadCodes); });
+PANELS.economy = function(panel){ configPanel(panel, [
+  { group: 'Idle Ash', items: [
+    { k: 'ashMinutes', label: 'Ash interval', hint: 'Minutes per ash', type: 'slider', min: 5, max: 120 },
+    { k: 'ashCap', label: 'Ash cap', hint: 'Max stored', type: 'slider', min: 1, max: 20 },
+    { k: 'ashUnit', label: 'Ash value', hint: 'Ember per ash', type: 'slider', min: 10, max: 500 },
+  ]},
+  { group: 'Check-in', items: [
+    { k: 'checkin_base', label: 'Check-in base', hint: 'Ember', type: 'slider', min: 100, max: 2000 },
+    { k: 'checkin_streakStep', label: 'Streak step', hint: 'Ember per streak day', type: 'slider', min: 0, max: 200 },
+    { k: 'checkin_streakMax', label: 'Streak max bonus', hint: 'Ember', type: 'slider', min: 0, max: 5000 },
+  ]},
+  { group: 'Tribe', items: [
+    { k: 'foundEmber', label: 'Found cost', hint: 'Ember', type: 'slider', min: 1000, max: 200000 },
+  ]},
+]); };
+
+PANELS.bonfire = function(panel){
+  panel.innerHTML = '';
+  api('/bonfires').then(function(list){
+    var g = h('div', { class: 'wgroup' });
+    g.innerHTML = '<h3>Active bonfires</h3>';
+    list.slice(0, 5).forEach(function(b){
+      var r = h('div', { class: 'wlist-row' });
+      r.innerHTML = '<span class="wl-ico">🔥</span><div class="wl-body"><b>' + esc(b.title) + '</b>' +
+        '<span>' + esc(b.metric) + ' ×' + esc(b.multiplier) + ' · ends ' + esc(String(b.end_at).slice(0, 16)) + '</span></div>';
+      var end = h('button', { class: 'btn tiny danger', text: 'End' });
+      end.addEventListener('click', function(){ act('/bonfires/end', { id: b.id }, 'Ended').then(function(){ PANELS.bonfire(panel); }); });
+      r.appendChild(end);
+      g.appendChild(r);
     });
-  }).catch(function(e){ toast(e.message,true); });
-}
-$('#cdAdd').addEventListener('click', function(){
-  act('/codes',{code:$('#cdCode').value,kind:$('#cdKind').value,amount:$('#cdAmount').value,maxUses:$('#cdMax').value,expiresDays:$('#cdDays').value},'Code created').then(function(){ $('#cdCode').value=''; loadCodes(); });
-});
+    panel.appendChild(g);
+  }).catch(function(){});
+};
 
-// ---- control ----
-$('#maintOn').addEventListener('click', function(){ act('/maintenance',{on:'on'},'Maintenance ON').then(refreshFlag); });
-$('#maintOff').addEventListener('click', function(){ act('/maintenance',{on:'off'},'Maintenance off').then(refreshFlag); });
-$('#bcSend').addEventListener('click', function(){
-  var txt = $('#bcText').value.trim();
-  if(!txt){ toast('Write a message first',true); return; }
-  if(confirm('Send this to every player?')) act('/broadcast',{text:txt},'Broadcast sent').then(function(d){
-    toast('Sent to '+fmt(d.sent)+' players');
-    $('#bcText').value='';
+PANELS.names = function(panel){
+  panel.innerHTML = '';
+  api('/names').then(function(list){
+    var g = h('div', { class: 'wgroup' });
+    g.innerHTML = '<h3>Name pool</h3><p class="wsub">' + list.length + ' names (' + list.filter(function(n){ return !n.claimed_by_tribe_id; }).length + ' unclaimed)</p>';
+    list.slice(0, 60).forEach(function(n){
+      var r = h('div', { class: 'wlist-row' });
+      r.innerHTML = '<div class="wl-body"><b>' + esc(n.name) + '</b>' +
+        '<span>' + (n.claimed_by_tribe_id ? 'claimed by #' + esc(n.claimed_by_tribe_id) : 'unclaimed') + '</span></div>';
+      if (!n.claimed_by_tribe_id){
+        var del = h('button', { class: 'btn tiny danger', text: 'Delete' });
+        del.addEventListener('click', function(){ act('/names/delete', { id: n.id }, 'Deleted').then(function(){ PANELS.names(panel); }); });
+        r.appendChild(del);
+      }
+      g.appendChild(r);
+    });
+    var addRow = h('div', { class: 'wlist-row' });
+    var inp = h('input', { class: 'winput', placeholder: 'New tribe name' });
+    var add = h('button', { class: 'btn tiny', text: 'Add' });
+    add.addEventListener('click', function(){
+      var v = inp.value.trim();
+      if (!v) return;
+      act('/names/add', { name: v }, 'Added').then(function(){ PANELS.names(panel); });
+    });
+    addRow.appendChild(inp); addRow.appendChild(add);
+    g.appendChild(addRow);
+    panel.appendChild(g);
+  }).catch(function(){});
+};
+
+PANELS.codes = function(panel){
+  panel.innerHTML = '';
+  api('/codes').then(function(list){
+    var g = h('div', { class: 'wgroup' });
+    g.innerHTML = '<h3>Gift codes</h3><p class="wsub">' + list.length + ' codes on record</p>';
+    list.slice(0, 40).forEach(function(c){
+      var r = h('div', { class: 'wlist-row' });
+      r.innerHTML = '<div class="wl-body"><b>' + esc(c.code) + '</b>' +
+        '<span>' + fmt(c.amount) + ' ' + esc(c.kind) + ' · used ' + esc(c.uses) + (c.max_uses ? '/' + esc(c.max_uses) : '') + '</span></div>';
+      var del = h('button', { class: 'btn tiny danger', text: 'Delete' });
+      del.addEventListener('click', function(){ act('/codes/delete', { code: c.code }, 'Deleted').then(function(){ PANELS.codes(panel); }); });
+      r.appendChild(del);
+      g.appendChild(r);
+    });
+    panel.appendChild(g);
+  }).catch(function(){});
+};
+
+PANELS.players = function(panel){
+  panel.innerHTML = '<div class="wgroup"><h3>Search players</h3>' +
+    '<div class="wrow"><input id="pSearch" class="winput" style="flex:1;max-width:none" placeholder="name, @user or id">' +
+    '<button id="pGo" class="btn tiny">Search</button></div><div id="pList"></div></div>';
+  $('#pGo').addEventListener('click', function(){ doSearch(); });
+  $('#pSearch').addEventListener('keydown', function(e){ if (e.key === 'Enter') doSearch(); });
+  function doSearch(){
+    var q = $('#pSearch').value.trim();
+    api('/players?q=' + encodeURIComponent(q)).then(function(rows){
+      var host = $('#pList'); host.innerHTML = '';
+      rows.forEach(function(r){
+        var row = h('div', { class: 'wlist-row' });
+        row.innerHTML = '<div class="wl-body"><b>' + esc(r.first_name || '') + ' <span style="color:var(--mut)">@' + esc(r.username || '?') + '</span></b>' +
+          '<span>#' + esc(r.id) + ' · ' + esc(r.role) + ' · ' + fmt(r.ember) + 'E · ' + fmt(r.loyalty) + '❤' + (r.banned ? ' · BANNED' : '') + '</span></div>';
+        host.appendChild(row);
+      });
+    }).catch(function(e){ toast(e.message, true); });
+  }
+};
+
+PANELS.tribes = function(panel){
+  panel.innerHTML = '';
+  api('/tribes').then(function(list){
+    var g = h('div', { class: 'wgroup' });
+    g.innerHTML = '<h3>Tribes</h3><p class="wsub">' + list.length + ' tribes</p>';
+    list.forEach(function(t){
+      var r = h('div', { class: 'wlist-row' });
+      r.innerHTML = '<div class="wl-body"><b>' + esc(t.name) + '</b>' +
+        '<span>#' + esc(t.id) + ' · ' + fmt(t.members) + ' kin · ' + fmt(t.loyalty_total) + '❤ · Pyre ' + fmt(t.treasury) + ' · ' + esc(t.wins) + 'W/' + esc(t.losses) + 'L</span></div>';
+      g.appendChild(r);
+    });
+    panel.appendChild(g);
+  }).catch(function(){});
+};
+
+PANELS.payments = function(panel){
+  panel.innerHTML = '';
+  api('/payments').then(function(list){
+    var g = h('div', { class: 'wgroup' });
+    g.innerHTML = '<h3>Recent payments</h3>';
+    if (!list.length) g.innerHTML += '<p class="muted" style="padding:12px 0">No payments yet.</p>';
+    list.slice(0, 30).forEach(function(p){
+      var r = h('div', { class: 'wlist-row' });
+      r.innerHTML = '<div class="wl-body"><b>' + esc(p.kind) + ' ' + fmt(p.amount) + (p.currency === 'XTR' ? '⭐' : '') + '</b>' +
+        '<span>user ' + esc(p.user_id) + ' · ' + esc(p.status) + (p.refunded ? ' (refunded)' : '') + '</span></div>';
+      if (!p.refunded){
+        var rf = h('button', { class: 'btn tiny danger', text: 'Refund' });
+        rf.addEventListener('click', function(){
+          if (confirm('Refund this payment?')) act('/refund', { chargeId: p.charge_id }, 'Refunded').then(function(){ PANELS.payments(panel); });
+        });
+        r.appendChild(rf);
+      }
+      g.appendChild(r);
+    });
+    panel.appendChild(g);
+  }).catch(function(){});
+};
+
+PANELS.control = function(panel){
+  panel.innerHTML = '';
+  var g = h('div', { class: 'wgroup' });
+  g.innerHTML = '<h3>Maintenance mode</h3><p class="wsub">Freezes player actions. Reads still work.</p>';
+  var row = h('div', { class: 'wrow' });
+  var on = h('button', { class: 'btn tiny', text: 'Enable' });
+  var off = h('button', { class: 'btn tiny ghost', text: 'Disable' });
+  on.addEventListener('click', function(){ act('/maintenance', { on: 'on' }, 'Maintenance ON'); });
+  off.addEventListener('click', function(){ act('/maintenance', { on: 'off' }, 'Maintenance off'); });
+  row.appendChild(on); row.appendChild(off);
+  g.appendChild(row);
+  panel.appendChild(g);
+
+  var b = h('div', { class: 'wgroup' });
+  b.innerHTML = '<h3>Broadcast</h3><p class="wsub">Sends a message to every non-banned player via the game bot.</p>';
+  var ta = h('textarea', { placeholder: 'Your message…', rows: 3, style: 'width:100%;padding:11px;border-radius:10px;background:rgba(0,0,0,.3);border:1px solid var(--line2);color:var(--ink);font-family:inherit;margin-bottom:10px' });
+  var send = h('button', { class: 'btn primary', text: 'Send to all' });
+  send.addEventListener('click', function(){
+    var txt = ta.value.trim(); if (!txt) return toast('Write a message', true);
+    if (confirm('Send to every player?')) act('/broadcast', { text: txt }, 'Broadcast sent').then(function(d){ toast('Sent to ' + fmt(d.sent)); ta.value = ''; });
   });
-});
-$('#wipeBtn').addEventListener('click', function(){
-  if(confirm('Wipe the season? Loyalty and war records reset for everyone.'))
-    act('/wipeseason',{},'Season wiped');
-});
+  b.appendChild(ta); b.appendChild(send);
+  panel.appendChild(b);
+};
 
-if(token){ api('/stats').then(showConsole).catch(function(){ localStorage.removeItem(KEY); token=''; }); }
+PANELS.danger = function(panel){
+  panel.innerHTML = '';
+  api('/reset/preview', { method: 'POST' }).then(function(p){
+    var g = h('div', { class: 'wgroup danger-card' });
+    g.innerHTML = '<h3>⚠️ Progression Reset</h3>' +
+      '<p>Wipes all free-currency progress, tribe membership, and active wars. <b>Keeps</b> accounts, purchased cosmetics, and Stars.</p>' +
+      '<div class="counts" style="margin-top:12px">' +
+        'Users: ' + fmt(p.users) + ' (' + fmt(p.usersWithProgress) + ' with progress)\n' +
+        'Tribes: ' + fmt(p.tribes) + '\n' +
+        'Active wars: ' + fmt(p.activeWars) + ' / ' + fmt(p.totalWars) + ' total' +
+      '</div>';
+    var btn = h('button', { class: 'btn danger', text: '⚠️ Reset Progression' });
+    btn.addEventListener('click', function(){ confirmReset('progression', p, 'RESET', btn); });
+    g.appendChild(btn);
+    panel.appendChild(g);
+
+    var g2 = h('div', { class: 'wgroup danger-card' });
+    g2.innerHTML = '<h3>🛑 Factory Reset</h3>' +
+      '<p>Deletes everything except user accounts. All tribes, wars, chronicles, Kiva messages, codes, cosmetics owned, and payment records are wiped. Users keep their Telegram identities but start over.</p>' +
+      '<div class="counts" style="margin-top:12px">' +
+        'Users: ' + fmt(p.users) + ' (kept)\n' +
+        'Tribes: ' + fmt(p.tribes) + ' (deleted)\n' +
+        'Wars: ' + fmt(p.totalWars) + ' (deleted)\n' +
+        'Kiva messages: ' + fmt(p.kivaMessages) + ' (deleted)\n' +
+        'Codes: ' + fmt(p.codes) + ' (deleted)\n' +
+        'Payments: ' + fmt(p.payments) + ' (deleted)' +
+      '</div>';
+    var btn2 = h('button', { class: 'btn danger', text: '🛑 Factory Reset' });
+    btn2.addEventListener('click', function(){ confirmReset('factory', p, 'FACTORY', btn2); });
+    g2.appendChild(btn2);
+    panel.appendChild(g2);
+
+    var g3 = h('div', { class: 'wgroup danger-card' });
+    g3.innerHTML = '<h3>📥 Backup first</h3><p>Download a JSON snapshot of the entire database before resetting.</p>';
+    var bk = h('button', { class: 'btn', text: '📥 Download backup' });
+    bk.addEventListener('click', function(){
+      api('/reset/backup', { method: 'POST' }).then(function(data){
+        var blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+        var a = document.createElement('a');
+        a.href = URL.createObjectURL(blob);
+        a.download = 'tribes-backup-' + new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-') + '.json';
+        a.click();
+        toast('Backup downloaded');
+      }).catch(function(e){ toast(e.message, true); });
+    });
+    g3.appendChild(bk);
+    panel.appendChild(g3);
+  }).catch(function(e){
+    panel.innerHTML = '<div class="loading">' + esc(e.message) + '</div>';
+  });
+};
+
+function confirmReset(kind, preview, word, btn){
+  var bg = h('div', { class: 'modal-bg' });
+  var card = h('div', { class: 'modal-card' });
+  card.innerHTML = '<h3>' + (kind === 'factory' ? '🛑 Factory Reset' : '⚠️ Progression Reset') + '</h3>' +
+    '<p>This cannot be undone. Type <b style="color:#ffcf7a">' + word + '</b> to confirm.</p>' +
+    '<div class="counts">' +
+      (kind === 'factory'
+        ? 'Delete: ' + fmt(preview.tribes) + ' tribes, ' + fmt(preview.totalWars) + ' wars, ' + fmt(preview.kivaMessages) + ' messages, ' + fmt(preview.payments) + ' payments'
+        : 'Wipe progress for: ' + fmt(preview.usersWithProgress) + ' users, ' + fmt(preview.activeWars) + ' active wars') +
+    '</div>';
+  var inp = h('input', { placeholder: 'Type ' + word + ' to confirm' });
+  card.appendChild(inp);
+  var row = h('div', { class: 'row' });
+  var cancel = h('button', { class: 'btn ghost', text: 'Cancel' });
+  var go = h('button', { class: 'btn danger', text: 'Reset now' });
+  cancel.addEventListener('click', function(){ document.body.removeChild(bg); });
+  go.addEventListener('click', function(){
+    if (inp.value.trim().toUpperCase() !== word){ toast('Type ' + word + ' exactly', true); return; }
+    document.body.removeChild(bg);
+    var path = kind === 'factory' ? '/reset/factory' : '/reset/progression';
+    act(path, {}, (kind === 'factory' ? 'Factory' : 'Progression') + ' reset started…').then(function(){
+      toast('Reset complete');
+      openPanel('danger');
+    });
+  });
+  row.appendChild(cancel); row.appendChild(go);
+  card.appendChild(row);
+  bg.appendChild(card);
+  document.body.appendChild(bg);
+  inp.focus();
+}
+
+function configPanel(panel, groups){
+  panel.innerHTML = '';
+  api('/econ').then(function(cfg){
+    var defs = cfg._defaults || {};
+    groups.forEach(function(g){
+      var el = h('div', { class: 'wgroup' });
+      el.innerHTML = '<h3>' + esc(g.group) + '</h3>';
+      g.items.forEach(function(it){
+        var v = cfg[it.k];
+        var d = defs[it.k];
+        var row;
+        if (it.type === 'slider'){
+          row = slider(it.label, it.hint, it.k, Number(v), it.min, it.max, 1, { default: d });
+        } else if (it.type === 'stepper'){
+          row = stepper(it.label, it.hint, it.k, Number(v), it.min, it.max, 1);
+        } else if (it.type === 'toggle'){
+          row = toggle(it.label, it.hint, it.k, v);
+        } else {
+          row = textRow(it.label, it.hint, it.k, v);
+        }
+        el.appendChild(row);
+      });
+      panel.appendChild(el);
+    });
+  }).catch(function(e){ panel.innerHTML = '<div class="loading">' + esc(e.message) + '</div>'; });
+}
+
+/* ---------- boot ---------- */
+if (token){ api('/stats').then(showConsole).catch(function(){ localStorage.removeItem(KEY); token = ''; }); }
 })();

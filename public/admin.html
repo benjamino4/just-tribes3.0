@@ -5,21 +5,9 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <meta name="robots" content="noindex">
 <title>TRIBES — Warden Console</title>
-<link rel="stylesheet" href="admin.css?v=99">
+<link rel="stylesheet" href="admin.css?v=300">
 </head>
 <body>
-<div class="embers" aria-hidden="true">
-  <svg class="flamebg" viewBox="0 0 200 200" preserveAspectRatio="none">
-    <defs>
-      <radialGradient id="glow" cx="50%" cy="100%" r="80%">
-        <stop offset="0%" stop-color="#ff7a18" stop-opacity=".55"/>
-        <stop offset="45%" stop-color="#c81d25" stop-opacity=".25"/>
-        <stop offset="100%" stop-color="#000" stop-opacity="0"/>
-      </radialGradient>
-    </defs>
-    <rect x="0" y="0" width="200" height="200" fill="url(#glow)"/>
-  </svg>
-</div>
 
 <section id="login" class="gate">
   <div class="gate-card">
@@ -35,97 +23,37 @@
   </div>
 </section>
 
-<main id="console" hidden>
+<main id="console" class="console" hidden>
   <header class="topbar">
-    <div class="brand"><span class="dot"></span> TRIBES · Warden Console</div>
+    <div class="brand">
+      <span class="dot"></span>
+      <span>TRIBES · Warden</span>
+    </div>
     <div class="top-actions">
+      <span id="liveStats" class="pill stat-pill"></span>
       <span id="maintFlag" class="pill"></span>
       <button id="logoutBtn" class="btn ghost sm">Lock</button>
     </div>
   </header>
 
-  <nav class="tabs">
-    <button class="tab active" data-tab="stats">Overview</button>
-    <button class="tab" data-tab="players">Players</button>
-    <button class="tab" data-tab="tribes">Tribes</button>
-    <button class="tab" data-tab="wars">Wars</button>
-    <button class="tab" data-tab="payments">Payments</button>
-    <button class="tab" data-tab="economy">Economy</button>
-    <button class="tab" data-tab="trials">Trials</button>
-    <button class="tab" data-tab="bonfire">Bonfire</button>
-    <button class="tab" data-tab="names">Names</button>
-    <button class="tab" data-tab="codes">Codes</button>
-    <button class="tab" data-tab="control">Control</button>
-  </nav>
+  <div class="layout">
+    <aside class="side">
+      <input id="navSearch" class="nav-search" placeholder="Filter sections…" autocomplete="off">
+      <nav id="navTree" class="nav-tree"></nav>
+    </aside>
 
-  <section class="panel active" id="tab-stats"><div id="statCards" class="cards"></div></section>
-
-  <section class="panel" id="tab-players">
-    <div class="row"><input id="pQuery" placeholder="Search name, @username or id"><button id="pSearch" class="btn">Search</button></div>
-    <div id="playerList" class="list"></div>
-    <div id="playerCard" class="detail"></div>
-  </section>
-
-  <section class="panel" id="tab-tribes">
-    <div id="tribeList" class="list"></div>
-    <div id="tribeCard" class="detail"></div>
-  </section>
-
-  <section class="panel" id="tab-wars">
-    <div class="row"><input id="waAtk" placeholder="Attacker tribe id" class="num"><input id="waDef" placeholder="Defender tribe id" class="num"><button id="waStart" class="btn">Force war</button></div>
-    <div id="warList" class="list"></div>
-  </section>
-
-  <section class="panel" id="tab-payments"><div id="payList" class="list"></div></section>
-
-  <section class="panel" id="tab-economy">
-    <p class="muted">Live economy multipliers &amp; caps. Changes apply instantly.</p>
-    <div id="econGrid" class="econ"></div>
-    <button id="econReset" class="btn ghost">Reset all to defaults</button>
-  </section>
-
-  <section class="panel" id="tab-trials">
-    <div class="row"><button id="trialsNew" class="btn primary">New trial</button><button id="trialsReset" class="btn ghost">Reset all cooldowns</button></div>
-    <div id="trialsList" class="list"></div>
-    <div id="trialsEditor" class="detail"></div>
-  </section>
-
-  <section class="panel" id="tab-bonfire">
-    <div class="row"><input id="bfTitle" placeholder="Title" value="Double Ash"><select id="bfMetric" class="num"><option>ember</option><option>loyalty</option><option>ash</option><option>checkin</option><option>war</option></select><input id="bfMult" class="num" type="number" step="0.1" value="2"><input id="bfHours" class="num" type="number" value="2"><button id="bfStart" class="btn primary">Start now</button></div>
-    <div id="bfList" class="list"></div>
-  </section>
-
-  <section class="panel" id="tab-names">
-    <div class="row"><input id="nmName" placeholder="New tribe name"><button id="nmAdd" class="btn primary">Add</button></div>
-    <div id="nmList" class="list"></div>
-  </section>
-
-  <section class="panel" id="tab-codes">
-    <div class="row"><input id="cdCode" placeholder="CODE"><select id="cdKind" class="num"><option>ember</option><option>loyalty</option></select><input id="cdAmount" class="num" type="number" placeholder="amount"><input id="cdMax" class="num" type="number" placeholder="max uses"><input id="cdDays" class="num" type="number" placeholder="expires days"><button id="cdAdd" class="btn primary">Create</button></div>
-    <div id="cdList" class="list"></div>
-  </section>
-
-  <section class="panel" id="tab-control">
-    <div class="ctl-card">
-      <h3>Maintenance mode</h3>
-      <p class="muted">Freezes player actions (reads still work).</p>
-      <div class="row"><button id="maintOn" class="btn warn">Enable</button><button id="maintOff" class="btn">Disable</button></div>
-    </div>
-    <div class="ctl-card">
-      <h3>Broadcast</h3>
-      <p class="muted">Send a message to every non-banned player via the game bot.</p>
-      <textarea id="bcText" rows="3" placeholder="Your message to the tribes…"></textarea>
-      <button id="bcSend" class="btn primary">Send to all</button>
-    </div>
-    <div class="ctl-card danger">
-      <h3>Season wipe</h3>
-      <p class="muted">Resets Loyalty &amp; war records for all tribes. Balances kept.</p>
-      <button id="wipeBtn" class="btn danger">Wipe season</button>
-    </div>
-  </section>
+    <section class="editor">
+      <div id="editorHeader" class="editor-header">
+        <h2 id="panelTitle">Overview</h2>
+        <span id="panelSub" class="muted"></span>
+      </div>
+      <div id="panel" class="panel"></div>
+    </section>
+  </div>
 
   <div id="toast" class="toast"></div>
 </main>
-<script src="admin.js?v=99"></script>
+
+<script src="admin.js?v=300"></script>
 </body>
 </html>
