@@ -2,7 +2,6 @@
 // TRIBES admin control plane. Batch 1 adds war-revamp settings endpoints.
 // ---------------------------------------------------------------------------
 import express from 'express';
-import { previewReset, backupToJSON, resetProgression, factoryReset } from './admin_reset.js';
 import { previewReset, backupToJSON, resetProgression, factoryReset, listTables } from './admin_reset.js';
 import { q } from './db.js';
 import { CFG, DEFAULTS, setConfig, resetConfig } from './config.js';
