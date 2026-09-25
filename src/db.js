@@ -393,7 +393,8 @@ async function runMigrations(){
   if (!files.length){ console.log('[db] no migration files'); return; }
 
   for (const f of files){
-    const sql = await fs.readFile(path.join(MIGRATIONS_DIR, f), 'utf8');
+    let sql = await fs.readFile(path.join(MIGRATIONS_DIR, f), 'utf8');
+    if (!sql.endsWith('\n')) sql += '\n';
     const client = await pool.connect();
     try {
       console.log('[db] running migration ' + f);

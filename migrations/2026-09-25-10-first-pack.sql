@@ -17,4 +17,4 @@ CREATE TABLE IF NOT EXISTS first_pack_claims (
   user_id     BIGINT PRIMARY KEY REFERENCES users(id) ON DELETE CASCADE,
   claimed_at  TIMESTAMPTZ DEFAULT now(),
   reward_paid JSONB
-);s
+);
