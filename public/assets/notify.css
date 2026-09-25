@@ -1,169 +1,143 @@
 /* =====================================================================
-   TRIBES — Dynamic Island-style notifications.
+   TRIBES — Dynamic Island notification helper.
+   Usage:
+     notify({ title, msg, icon, severity, action, duration, progress })
+   Options:
+     title      string
+     msg        string
+     icon       icon name (from sprite)
+     severity   'default' | 'success' | 'warn' | 'danger'
+     action     { label, onClick }   optional
+     duration   ms before auto-compact (default 4000). 0 = sticky.
+     onTap      callback for whole-notification tap (expands if compact)
+     progress   { total, interval }  shows a bar draining over time
+   Returns a handle: { el, close(), compact() }
 ===================================================================== */
+(function(){
+'use strict';
 
-.notify-root {
-  position: fixed;
-  top: env(safe-area-inset-top, 0px);
-  left: 0; right: 0;
-  z-index: 500;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px 0;
-  pointer-events: none;
-}
-
-.notify {
-  pointer-events: auto;
-  width: 100%;
-  max-width: 460px;
-  border-radius: 22px;
-  padding: 12px 14px;
-  display: grid;
-  grid-template-columns: 34px 1fr auto;
-  gap: 12px;
-  align-items: center;
-
-  background: linear-gradient(160deg, rgba(34,26,18,.92), rgba(14,10,8,.94));
-  border: 1px solid rgba(245,239,223,.14);
-  box-shadow:
-    0 18px 48px rgba(0,0,0,.6),
-    0 0 0 0.5px rgba(255,255,255,.04),
-    inset 0 1px 0 rgba(255,220,180,.08);
-
-  backdrop-filter: blur(24px) saturate(180%);
-  -webkit-backdrop-filter: blur(24px) saturate(180%);
-
-  transform: translateY(-120%) scale(0.9);
-  opacity: 0;
-  animation: notify-in 480ms cubic-bezier(.34,1.4,.5,1) forwards;
-  will-change: transform, opacity;
-}
-
-.notify.compact {
-  grid-template-columns: 26px 1fr auto;
-  padding: 8px 12px;
-  border-radius: 18px;
-  animation: notify-compact 340ms cubic-bezier(.34,1.4,.5,1) forwards;
-}
-
-@keyframes notify-in {
-  0%   { transform: translateY(-120%) scale(0.86); opacity: 0; }
-  60%  { transform: translateY(4px) scale(1.02); opacity: 1; }
-  100% { transform: translateY(0) scale(1); opacity: 1; }
-}
-@keyframes notify-compact {
-  from { padding: 12px 14px; }
-  to   { padding: 8px 12px; }
-}
-.notify.out { animation: notify-out 320ms cubic-bezier(.4,0,.6,1) forwards; }
-@keyframes notify-out {
-  to { transform: translateY(-120%) scale(0.9); opacity: 0; }
-}
-
-.notify-ico {
-  width: 34px; height: 34px;
-  border-radius: 12px;
-  display: grid; place-items: center;
-  background: radial-gradient(circle at 40% 30%, rgba(255,122,24,.22), rgba(20,14,10,.9));
-  border: 1px solid rgba(255,122,24,.32);
-  color: var(--ember, #ff7a18);
-  box-shadow: inset 0 1px 0 rgba(255,220,180,.12);
-  flex-shrink: 0;
-}
-.notify-ico .ico { width: 18px; height: 18px; }
-
-.notify-body { min-width: 0; }
-.notify-title {
-  font-size: .82rem;
-  font-weight: 800;
-  color: var(--bone, #f5ede0);
-  letter-spacing: .01em;
-  margin: 0 0 2px;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-.notify-msg {
-  font-size: .72rem;
-  color: var(--ash, #9a8d7e);
-  line-height: 1.35;
-  overflow: hidden;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-}
-.notify.compact .notify-msg { display: none; }
-
-.notify-action {
-  flex-shrink: 0;
-  padding: 7px 12px;
-  border-radius: 12px;
-  background: linear-gradient(160deg, #ffd27a, var(--ember, #ff7a18) 60%, #c8562d);
-  color: #2a1402;
-  font-size: .72rem;
-  font-weight: 800;
-  border: 0;
-  cursor: pointer;
-  font-family: inherit;
-  letter-spacing: .02em;
-  transition: transform .14s cubic-bezier(.2,.9,.2,1);
-}
-.notify-action:active { transform: scale(.94); }
-.notify-action.ghost {
-  background: transparent;
-  color: var(--ash, #9a8d7e);
-  border: 1px solid rgba(245,239,223,.14);
-}
-
-.notify-progress {
-  grid-column: 1 / -1;
-  height: 2px;
-  margin-top: 8px;
-  border-radius: 2px;
-  background: rgba(255,255,255,.06);
-  overflow: hidden;
-}
-.notify-progress > i {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, var(--ember, #ff7a18), var(--gold, #ffcf7a));
-  border-radius: 2px;
-  box-shadow: 0 0 8px rgba(255,122,24,.5);
-  transition: width 200ms linear;
-}
-
-.notify.sev-success .notify-ico {
-  background: radial-gradient(circle at 40% 30%, rgba(42,220,140,.22), rgba(10,20,14,.9));
-  border-color: rgba(42,220,140,.4);
-  color: #2adc8c;
-}
-.notify.sev-warn .notify-ico {
-  background: radial-gradient(circle at 40% 30%, rgba(255,180,58,.24), rgba(26,16,6,.9));
-  border-color: rgba(255,180,58,.4);
-  color: #ffb43a;
-}
-.notify.sev-danger .notify-ico {
-  background: radial-gradient(circle at 40% 30%, rgba(192,57,43,.28), rgba(26,10,8,.9));
-  border-color: rgba(192,57,43,.5);
-  color: #ff8a8a;
-}
-.notify.sev-danger .notify-action {
-  background: linear-gradient(160deg, #ff8a8a, #a5361f);
-  color: #fff;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .notify, .notify.compact, .notify.out {
-    animation-duration: 1ms !important;
+function ensureRoot(){
+  let root = document.getElementById('notifyRoot');
+  if (!root){
+    root = document.createElement('div');
+    root.id = 'notifyRoot';
+    root.className = 'notify-root';
+    document.body.appendChild(root);
   }
+  return root;
 }
 
-[data-tier="low"] .notify,
-[data-tier="ultra-saver"] .notify {
-  backdrop-filter: none;
-  -webkit-backdrop-filter: none;
-  background: linear-gradient(160deg, rgba(38,29,20,.98), rgba(20,14,10,.98));
+function notify(opts){
+  opts = opts || {};
+  const {
+    title = '',
+    msg = '',
+    icon = 'bell',
+    severity = 'default',
+    action = null,
+    duration = 4000,
+    onTap = null,
+    progress = null,
+  } = opts;
+
+  const root = ensureRoot();
+  const el = document.createElement('div');
+  el.className = 'notify sev-' + severity;
+
+  const iconHtml = '<span data-icon="' + icon + '"></span>';
+  const actionHtml = action
+    ? '<button class="notify-action" type="button">' + escapeHtml(action.label || 'Open') + '</button>'
+    : '';
+  const progressHtml = progress
+    ? '<div class="notify-progress"><i style="width:100%"></i></div>'
+    : '';
+
+  el.innerHTML =
+    '<div class="notify-ico">' + iconHtml + '</div>' +
+    '<div class="notify-body">' +
+      '<div class="notify-title">' + escapeHtml(title) + '</div>' +
+      (msg ? '<div class="notify-msg">' + escapeHtml(msg) + '</div>' : '') +
+    '</div>' +
+    actionHtml +
+    progressHtml;
+
+  root.appendChild(el);
+
+  if (window.hydrateIcons) window.hydrateIcons();
+
+  // Action click
+  if (action && action.onClick){
+    const btn = el.querySelector('.notify-action');
+    if (btn) btn.addEventListener('click', e => {
+      e.stopPropagation();
+      try { action.onClick(handle); } catch(err){ console.warn(err); }
+      handle.close();
+    });
+  }
+
+  // Whole-notification tap
+  el.addEventListener('click', e => {
+    if (e.target.closest('.notify-action')) return;
+    if (onTap) onTap(handle);
+    else handle.compact();
+  });
+
+  // Progress bar
+  let progressTimer = null;
+  if (progress && progress.total > 0){
+    const bar = el.querySelector('.notify-progress > i');
+    const startedAt = Date.now();
+    progressTimer = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const pct = Math.max(0, 1 - elapsed / progress.total);
+      if (bar) bar.style.width = (pct * 100).toFixed(1) + '%';
+      if (pct <= 0) clearInterval(progressTimer);
+    }, progress.interval || 200);
+  }
+
+  // Auto-compact
+  let compactTimer = null;
+  if (duration > 0){
+    compactTimer = setTimeout(() => handle.compact(), duration);
+  }
+
+  const handle = {
+    el,
+    close(){
+      clearTimeout(compactTimer);
+      clearInterval(progressTimer);
+      el.classList.add('out');
+      setTimeout(() => el.remove(), 340);
+    },
+    compact(){
+      clearTimeout(compactTimer);
+      if (el.classList.contains('compact')) return;
+      el.classList.add('compact');
+      // auto-dismiss 3s after compact if it was transient
+      if (duration > 0){
+        compactTimer = setTimeout(() => handle.close(), 3000);
+      }
+    },
+    expand(){
+      el.classList.remove('compact');
+      clearTimeout(compactTimer);
+      if (duration > 0) compactTimer = setTimeout(() => handle.compact(), duration);
+    },
+  };
+
+  // Cap at 4 visible
+  const all = root.querySelectorAll('.notify');
+  if (all.length > 4) all[0].remove();
+
+  return handle;
 }
+
+function escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+window.notify = notify;
+
+})();
