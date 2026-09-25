@@ -996,3 +996,207 @@ b{font-weight:800}
 [data-fx="reduced"] .fx-ember,
 [data-fx="reduced"] .reward-bloom{display:none}
 [data-fx="reduced"] .campfire .flame.f3{display:none}
+/* =====================================================================
+   VISUAL PUNCH-UP — stronger contrast, deeper depth
+   (appended block — wins cascade over earlier rules)
+   ===================================================================== */
+
+:root{
+  --bg-ink:        #05040a;
+  --bone:          #ffffff;
+  --bone-dim:      #e6dcc8;
+  --ash:           #b8ac96;
+  --ash-dim:       #7a7160;
+
+  --ember:         #ff8a2a;
+  --ember-bright:  #ffb05c;
+  --ember-deep:    #d9541e;
+  --gold:          #ffd98a;
+  --rust:          #d15a2c;
+  --jade:          #35e896;
+
+  --line:          rgba(255,225,190,.14);
+  --line-strong:   rgba(255,225,190,.28);
+
+  --shadow-1:      0 2px 10px rgba(0,0,0,.55);
+  --shadow-2:      0 12px 32px rgba(0,0,0,.65);
+  --shadow-3:      0 24px 60px rgba(0,0,0,.75);
+}
+
+/* --- Icons thicker --- */
+.ico{ stroke-width: 1.9; }
+.tab .tab-icon svg{ stroke-width: 1.9; }
+
+/* --- Cards: lift, edge glow, specular line --- */
+.card,
+.dash-card,
+.trial,
+.kiva-hero,
+.settings-group,
+.daily-card,
+.x-quest,
+.referral-card,
+.front-card,
+.war-arena,
+.shop-card,
+.featured{
+  background: linear-gradient(160deg, rgba(46,34,22,.92), rgba(22,15,10,.92));
+  border: 1px solid rgba(255,225,190,.14);
+  box-shadow:
+    0 14px 34px rgba(0,0,0,.7),
+    inset 0 1px 0 rgba(255,225,190,.10),
+    inset 0 0 60px rgba(255,122,24,.04);
+  position: relative;
+}
+
+.card::before,
+.dash-card::before,
+.trial::before,
+.kiva-hero::before,
+.settings-group::before,
+.war-arena::before,
+.featured::before,
+.shop-card::before{
+  content:'';
+  position:absolute;
+  top:0; left:0; right:0; height:1px;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,225,190,.45) 50%, transparent 100%);
+  border-radius: inherit;
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* --- Campfire hotter --- */
+.dash-campfire .campfire .flame{
+  filter: blur(1px) drop-shadow(0 0 26px rgba(255,140,40,.9));
+  box-shadow: 0 -14px 70px rgba(255,120,30,.75);
+}
+.dash-campfire .campfire .halo{
+  background: radial-gradient(circle,
+    rgba(255,140,40,.55) 0%,
+    rgba(255,120,30,.18) 45%,
+    transparent 65%);
+  animation-duration: 2.6s;
+}
+.campfire .logs{
+  background: linear-gradient(90deg, rgba(58,37,20,0), #6b4520 30%, #4a2f14 70%, rgba(58,37,20,0));
+  box-shadow: 0 10px 20px rgba(0,0,0,.75);
+}
+
+/* --- Typography stronger --- */
+.dash-card-head{
+  color: #d4c8b0;
+  font-weight: 900;
+  letter-spacing: .18em;
+}
+.screen-title{
+  color: #ffd98a;
+  text-shadow: 0 0 24px rgba(255,140,40,.35);
+}
+.dash-streak-num{
+  color: #ffffff;
+  text-shadow: 0 0 20px rgba(255,140,40,.4);
+}
+.dash-card-foot{
+  color: #d4c8b0;
+  font-weight: 800;
+}
+.section-head b{
+  color: #ffffff;
+  font-weight: 900;
+}
+.section-head .muted{
+  color: #b8ac96;
+  font-weight: 700;
+  letter-spacing: .06em;
+}
+
+/* --- Buttons with bevel + shadow --- */
+.btn-primary{
+  box-shadow:
+    0 12px 28px rgba(255,122,24,.5),
+    0 2px 0 rgba(255,255,255,.35) inset,
+    0 -2px 0 rgba(120,40,10,.35) inset;
+}
+.btn-stone{
+  background: linear-gradient(160deg,#3a2a1c,#22170f);
+  border: 1px solid rgba(255,200,120,.28);
+  box-shadow:
+    0 8px 20px rgba(0,0,0,.55),
+    0 1px 0 rgba(255,220,180,.18) inset;
+  color: #ffd98a;
+}
+
+/* --- FABs visible --- */
+.w-fab{
+  background: linear-gradient(160deg,#3a2a1c,#1a120c);
+  border: 1px solid rgba(255,200,120,.35);
+  color: #ffd98a;
+  box-shadow:
+    0 14px 32px rgba(0,0,0,.75),
+    0 1px 0 rgba(255,220,180,.20) inset,
+    0 0 24px rgba(255,122,24,.15);
+}
+.w-fab .ico{ stroke-width: 2.1; }
+
+/* --- Nav bar clearer --- */
+.tabbar{
+  background: linear-gradient(180deg, rgba(20,14,10,.92) 0%, rgba(8,6,4,.96) 100%);
+  border-top: 1px solid rgba(255,200,120,.16);
+  box-shadow: 0 -12px 40px rgba(0,0,0,.5);
+}
+.tab[data-active="true"]{ color: var(--ember-bright); }
+.tab .tab-label{ font-size: 11px; font-weight: 700; letter-spacing: .04em; }
+
+/* --- Topbar chips --- */
+.chip{
+  background: linear-gradient(160deg, rgba(40,28,18,.9), rgba(16,11,8,.9));
+  border: 1px solid rgba(255,200,120,.18);
+  box-shadow:
+    0 8px 22px rgba(0,0,0,.6),
+    0 1px 0 rgba(255,220,180,.10) inset;
+}
+.crest-meta b{ color: #ffd98a; font-size:.86rem; }
+.crest-meta i{ color: #b8ac96; }
+
+/* --- Trial / daily accent strip --- */
+.trial::before,
+.daily-card::before{
+  width: 4px;
+  background: linear-gradient(180deg, var(--ember) 0%, var(--gold) 100%);
+  box-shadow: 0 0 16px rgba(255,140,40,.6);
+}
+
+/* --- Toast / reward crisper --- */
+.toast{
+  background: linear-gradient(160deg, rgba(48,34,22,.96), rgba(20,14,10,.96));
+  border: 1px solid rgba(255,200,120,.28);
+  box-shadow:
+    0 18px 42px rgba(0,0,0,.75),
+    0 1px 0 rgba(255,220,180,.12) inset;
+  color: #ffffff;
+}
+
+/* --- Kiva messages clearer --- */
+.kiva-msg{
+  background: linear-gradient(160deg, rgba(40,28,18,.7), rgba(18,12,8,.7));
+  border: 1px solid rgba(255,200,120,.12);
+}
+.kiva-msg .km-text{ color: #ffffff; }
+.kiva-msg .km-meta{ color: #b8ac96; }
+
+/* --- Sheet (bottom drawer) --- */
+.sheet{
+  background: linear-gradient(180deg, rgba(34,24,16,.99), rgba(14,10,7,.99));
+  border-top: 1px solid rgba(255,200,120,.28);
+  box-shadow: 0 -30px 70px rgba(0,0,0,.8);
+}
+.sheet h3{ color: #ffd98a; }
+
+/* --- Feature banner (starter) --- */
+.featured{
+  background:
+    radial-gradient(120% 90% at 30% 0%, rgba(255,140,40,.32), transparent 60%),
+    linear-gradient(160deg, rgba(50,32,20,.95), rgba(20,14,10,.95));
+  border: 1px solid rgba(255,140,40,.4);
+}
