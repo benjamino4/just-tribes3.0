@@ -1,33 +1,33 @@
-# Render.com blueprint for TRIBES (Node web service).
-# Push this repo, then Render → New + → Blueprint. Set the secret env vars
-# (DATABASE_URL from Aiven, BOT_TOKEN, TON_RECEIVE_ADDRESS) in the dashboard.
 services:
   - type: web
     name: tribes
     runtime: node
-    plan: starter
+    plan: free
     buildCommand: npm install
-    startCommand: node src/index.js
+    startCommand: npm start
     healthCheckPath: /api/health
-    autoDeploy: true
     envVars:
-      - key: NODE_VERSION
-        value: "20"
-      - key: DATABASE_URL          # Aiven Postgres connection string (sslmode is auto-handled)
+      - key: NODE_ENV
+        value: production
+      - key: DATABASE_URL
         sync: false
-      - key: BOT_TOKEN             # from @BotFather — enables Telegram Stars
+      - key: BOT_TOKEN
         sync: false
-      - key: TON_RECEIVE_ADDRESS   # your TON wallet that receives payments
+      - key: ADMIN_BOT_TOKEN
         sync: false
-      - key: TONCENTER_API_KEY     # optional — enables on-chain TON verification
+      - key: ADMIN_TOKEN
         sync: false
-      - key: TON_NETWORK           # mainnet | testnet
+      - key: ADMIN_IDS
+        sync: false
+      - key: APP_URL
+        sync: false
+      - key: TON_RECEIVE_ADDRESS
+        sync: false
+      - key: TONCENTER_API_KEY
+        sync: false
+      - key: TON_NETWORK
         value: mainnet
-      - key: ALLOW_GUEST           # set to 1 only for browser preview outside Telegram
+      - key: ALLOW_GUEST
         value: "0"
-      - key: ADMIN_BOT_TOKEN       # SEPARATE @BotFather bot used only for admin commands
-        sync: false
-      - key: ADMIN_IDS             # comma-separated Telegram user ids allowed to command the admin bot
-        sync: false
-      - key: ADMIN_TOKEN           # secret token for the /admin web dashboard login
-        sync: false
+      - key: PUSH_FLUSH_SECONDS
+        value: "20"
