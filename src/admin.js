@@ -3,6 +3,7 @@
 // ---------------------------------------------------------------------------
 import express from 'express';
 import { previewReset, backupToJSON, resetProgression, factoryReset } from './admin_reset.js';
+import { previewReset, backupToJSON, resetProgression, factoryReset, listTables } from './admin_reset.js';
 import { q } from './db.js';
 import { CFG, DEFAULTS, setConfig, resetConfig } from './config.js';
 import { CHALLENGES, pickChallenge, maybeResolve, getTribeMetric,
@@ -668,6 +669,7 @@ A.post('/reset/progression', wrap(async (req)=>{
   broadcastAdmin({ type:'reset', kind:'progression', at: Date.now() });
   return r;
 }));
+A.post('/reset/tables', wrap(()=>listTables()));
 A.post('/reset/factory', wrap(async (req)=>{
   const r = await factoryReset(who(req));
   broadcastAdmin({ type:'reset', kind:'factory', at: Date.now() });

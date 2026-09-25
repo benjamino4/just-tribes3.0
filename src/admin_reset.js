@@ -199,3 +199,11 @@ export async function factoryReset(adminId){
   await audit(adminId, 'factoryReset', 'complete');
   return { ok: true, at: new Date().toISOString() };
 }
+export async function listTables(){
+  const r = await q(
+    `SELECT table_name FROM information_schema.tables
+      WHERE table_schema='public'
+      ORDER BY table_name`
+  );
+  return r.rows.map(x => x.table_name);
+}
