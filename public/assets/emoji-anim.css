@@ -1,0 +1,207 @@
+/* =====================================================================
+   TRIBES — Alive emoji / icon animations
+   Every animation is a primitive. Triggered by class. Auto-cleans.
+===================================================================== */
+
+/* --- Popping (rewards, reactions) --- */
+@keyframes emoji-pop {
+  0%   { transform: scale(1); }
+  40%  { transform: scale(1.35); }
+  70%  { transform: scale(0.95); }
+  100% { transform: scale(1); }
+}
+.emoji-pop { animation: emoji-pop 400ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* --- Breathing (ambient) --- */
+@keyframes emoji-breathe {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.06); }
+}
+.emoji-breathe { animation: emoji-breathe 2.6s ease-in-out infinite; }
+
+/* --- Pulse (on value change) --- */
+@keyframes emoji-pulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.18); }
+}
+.emoji-pulse { animation: emoji-pulse 500ms ease-out 2; }
+
+/* --- Spin (rank up, victory) --- */
+@keyframes emoji-spin {
+  0%   { transform: rotate(0) scale(1); }
+  50%  { transform: rotate(180deg) scale(1.15); }
+  100% { transform: rotate(360deg) scale(1); }
+}
+.emoji-spin { animation: emoji-spin 600ms cubic-bezier(0.34, 1.56, 0.64, 1); }
+
+/* --- Shake (attention) --- */
+@keyframes emoji-shake {
+  0%, 100% { transform: rotate(0); }
+  20%      { transform: rotate(-8deg); }
+  40%      { transform: rotate(8deg); }
+  60%      { transform: rotate(-4deg); }
+  80%      { transform: rotate(4deg); }
+}
+.emoji-shake { animation: emoji-shake 400ms ease-in-out; }
+
+/* --- Fly-in (reaction arrival) --- */
+@keyframes emoji-fly-in {
+  0%   { transform: translate(var(--from-x, 0), var(--from-y, 40px)) scale(0.4); opacity: 0; }
+  60%  { opacity: 1; }
+  100% { transform: translate(0, 0) scale(1); opacity: 1; }
+}
+.emoji-fly-in {
+  animation: emoji-fly-in 500ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+}
+
+/* --- Draw (checkmarks) --- */
+@keyframes icon-draw {
+  from { stroke-dashoffset: 24; }
+  to   { stroke-dashoffset: 0; }
+}
+.icon-draw path {
+  stroke-dasharray: 24;
+  stroke-dashoffset: 24;
+  animation: icon-draw 400ms ease-out forwards;
+}
+.icon-draw circle {
+  stroke-dasharray: 70;
+  stroke-dashoffset: 70;
+  animation: icon-draw 500ms ease-out forwards;
+}
+
+/* --- Ignite (cooldown ends) --- */
+@keyframes icon-ignite {
+  0%   { filter: brightness(0.5); opacity: 0.4; }
+  50%  { filter: brightness(1.3); opacity: 1; }
+  100% { filter: brightness(1); opacity: 1; }
+}
+.icon-ignite { animation: icon-ignite 500ms ease-out; }
+
+/* --- Ripple (banner, wave) --- */
+@keyframes icon-ripple {
+  0%, 100% { transform: skewY(0); }
+  25%      { transform: skewY(-2deg); }
+  75%      { transform: skewY(2deg); }
+}
+.icon-ripple { animation: icon-ripple 4s ease-in-out infinite; }
+
+/* --- Tick (clock hand) --- */
+@keyframes icon-tick {
+  from { transform: rotate(0); }
+  to   { transform: rotate(360deg); }
+}
+.icon-tick { animation: icon-tick 60s linear infinite; transform-origin: center; }
+
+/* --- Blink (profile) --- */
+@keyframes icon-blink {
+  0%, 92%, 100% { transform: scaleY(1); }
+  94%           { transform: scaleY(0.05); }
+  96%           { transform: scaleY(1); }
+}
+.icon-blink { animation: icon-blink 15s ease-in-out infinite; }
+
+/* --- Float (crown) --- */
+@keyframes icon-float {
+  0%, 100% { transform: translateY(0); }
+  50%      { transform: translateY(-2px); }
+}
+.icon-float { animation: icon-float 3s ease-in-out infinite; }
+
+/* --- Reheat (nav return) --- */
+@keyframes nav-reheat {
+  0%   { box-shadow: 0 0 0 0 rgba(255,122,24,0); }
+  40%  { box-shadow: 0 0 24px 6px rgba(255,122,24,0.35); }
+  100% { box-shadow: 0 0 0 0 rgba(255,122,24,0); }
+}
+.nav-reheat { animation: nav-reheat 600ms ease-out; }
+
+/* --- Underline grow (nav) --- */
+@keyframes underline-grow {
+  from { transform: scaleX(0); }
+  to   { transform: scaleX(1); }
+}
+.underline-grow { animation: underline-grow 250ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+@keyframes underline-retract {
+  from { transform: scaleX(1); }
+  to   { transform: scaleX(0); }
+}
+.underline-retract { animation: underline-retract 150ms ease-out forwards; }
+
+/* --- Fire flash (reward impact) --- */
+@keyframes fire-flash {
+  0%   { filter: brightness(1); transform: scale(1); }
+  30%  { filter: brightness(1.8); transform: scale(1.08); }
+  100% { filter: brightness(1); transform: scale(1); }
+}
+.fire-flash { animation: fire-flash 500ms ease-out; }
+
+/* --- Reward card drop --- */
+@keyframes reward-drop {
+  0%   { transform: translateY(-40px) scale(1.1); opacity: 0; }
+  60%  { opacity: 1; transform: translateY(0) scale(1.05); }
+  100% { transform: translateY(0) scale(1); opacity: 1; }
+}
+.reward-drop { animation: reward-drop 600ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards; }
+
+/* --- Camera push --- */
+@keyframes camera-push {
+  0%   { transform: scale(1); }
+  100% { transform: scale(1.05); }
+}
+.camera-push { animation: camera-push 400ms ease-out forwards; }
+.camera-pull { animation: camera-push 400ms ease-out reverse forwards; }
+
+/* --- Screen shake (impact) --- */
+@keyframes screen-shake {
+  0%, 100% { transform: translate(0, 0); }
+  25%      { transform: translate(-2px, -1px); }
+  50%      { transform: translate(2px, 1px); }
+  75%      { transform: translate(-1px, 1px); }
+}
+.screen-shake { animation: screen-shake 200ms ease-out; }
+
+/* --- Reduced motion --- */
+@media (prefers-reduced-motion: reduce) {
+  .emoji-pop, .emoji-breathe, .emoji-pulse, .emoji-spin, .emoji-shake,
+  .emoji-fly-in, .icon-draw path, .icon-draw circle, .icon-ignite,
+  .icon-ripple, .icon-tick, .icon-blink, .icon-float, .nav-reheat,
+  .underline-grow, .underline-retract, .fire-flash, .reward-drop,
+  .camera-push, .camera-pull, .screen-shake {
+    animation: none !important;
+  }
+}
+
+/* --- Device tier gating --- */
+[data-tier="low"] .emoji-breathe,
+[data-tier="low"] .icon-ripple,
+[data-tier="low"] .icon-tick,
+[data-tier="low"] .icon-blink,
+[data-tier="low"] .icon-float,
+[data-tier="low"] .fire-flash,
+[data-tier="low"] .camera-push,
+[data-tier="low"] .camera-pull,
+[data-tier="low"] .screen-shake {
+  animation: none !important;
+}
+
+[data-tier="low"] .emoji-pop,
+[data-tier="low"] .emoji-pulse,
+[data-tier="low"] .emoji-spin,
+[data-tier="low"] .reward-drop,
+[data-tier="low"] .icon-draw path,
+[data-tier="low"] .icon-draw circle {
+  animation-duration: 200ms !important;
+}
+
+[data-tier="mid"] .icon-ripple,
+[data-tier="mid"] .icon-tick,
+[data-tier="mid"] .icon-blink,
+[data-tier="mid"] .icon-float {
+  animation: none !important;
+}
+
+[data-tier="ultra-saver"] * {
+  animation: none !important;
+  transition: none !important;
+}

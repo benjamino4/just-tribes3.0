@@ -858,3 +858,363 @@ b{font-weight:800}
 .sift-pile.miss .sift-ico{ opacity:.5; }
 .sift-pile.reveal{ border-color:rgba(255,207,122,.5); animation:revealPulse .6s ease; }
 @keyframes revealPulse{ 0%{ transform:scale(1); } 50%{ transform:scale(1.06); } 100%{ transform:scale(1); } }
+
+/* =====================================================================
+   TRIBES — Ash & Bone foundation + Ember Row navigation
+===================================================================== */
+
+/* --- Ash & Bone palette (scoped to body:not([data-theme=legacy])) --- */
+:root {
+  --bg-ink:        #0a0908;
+  --bg-card:       #121010;
+  --bg-elevated:   #1a1714;
+  --bg-paper:      #e8dfc8;
+  --paper-tint:    #d9cfb6;
+
+  --ink:           #0a0908;
+  --bone:          #f5efdf;
+  --bone-dim:      #d9d0bc;
+  --ash:           #8a8170;
+  --ash-dim:       #5c5446;
+
+  --ember:         #ff7a18;
+  --ember-bright:  #ff9d3c;
+  --ember-deep:    #c8562d;
+  --rust:          #b8451f;
+
+  --gold:          #ffcf7a;
+  --blood:         #8f2d1f;
+  --jade:          #2adc8c;
+
+  --line:          rgba(245, 239, 223, 0.10);
+  --line-strong:   rgba(245, 239, 223, 0.18);
+
+  --shadow-1:      0 2px 8px rgba(0,0,0,0.35);
+  --shadow-2:      0 8px 24px rgba(0,0,0,0.45);
+  --shadow-3:      0 16px 48px rgba(0,0,0,0.55);
+
+  --spring-in:     cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spring-out:    cubic-bezier(0.2, 0.9, 0.2, 1);
+  --ease-soft:     cubic-bezier(0.25, 0.1, 0.25, 1);
+
+  --dur-micro:     200ms;
+  --dur-med:       350ms;
+  --dur-large:     600ms;
+}
+
+/* --- Icon system --- */
+.icon {
+  display: inline-block;
+  width: 24px;
+  height: 24px;
+  vertical-align: middle;
+  color: currentColor;
+  flex-shrink: 0;
+}
+.icon-sm { width: 16px; height: 16px; }
+.icon-md { width: 20px; height: 20px; }
+.icon-lg { width: 32px; height: 32px; }
+.icon-xl { width: 48px; height: 48px; }
+
+.icon use { pointer-events: none; }
+
+/* Icons that inherit ember */
+.icon--ember { color: var(--ember); }
+.icon--bone  { color: var(--bone); }
+.icon--ash   { color: var(--ash); }
+.icon--gold  { color: var(--gold); }
+.icon--rust  { color: var(--rust); }
+
+/* Emoji — consistent across devices if Twemoji is loaded; graceful
+   fallback to native emoji otherwise. */
+.emoji {
+  font-family: 'Twemoji', 'Apple Color Emoji', 'Segoe UI Emoji',
+               'Noto Color Emoji', sans-serif;
+  font-style: normal;
+  line-height: 1;
+  display: inline-block;
+  vertical-align: -0.1em;
+}
+
+/* --- The Ember Row (navigation) --- */
+.tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 100;
+  height: calc(52px + env(safe-area-inset-bottom, 0px));
+  padding-bottom: env(safe-area-inset-bottom, 0px);
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  background: linear-gradient(180deg,
+              rgba(14, 12, 10, 0.78) 0%,
+              rgba(10, 9, 8, 0.82) 100%);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  border-top: 0.5px solid rgba(245, 239, 223, 0.12);
+  transition: transform var(--dur-med) var(--ease-soft),
+              opacity var(--dur-micro) var(--ease-soft);
+  will-change: transform, opacity;
+}
+
+.tabbar::before {
+  /* Bottom ember glow — the fire beneath the app */
+  content: '';
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 40px;
+  pointer-events: none;
+  background: radial-gradient(ellipse at 50% 100%,
+              rgba(255, 122, 24, 0.06) 0%,
+              rgba(255, 122, 24, 0.02) 40%,
+              transparent 75%);
+  transition: opacity var(--dur-med) var(--ease-soft);
+}
+.tabbar[data-surge="true"]::before {
+  opacity: 1.6;
+}
+
+.tabbar[data-minimized="true"] {
+  transform: translateY(10px);
+}
+.tabbar[data-recessed="true"] {
+  opacity: 0.35;
+}
+.tabbar[data-hidden="true"] {
+  transform: translateY(100%);
+}
+
+/* Tab item */
+.tab {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  background: transparent;
+  border: 0;
+  color: var(--ash);
+  padding: 0;
+  cursor: pointer;
+  transition: color var(--dur-micro) var(--ease-soft);
+  -webkit-tap-highlight-color: transparent;
+}
+
+.tab[data-active="true"] {
+  color: var(--ember);
+}
+
+/* The active glow — radial bloom behind the icon */
+.tab::before {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 60px;
+  height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle,
+              rgba(255, 122, 24, 0.22) 0%,
+              rgba(255, 122, 24, 0.08) 40%,
+              transparent 70%);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-med) var(--ease-soft);
+}
+.tab[data-active="true"]::before {
+  opacity: 1;
+  animation: emoji-breathe 4s ease-in-out infinite;
+}
+
+/* Icon */
+.tab .tab-icon {
+  width: 24px;
+  height: 24px;
+  position: relative;
+  z-index: 1;
+  transition: transform var(--dur-med) var(--spring-in);
+}
+
+/* Outline + filled pair stacked */
+.tab .tab-icon svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  transition: opacity var(--dur-med) var(--ease-soft);
+}
+.tab .tab-icon .outline { opacity: 1; }
+.tab .tab-icon .filled  { opacity: 0; }
+.tab[data-active="true"] .tab-icon .outline { opacity: 0; }
+.tab[data-active="true"] .tab-icon .filled  { opacity: 1; }
+
+.tab[data-active="true"] .tab-icon {
+  transform: translateY(-2px) scale(1.05);
+}
+
+.tab:active .tab-icon {
+  transform: scale(0.94);
+}
+
+/* Label */
+.tab .tab-label {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  position: relative;
+  z-index: 1;
+  transition: transform var(--dur-med) var(--spring-in),
+              opacity var(--dur-med) var(--ease-soft);
+}
+
+.tabbar[data-minimized="true"] .tab-label {
+  opacity: 0;
+  transform: translateY(4px);
+}
+.tabbar[data-minimized="true"] .tab-icon {
+  transform: translateY(2px);
+  opacity: 0.85;
+}
+.tabbar[data-minimized="true"] .tab[data-active="true"] .tab-icon {
+  transform: translateY(2px) scale(1.05);
+  opacity: 1;
+}
+
+/* Heat line under active tab */
+.tab .tab-heatline {
+  position: absolute;
+  bottom: -1px;
+  left: 50%;
+  transform: translateX(-50%) scaleX(0);
+  width: 60%;
+  height: 2px;
+  border-radius: 1px;
+  background: linear-gradient(90deg,
+              transparent 0%,
+              var(--ember) 50%,
+              transparent 100%);
+  opacity: 0;
+  transition: opacity var(--dur-micro) var(--ease-soft);
+}
+.tab[data-active="true"] .tab-heatline {
+  opacity: 0.9;
+  animation: underline-grow 250ms var(--spring-in) forwards;
+}
+.tab.leaving .tab-heatline {
+  opacity: 0;
+  animation: underline-retract 150ms var(--ease-soft) forwards;
+}
+
+/* Per-tab activate flourish (icon-specific animations) */
+.tab[data-tab="fire"][data-active="true"] .tab-icon svg.filled {
+  filter: drop-shadow(0 0 8px rgba(255, 122, 24, 0.6));
+}
+.tab[data-tab="war"][data-active="true"] .tab-icon svg.filled use {
+  animation: emoji-pop 400ms var(--spring-in);
+}
+.tab[data-tab="ranks"][data-active="true"] .tab-icon svg.filled use {
+  animation: emoji-float 3s ease-in-out infinite;
+}
+.tab[data-tab="store"][data-active="true"] .tab-icon svg.filled {
+  filter: drop-shadow(0 0 6px rgba(255, 207, 122, 0.5));
+}
+
+/* Hairline spotlight under the active tab */
+.tabbar::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  height: 1px;
+  width: 60px;
+  background: linear-gradient(90deg,
+              transparent 0%,
+              rgba(255, 122, 24, 0.35) 50%,
+              transparent 100%);
+  opacity: 0.9;
+  transition: transform var(--dur-large) var(--spring-in);
+  pointer-events: none;
+}
+/* JS sets --tab-x to the center of the active tab */
+.tabbar { --tab-x: 50%; }
+.tabbar::after { transform: translateX(var(--tab-x)); }
+
+/* Long-press context menu */
+.tab-menu {
+  position: fixed;
+  bottom: calc(62px + env(safe-area-inset-bottom, 0px));
+  z-index: 150;
+  background: rgba(20, 16, 12, 0.95);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 0.5px solid rgba(245, 239, 223, 0.18);
+  border-radius: 14px;
+  padding: 6px;
+  box-shadow: var(--shadow-3);
+  animation: reward-drop 300ms var(--spring-in);
+  min-width: 180px;
+}
+.tab-menu button {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 10px 14px;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: var(--bone);
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+}
+.tab-menu button:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+.tab-menu button .icon {
+  width: 18px;
+  height: 18px;
+  color: var(--ember);
+}
+
+/* Double-tap = scroll to top (no visual, handled by JS) */
+
+/* --- Reduced motion --- */
+@media (prefers-reduced-motion: reduce) {
+  .tabbar, .tab, .tab .tab-icon, .tab .tab-label,
+  .tab::before, .tab .tab-heatline, .tabbar::after {
+    transition: none !important;
+    animation: none !important;
+  }
+}
+
+/* --- Device tier overrides --- */
+[data-tier="low"] .tab::before,
+[data-tier="low"] .tabbar::before {
+  animation: none !important;
+  opacity: 0.6 !important;
+}
+[data-tier="low"] .tab[data-active="true"] .tab-icon svg.filled,
+[data-tier="mid"] .tab[data-tab="war"][data-active="true"] .tab-icon svg.filled use,
+[data-tier="mid"] .tab[data-tab="ranks"][data-active="true"] .tab-icon svg.filled use {
+  animation: none !important;
+  filter: none !important;
+}
+[data-tier="low"] .tabbar::after {
+  display: none;
+}
+[data-tier="ultra-saver"] .tab::before,
+[data-tier="ultra-saver"] .tabbar::before,
+[data-tier="ultra-saver"] .tabbar::after {
+  display: none;
+}
+[data-tier="ultra-saver"] .tabbar {
+  backdrop-filter: none;
+  background: var(--bg-ink);
+}
