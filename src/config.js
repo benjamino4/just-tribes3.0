@@ -160,4 +160,4 @@ export async function resetConfig(q){
 
 export function cfgJSON(key, fallback){
   return parseJSON(CFG[key], fallback);
-}s
+}
