@@ -383,7 +383,7 @@ CREATE TABLE IF NOT EXISTS calendar_state (
   total_claims   INT DEFAULT 0,
   last_claim     TIMESTAMPTZ,
   CHECK (id = 1)
-`;
+);`;
 
 async function runMigrations(){
   if (!pool) return;
