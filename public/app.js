@@ -1,107 +1,110 @@
 /* =====================================================================
-   TRIBES — Mini App client. Obsidian Glass UI.
-   Batch 3 Part 1: trial mini-games (stoke, feed, cry, sift).
+   TRIBES — Mini App client. Ash & Bone redesign.
+   Part 1 of 3: foundation, boot, onboarding, Ember Row navigation.
+   Parts 2 and 3 follow in the next message(s); concatenate in order.
 ===================================================================== */
 'use strict';
-window.addEventListener('error', function(e){ var b = document.getElementById('bootMsg'); if (b && b.style.display !== 'none') b.textContent = 'Error: ' + (e.message || 'unknown'); });
+
+/* ---------- error surface ---------- */
+window.addEventListener('error', function(e){
+  const b = document.getElementById('bootMsg');
+  if (b && b.style.display !== 'none') b.textContent = 'Error: ' + (e.message || 'unknown');
+});
+
+/* ---------- Telegram SDK ---------- */
 const TG = window.Telegram && window.Telegram.WebApp ? window.Telegram.WebApp : null;
 try{
-  if(TG){
+  if (TG){
     TG.ready(); TG.expand();
-    TG.setHeaderColor&&TG.setHeaderColor('#07060a');
-    TG.setBackgroundColor&&TG.setBackgroundColor('#07060a');
-    TG.enableClosingConfirmation&&TG.enableClosingConfirmation();
+    TG.setHeaderColor && TG.setHeaderColor('#0a0908');
+    TG.setBackgroundColor && TG.setBackgroundColor('#0a0908');
+    TG.enableClosingConfirmation && TG.enableClosingConfirmation();
   }
 }catch(e){}
 
-const $  = (s,r=document)=>r.querySelector(s);
-const $$ = (s,r=document)=>[...r.querySelectorAll(s)];
-const el = (t,c,h)=>{ const n=document.createElement(t); if(c)n.className=c; if(h!=null)n.innerHTML=h; return n; };
-const fmt = n => { n=Number(n)||0; return n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':Math.floor(n).toLocaleString(); };
-const clamp=(v,a,b)=>Math.max(a,Math.min(b,v));
-const esc = s => String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const haptic = (t='light') => { try{ TG&&TG.HapticFeedback&&TG.HapticFeedback.impactOccurred(t); }catch(e){} };
-const PERF = window.__tribes_perf || null;
+/* ---------- primitives ---------- */
+const $  = (s, r=document) => r.querySelector(s);
+const $$ = (s, r=document) => [...r.querySelectorAll(s)];
+const el = (t,c,h) => { const n = document.createElement(t); if(c)n.className=c; if(h!=null)n.innerHTML=h; return n; };
+const fmt = n => { n = Number(n)||0; return n>=1e6?(n/1e6).toFixed(2)+'M':n>=1e3?(n/1e3).toFixed(1)+'k':Math.floor(n).toLocaleString(); };
+const clamp = (v,a,b) => Math.max(a, Math.min(b, v));
+const esc = s => String(s==null?'':s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const haptic = (t='light') => { try{ TG && TG.HapticFeedback && TG.HapticFeedback.impactOccurred(t); }catch(e){} };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
 
+const PERF = window.__tribes_perf || null;
+const TIER = () => (document.documentElement.getAttribute('data-tier') || 'mid');
+
+/* ---------- toast ---------- */
 function toast(msg, kind='', ico){
   ico = ico || (kind==='good'?'✓':kind==='bad'?'✕':kind==='warn'?'!':'✦');
-  const t = el('div','toast '+kind, `<span class="t-ico">${ico}</span><span>${esc(msg)}</span>`);
-  $('#toastRoot').appendChild(t);
-  setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(),320); }, 2600);
+  const t = el('div','toast '+kind, '<span class="t-ico">'+ico+'</span><span>'+esc(msg)+'</span>');
+  const root = $('#toastRoot'); if (!root) return;
+  root.appendChild(t);
+  setTimeout(()=>{ t.classList.add('out'); setTimeout(()=>t.remove(), 320); }, 2600);
 }
 
+/* ---------- fx ---------- */
 const fxRoot = () => $('#fxRoot');
 function fxPop(text, x, y){
   const p = el('div','fx-pop', esc(text));
   p.style.left = x+'px'; p.style.top = y+'px';
-  fxRoot().appendChild(p);
+  const r = fxRoot(); if (!r) return;
+  r.appendChild(p);
   setTimeout(()=>p.remove(), 1000);
 }
 function burstEmbers(x, y, count=14, spread=110){
-  for(let i=0;i<count;i++){
-    const a=(Math.PI*2)*(i/count)+(Math.random()*.5);
-    const dist=spread*(0.55+Math.random()*0.6);
-    const dx=Math.cos(a)*dist, dy=Math.sin(a)*dist-20;
-    const e=el('div','fx-ember');
-    e.style.left=(x-3)+'px'; e.style.top=(y-3)+'px';
-    e.style.width=(4+Math.random()*5)+'px';
-    e.style.height=e.style.width;
-    e.style.transition='transform 900ms cubic-bezier(.15,.75,.3,1), opacity 900ms ease-out';
-    fxRoot().appendChild(e);
-    requestAnimationFrame(()=>{ e.style.transform=`translate(${dx}px,${dy}px) scale(.3)`; e.style.opacity='0'; });
+  const r = fxRoot(); if (!r) return;
+  for (let i=0;i<count;i++){
+    const a = (Math.PI*2) * (i/count) + (Math.random()*.5);
+    const dist = spread * (0.55 + Math.random()*0.6);
+    const dx = Math.cos(a)*dist, dy = Math.sin(a)*dist - 20;
+    const e = el('div','fx-ember');
+    e.style.left = (x-3)+'px'; e.style.top = (y-3)+'px';
+    e.style.width = (4 + Math.random()*5)+'px';
+    e.style.height = e.style.width;
+    e.style.transition = 'transform 900ms cubic-bezier(.15,.75,.3,1), opacity 900ms ease-out';
+    r.appendChild(e);
+    requestAnimationFrame(()=>{ e.style.transform = 'translate('+dx+'px,'+dy+'px) scale(.3)'; e.style.opacity = '0'; });
     setTimeout(()=>e.remove(), 1100);
   }
 }
-function flyTo(fromEl, toEl, text){
-  if(!fromEl||!toEl) return;
-  const f=fromEl.getBoundingClientRect(), t=toEl.getBoundingClientRect();
-  const p=el('div','fx-pop', esc(text));
-  p.style.left=(f.left+f.width/2)+'px';
-  p.style.top=(f.top+f.height/2)+'px';
-  p.style.transition='transform 700ms cubic-bezier(.2,.9,.2,1), opacity 700ms ease-in';
-  fxRoot().appendChild(p);
-  requestAnimationFrame(()=>{
-    const dx=(t.left+t.width/2)-(f.left+f.width/2);
-    const dy=(t.top+t.height/2)-(f.top+f.height/2);
-    p.style.transform=`translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px)) scale(.5)`;
-    p.style.opacity='0';
-  });
-  setTimeout(()=>p.remove(), 760);
-}
 function burstAt(node, count=14){
-  if(!node) return;
-  const r=node.getBoundingClientRect();
+  if (!node) return;
+  const r = node.getBoundingClientRect();
   burstEmbers(r.left+r.width/2, r.top+r.height/2, count);
 }
-function popAt(node, text){
-  if(!node) return;
-  const r=node.getBoundingClientRect();
+function fxPopAt(node, text){
+  if (!node) return;
+  const r = node.getBoundingClientRect();
   fxPop(text, r.left+r.width/2, r.top+r.height/2);
 }
 function animateCounter(node, to, dur=520){
-  if(!node) return;
+  if (!node) return;
   const from = Number(node.dataset.v || node.textContent.replace(/[^\d.-]/g,'')) || 0;
-  to = Number(to)||0;
-  if(from===to){ node.dataset.v=to; node.textContent=fmt(to); return; }
-  const t0=performance.now();
-  const step=now=>{
-    const k=clamp((now-t0)/dur, 0, 1);
-    const e=1-Math.pow(1-k,3);
-    const v=Math.round(from+(to-from)*e);
-    node.textContent=fmt(v);
-    if(k<1) requestAnimationFrame(step);
-    else { node.dataset.v=to; node.textContent=fmt(to); }
+  to = Number(to) || 0;
+  if (from === to){ node.dataset.v = to; node.textContent = fmt(to); return; }
+  const t0 = performance.now();
+  const step = now => {
+    const k = clamp((now-t0)/dur, 0, 1);
+    const e = 1 - Math.pow(1-k, 3);
+    const v = Math.round(from + (to-from)*e);
+    node.textContent = fmt(v);
+    if (k < 1) requestAnimationFrame(step);
+    else { node.dataset.v = to; node.textContent = fmt(to); }
   };
   requestAnimationFrame(step);
 }
 
+/* ---------- guest ---------- */
 let GUEST = localStorage.getItem('tribes.guest');
-if(!GUEST){ GUEST='g'+String(Math.floor(Math.random()*9e9)+1e9); localStorage.setItem('tribes.guest',GUEST); }
+if (!GUEST){ GUEST = 'g' + String(Math.floor(Math.random()*9e9)+1e9); localStorage.setItem('tribes.guest', GUEST); }
 
+/* ---------- API ---------- */
 async function api(path, body, opts){
   opts = opts || {};
   const headers = { 'Content-Type':'application/json' };
-  if(TG && TG.initData) headers['X-Init-Data'] = TG.initData;
+  if (TG && TG.initData) headers['X-Init-Data'] = TG.initData;
   headers['X-Guest-Id'] = GUEST;
   const READ_PATHS = new Set(['/state','/health','/war','/war/chronicle','/war/leaderboard','/tribes','/tribe/names','/kiva','/bonfire','/cosmetics','/trials']);
   const pathOnly = path.split('?')[0];
@@ -111,8 +114,9 @@ async function api(path, body, opts){
     headers,
     body: m === 'POST' ? JSON.stringify(body ?? {}) : undefined,
   });
-  let j={}; try{ j = await r.json(); }catch(e){}
-  if(!r.ok){
+  let j = {};
+  try { j = await r.json(); } catch(e){}
+  if (!r.ok){
     const err = new Error(j.error || ('HTTP '+r.status));
     err.status = r.status; err.data = j;
     throw err;
@@ -120,281 +124,986 @@ async function api(path, body, opts){
   return j;
 }
 
+/* ---------- SVG art (legacy, still used by non-nav icons) ---------- */
 const ART = {
   totem:'<svg viewBox="0 0 60 80"><rect x="20" y="8" width="20" height="64" rx="6" fill="#5a3a24"/><circle cx="30" cy="24" r="8" fill="url(#gGold)"/><circle cx="27" cy="23" r="1.6" fill="#2a1408"/><circle cx="33" cy="23" r="1.6" fill="#2a1408"/><path d="M22 44h16M22 56h16" stroke="#ffd77a" stroke-width="3"/></svg>',
-  skull:'<svg viewBox="0 0 60 80"><path d="M30 8c13 0 20 9 20 22 0 8-4 12-4 18l-4 4h-4l-2-6-2 6h-4l-2-6-2 6h-4l-4-4c0-6-4-10-4-18C14 17 17 8 30 8z" fill="#e8dcc4"/><circle cx="22" cy="36" r="5" fill="#2a1408"/><circle cx="38" cy="36" r="5" fill="#2a1408"/><path d="M30 44l-3 8h6z" fill="#2a1408"/></svg>',
-  drum:'<svg viewBox="0 0 60 80"><ellipse cx="30" cy="22" rx="22" ry="9" fill="url(#gGold)"/><path d="M8 22v30a22 9 0 0 0 44 0V22" fill="#6b4326"/><path d="M10 26l40 22M50 26L10 48" stroke="#ffd77a" stroke-width="2" opacity=".6"/></svg>',
   flame:'<svg viewBox="0 0 60 80"><path d="M30 6c8 18-12 22-12 38a12 12 0 0 0 24 0c0-8-4-12-12-38z" fill="url(#gFlame)"/><circle cx="30" cy="48" r="7" fill="#fff6d6"/></svg>',
-  torch:'<svg viewBox="0 0 60 80"><rect x="27" y="30" width="6" height="46" rx="3" fill="#6b4326"/><path d="M30 4c5 12-8 14-8 24a8 8 0 0 0 16 0c0-6-4-8-8-24z" fill="url(#gFlame)"/></svg>',
-  charm:'<svg viewBox="0 0 60 80"><path d="M30 12l6 14 15 2-11 10 3 15-13-8-13 8 3-15L9 28l15-2z" fill="url(#gFlame)"/></svg>',
-  horn:'<svg viewBox="0 0 60 80"><path d="M8 52c14 6 40 4 46-24-2 20-18 30-30 30-8 0-14-3-16-6z" fill="#e8d7b5"/></svg>',
-  firestone:'<svg viewBox="0 0 60 80"><polygon points="30,8 50,30 40,64 20,64 10,30" fill="url(#gFlame)"/><polygon points="30,20 40,32 34,54 26,54" fill="#fff2cf" opacity=".7"/></svg>',
-  idol:'<svg viewBox="0 0 60 80"><rect x="20" y="20" width="20" height="52" rx="8" fill="#d8c39a"/><circle cx="30" cy="18" r="11" fill="#e8d7b5"/><circle cx="26" cy="17" r="2" fill="#3a2416"/><circle cx="34" cy="17" r="2" fill="#3a2416"/></svg>',
-  sun:'<svg viewBox="0 0 60 80"><circle cx="30" cy="40" r="15" fill="url(#gGold)"/><g stroke="#ffd77a" stroke-width="3"><path d="M30 8v10M30 62v10M8 40h10M42 40h10M14 24l7 7M39 49l7 7M46 24l-7 7M21 49l-7 7"/></g></svg>',
+  sun:'<svg viewBox="0 0 60 80"><circle cx="30" cy="40" r="15" fill="url(#gGold)"/></svg>',
   moon:'<svg viewBox="0 0 60 80"><path d="M38 12a24 24 0 1 0 0 56 20 20 0 0 1 0-56z" fill="#dfe6ff"/></svg>',
+  idol:'<svg viewBox="0 0 60 80"><rect x="20" y="20" width="20" height="52" rx="8" fill="#d8c39a"/><circle cx="30" cy="18" r="11" fill="#e8d7b5"/></svg>',
 };
 function artSvg(k){ return ART[k] || ART.totem; }
 
-const sleep = ms => new Promise(r=>setTimeout(r,ms));
-let S = null, TAB = 'fire';
+/* ---------- global state ---------- */
+let S = null, TAB = 'home';
+const RANK_KEY = 'tribes.nav.order';
+const NAV_POOL = [
+  { id:'home',     label:'Home',    ico:'nav-home',   filled:'nav-home-f' },
+  { id:'fire',     label:'Fire',    ico:'nav-fire',   filled:'nav-fire-f' },
+  { id:'trials',   label:'Trials',  ico:'chronicle',  filled:'chronicle' },
+  { id:'war',      label:'War',     ico:'nav-war',    filled:'nav-war-f' },
+  { id:'ranks',    label:'Ranks',   ico:'nav-ranks',  filled:'nav-ranks-f' },
+  { id:'store',    label:'Store',   ico:'nav-store',  filled:'nav-store-f' },
+  { id:'tribe',    label:'Tribe',   ico:'tribe',      filled:'tribe' },
+  { id:'kiva',     label:'Kiva',    ico:'kiva',       filled:'kiva' },
+  { id:'profile',  label:'Profile', ico:'profile',    filled:'profile' },
+];
 
+/* =====================================================================
+   TON Connect
+===================================================================== */
 let tonUI = null, tonAddr = null;
 function initTon(){
   try{
     const NS = window.TON_CONNECT_UI;
-    if(!NS) return;
+    if (!NS) return;
     tonUI = new NS.TonConnectUI({ manifestUrl: location.origin + '/tonconnect-manifest.json' });
     tonUI.onStatusChange(async w => {
       tonAddr = (w && w.account) ? w.account.address : null;
       updateTonChip();
-      if(tonAddr){ try{ await api('/ton/link', { address: tonAddr }); }catch(e){} }
+      if (tonAddr){ try{ await api('/ton/link', { address: tonAddr }); }catch(e){} }
     });
     const acc = tonUI.account;
-    if(acc){ tonAddr = acc.address; updateTonChip(); }
+    if (acc){ tonAddr = acc.address; updateTonChip(); }
   }catch(e){ console.warn('TON init', e); }
 }
 function updateTonChip(){
-  const b = $('#tonBtn'); if(!b) return;
-  if(tonAddr){ b.classList.add('on'); b.textContent = '◈ '+tonAddr.slice(0,4)+'…'+tonAddr.slice(-3); }
+  const b = $('#tonBtn'); if (!b) return;
+  if (tonAddr){ b.classList.add('on'); b.textContent = '◈ ' + tonAddr.slice(0,4) + '…' + tonAddr.slice(-3); }
   else { b.classList.remove('on'); b.textContent = 'Connect'; }
 }
-async function tonToggle(){
-  if(!tonUI){ toast('TON wallet not available here','warn'); return; }
-  try{ if(tonAddr) await tonUI.disconnect(); else await tonUI.openModal(); }catch(e){}
-}
 
-async function buyStars(itemId){
-  if(!TG){ toast('Open in Telegram to pay with Stars','warn'); return; }
-  let link;
-  try{ link = (await api('/stars/invoice', { itemId })).link; }
-  catch(e){ return toast(e.message,'bad'); }
-  haptic('medium');
-  TG.openInvoice(link, async status => {
-    if(status==='paid'){ toast('Payment complete!','good'); setTimeout(refresh,1400); }
-    else if(status==='failed') toast('Payment failed','bad');
-    else if(status==='cancelled') toast('Payment cancelled','warn');
-  });
-}
-async function buyTon(itemId){
-  if(!tonUI || !tonAddr){ toast('Connect your TON wallet first','warn'); return tonToggle(); }
-  let intent;
-  try{ intent = (await api('/ton/intent', { itemId })).intent; }
-  catch(e){ return toast(e.message,'bad'); }
-  try{
-    await tonUI.sendTransaction({ validUntil: Math.floor(Date.now()/1000)+600,
-      messages:[{ address: intent.to, amount: String(intent.amountNano) }] });
-  }catch(e){ return toast('Transaction cancelled','warn'); }
-  toast('Confirming on-chain…');
-  let ok = false;
-  for(let i=0;i<14 && !ok;i++){
-    await sleep(5000);
-    try{ const r = await api('/ton/verify', { nonce: intent.nonce }); if(r.verified) ok = true; }catch(e){}
-  }
-  if(ok){ toast('TON payment confirmed!','good'); await refresh(); }
-  else toast('Still settling — rewards arrive once the tx confirms','warn');
-}
-
+/* =====================================================================
+   Boot + onboarding
+===================================================================== */
 function setBoot(msg, retry){
-  $('#bootMsg').textContent = msg;
-  $('#retryBtn').style.display = retry ? 'inline-flex' : 'none';
+  const b = $('#bootMsg'); if (b) b.textContent = msg;
+  const rb = $('#retryBtn'); if (rb) rb.style.display = retry ? 'inline-flex' : 'none';
 }
-function showApp(){
-  $('#boot').classList.add('gone');
-  setTimeout(()=>{ $('#boot').style.display='none'; }, 600);
-  $('#gate').style.display='none';
-  $('#app').style.display='block';
+
+function hasOnboarded(){
+  return localStorage.getItem('tribes.onboarded') === '1';
 }
-function showGate(){
-  $('#boot').style.display='none';
-  $('#gate').style.display='grid';
-  $('#app').style.display='none';
-}
+
 async function boot(){
-  setBoot('Waking the ancestors…');
+  setBoot('loading');
   try{ await api('/health'); }catch(e){}
   try{ S = await api('/state'); }
   catch(e){
-    if(e.status===401 && e.data && e.data.error==='no_username'){ showGate(); return; }
-    if(e.status===401){ setBoot('Open TRIBES inside Telegram to gather at the fire.', true); return; }
-    if(e.status===503){ setBoot('The elders are tending the fire — try again soon.', true); return; }
-    if(e.status===403 && e.data && e.data.error==='banned'){ setBoot('You were banished: '+(e.data.reason||''), false); return; }
-    setBoot('The fire could not be reached — '+(e.message||'try again.'), true); return;
+    if (e.status===401 && e.data && e.data.error==='no_username'){ showUsernameGate(); return; }
+    if (e.status===401){ setBoot('Open TRIBES inside Telegram to gather at the fire.', true); return; }
+    if (e.status===503){ setBoot('The elders are tending the fire — try again soon.', true); return; }
+    if (e.status===403 && e.data && e.data.error==='banned'){ setBoot('You were banished: '+(e.data.reason||''), false); return; }
+    setBoot('The fire could not be reached — ' + (e.message || 'try again.'), true); return;
   }
-  try { initTon(); applyPalette(); renderAll(); }
-  catch (err) { setBoot('Error: ' + (err && err.message ? err.message : String(err))); console.error('BOOT ERROR:', err); return; }
-  showApp();
-  startBonfireTicker();
-  startPushPoller();
-}
-async function refresh(){
-  try{
-    const prev = S;
-    S = await api('/state');
-    applyPalette();
-    renderAll();
-    if(prev && S.user && prev.user){
-      if(Number(S.user.ember) > Number(prev.user.ember)) animateCounter($('#emberVal'), S.user.ember);
-    }
-  }catch(e){ console.warn(e); }
-}
-window.refresh = refresh;
+  try { initTon(); applyPalette(); }
+  catch(err){ setBoot('Error: ' + (err && err.message ? err.message : String(err))); console.error(err); return; }
 
+  await playBootThenShow();
+}
+
+async function playBootThenShow(){
+  // Act 1 (0-400ms): pure black + "loading"
+  const bootEl = $('#boot');
+  if (bootEl) {
+    bootEl.style.background = '#000';
+    setBoot('loading');
+  }
+  await sleep(400);
+
+  // Act 2 (400-1400ms): ember rises, word hidden
+  if (bootEl){
+    bootEl.innerHTML =
+      '<div class="boot-ember"></div>' +
+      '<div class="boot-title">' +
+        '<span class="boot-letter">T</span>' +
+        '<span class="boot-letter">R</span>' +
+        '<span class="boot-letter">I</span>' +
+        '<span class="boot-letter">B</span>' +
+        '<span class="boot-letter">E</span>' +
+        '<span class="boot-letter">S</span>' +
+      '</div>' +
+      '<div class="boot-sub">RISE OF THE TRIBES</div>';
+  }
+  await sleep(1000);
+
+  // Act 3 (1400-2200ms): letters assemble
+  const letters = $$('.boot-letter');
+  letters.forEach((l, i) => { l.style.animationDelay = (i * 80) + 'ms'; });
+  const sub = $('.boot-sub'); if (sub) sub.style.opacity = '1';
+  await sleep(800);
+
+  // Act 4 (2200-2600ms): app revealed behind, then boot slides up
+  const app = $('#app'); if (app) app.style.display = 'block';
+  const gate = $('#gate'); if (gate) gate.style.display = 'none';
+
+  if (!hasOnboarded()){
+    await runOnboarding();
+    localStorage.setItem('tribes.onboarded', '1');
+  } else {
+    renderAll();
+  }
+
+  if (bootEl){
+    bootEl.classList.add('gone');
+    await sleep(600);
+    bootEl.style.display = 'none';
+  }
+}
+
+/* ---------- onboarding (3 steps) ---------- */
+async function runOnboarding(){
+  const app = $('#app'); if (!app) return;
+
+  // Step 1: Welcome
+  const step1 = el('div','ob-step', '');
+  step1.innerHTML =
+    '<div class="ob-ember"></div>' +
+    '<p class="ob-line" id="obLine1">You wake at the fire.</p>' +
+    '<p class="ob-line ob-delay" id="obLine2">But the tribe does not know your name.</p>' +
+    '<button class="ob-btn" id="obBtn1">Give your name</button>';
+  app.appendChild(step1);
+
+  await new Promise(resolve => {
+    $('#obBtn1').addEventListener('click', ()=>{ haptic('light'); resolve(); });
+  });
+  step1.classList.add('leaving');
+  await sleep(400);
+  step1.remove();
+
+  // Step 2: Username
+  const step2 = el('div','ob-step', '');
+  const prefilled = (S && S.user && S.user.username) || '';
+  step2.innerHTML =
+    '<div class="ob-title">What shall we call you?</div>' +
+    '<div class="ob-username-wrap">' +
+      '<span class="ob-at">@</span>' +
+      '<input class="ob-input" id="obUsername" maxlength="32" placeholder="username" value="' + esc(prefilled) + '"/>' +
+      '<span class="ob-check" id="obCheck"></span>' +
+    '</div>' +
+    '<div class="ob-previews">' +
+      '<div class="ob-preview"><span class="ob-label">On the Ranks</span><b id="pv1">—</b></div>' +
+      '<div class="ob-preview"><span class="ob-label">In the Kiva</span><b id="pv2">—</b></div>' +
+      '<div class="ob-preview"><span class="ob-label">At War</span><b id="pv3">—</b></div>' +
+    '</div>' +
+    '<button class="ob-btn" id="obBtn2" disabled>Enter the fire</button>';
+  app.appendChild(step2);
+
+  const inp = $('#obUsername'), chk = $('#obCheck'), btn = $('#obBtn2');
+  const update = () => {
+    const v = inp.value.trim();
+    const ok = /^[a-z0-9_]{3,32}$/i.test(v);
+    chk.textContent = ok ? '✓' : '';
+    chk.classList.toggle('on', ok);
+    btn.disabled = !ok;
+    $('#pv1').textContent = v || '—';
+    $('#pv2').textContent = v || '—';
+    $('#pv3').textContent = v || '—';
+  };
+  inp.addEventListener('input', update);
+  update();
+
+  await new Promise(resolve => {
+    btn.addEventListener('click', async () => {
+      if (btn.disabled) return;
+      haptic('medium');
+      const v = inp.value.trim();
+      // The server verifies the actual Telegram username; here we just proceed.
+      // If the user changed it, the server's initData still carries the real one.
+      const ripple = el('div','ob-ripple');
+      step2.appendChild(ripple);
+      await sleep(500);
+      resolve();
+    });
+  });
+  step2.classList.add('leaving');
+  await sleep(400);
+  step2.remove();
+
+  // Step 3: First landing — staggered reveal
+  renderAll();
+  const cards = $$('.dash-card');
+  cards.forEach((c, i) => { c.style.animationDelay = (i*60) + 'ms'; c.classList.add('reveal'); });
+}
+
+/* =====================================================================
+   Username gate (hard block)
+===================================================================== */
+function showUsernameGate(){
+  const boot = $('#boot'); if (boot) boot.style.display = 'none';
+  const gate = $('#gate'); if (gate) gate.style.display = 'grid';
+}
+
+/* =====================================================================
+   Ember Row navigation
+===================================================================== */
+let navMinimized = false;
+let navRecessed = false;
+let navHidden = false;
+
+function currentNavOrder(){
+  try {
+    const raw = localStorage.getItem(RANK_KEY);
+    if (!raw) return ['home','fire','war','ranks','store'];
+    const arr = JSON.parse(raw);
+    if (!Array.isArray(arr) || arr[0] !== 'home') return ['home','fire','war','ranks','store'];
+    return arr.slice(0, 5);
+  } catch(e){ return ['home','fire','war','ranks','store']; }
+}
+function saveNavOrder(arr){
+  localStorage.setItem(RANK_KEY, JSON.stringify(arr));
+  buildNav();
+}
+
+function buildNav(){
+  const nav = $('.tabbar');
+  if (!nav) return;
+  const order = currentNavOrder();
+  nav.innerHTML = '';
+  order.forEach(id => {
+    const meta = NAV_POOL.find(n => n.id === id);
+    if (!meta) return;
+    const btn = el('button','tab');
+    btn.dataset.tab = meta.id;
+    btn.setAttribute('data-active', meta.id === TAB ? 'true' : 'false');
+    btn.innerHTML =
+      '<div class="tab-icon">' +
+        '<svg class="outline"><use href="/assets/icons.svg#' + meta.ico + '"/></svg>' +
+        '<svg class="filled"><use href="/assets/icons.svg#' + meta.filled + '"/></svg>' +
+      '</div>' +
+      '<div class="tab-label">' + esc(meta.label) + '</div>' +
+      '<div class="tab-heatline"></div>';
+    nav.appendChild(btn);
+    attachTabHandlers(btn, meta.id);
+  });
+  updateNavSpotlight();
+}
+
+function updateNavSpotlight(){
+  const nav = $('.tabbar');
+  if (!nav) return;
+  const active = nav.querySelector('[data-active="true"]');
+  if (!active) return;
+  const navRect = nav.getBoundingClientRect();
+  const tabRect = active.getBoundingClientRect();
+  const center = tabRect.left + tabRect.width/2 - navRect.left;
+  nav.style.setProperty('--tab-x', center + 'px');
+}
+
+function attachTabHandlers(btn, id){
+  let longTimer = null;
+  let longFired = false;
+  let doubleTimer = null;
+  let lastTap = 0;
+
+  btn.addEventListener('pointerdown', () => {
+    longFired = false;
+    longTimer = setTimeout(()=>{
+      longFired = true;
+      haptic('medium');
+      showTabMenu(id, btn);
+    }, 500);
+  });
+
+  const cancel = () => { if (longTimer) { clearTimeout(longTimer); longTimer = null; } };
+  btn.addEventListener('pointerup', cancel);
+  btn.addEventListener('pointercancel', cancel);
+  btn.addEventListener('pointerleave', cancel);
+
+  btn.addEventListener('click', () => {
+    if (longFired) return;
+    const now = Date.now();
+    if (now - lastTap < 280){
+      // double tap
+      if (doubleTimer){ clearTimeout(doubleTimer); doubleTimer = null; }
+      scrollToTop();
+      haptic('light');
+      lastTap = 0;
+      return;
+    }
+    lastTap = now;
+    doubleTimer = setTimeout(() => {
+      // single tap
+      haptic('light');
+      setTab(id);
+      const nav = $('.tabbar');
+      if (nav){
+        nav.dataset.surge = 'true';
+        setTimeout(()=> nav.dataset.surge = 'false', 300);
+      }
+      doubleTimer = null;
+    }, 260);
+  });
+}
+
+function showTabMenu(id, btn){
+  closeTabMenu();
+  const menu = el('div','tab-menu');
+  const options = MENU_FOR[id] || [{ label:'Open', action: () => setTab(id) }];
+  options.forEach(o => {
+    const b = el('button', '', '<svg class="icon icon-sm"><use href="/assets/icons.svg#' + (o.ico || 'check') + '"/></svg><span>' + esc(o.label) + '</span>');
+    b.addEventListener('click', () => { closeTabMenu(); o.action(); });
+    menu.appendChild(b);
+  });
+  document.body.appendChild(menu);
+  const r = btn.getBoundingClientRect();
+  menu.style.left = Math.max(12, Math.min(window.innerWidth - 200, r.left + r.width/2 - 90)) + 'px';
+  setTimeout(()=>{
+    document.addEventListener('pointerdown', outsideMenu, true);
+  }, 10);
+}
+function closeTabMenu(){
+  const m = $('.tab-menu'); if (m) m.remove();
+  document.removeEventListener('pointerdown', outsideMenu, true);
+}
+function outsideMenu(e){
+  const m = $('.tab-menu'); if (m && m.contains(e.target)) return;
+  closeTabMenu();
+}
+
+const MENU_FOR = {
+  home:     [{ label:'Reset dashboard', ico:'refresh', action: scrollToTop }],
+  fire:     [{ label:'Check in now',   ico:'flame', action: () => { setTab('fire'); } }],
+  war:      [{ label:'War status',     ico:'war',   action: () => setTab('war') }],
+  ranks:    [{ label:'My rank',        ico:'ranks', action: () => setTab('ranks') }],
+  store:    [{ label:'Featured item',  ico:'store', action: () => setTab('store') }],
+  trials:   [{ label:'Open trials',    ico:'chronicle', action: () => setTab('trials') }],
+  tribe:    [{ label:'My tribe',       ico:'tribe', action: () => setTab('tribe') }],
+  kiva:     [{ label:'Open Kiva',      ico:'kiva',  action: () => openKiva() }],
+  profile:  [{ label:'My profile',     ico:'profile', action: () => setTab('profile') }],
+};
+
+function scrollToTop(){
+  window.scrollTo({ top:0, behavior:'smooth' });
+  const nav = $('.tabbar');
+  if (nav){
+    nav.classList.remove('nav-reheat');
+    void nav.offsetWidth;
+    nav.classList.add('nav-reheat');
+    setTimeout(()=> nav.classList.remove('nav-reheat'), 700);
+  }
+}
+
+/* Peek behavior on scroll */
+let lastScrollY = 0;
+window.addEventListener('scroll', () => {
+  const nav = $('.tabbar'); if (!nav) return;
+  const y = window.scrollY;
+  if (y > lastScrollY + 8 && y > 40){
+    if (!navMinimized){ navMinimized = true; nav.dataset.minimized = 'true'; }
+  } else if (y < lastScrollY - 8){
+    if (navMinimized){ navMinimized = false; nav.dataset.minimized = 'false'; }
+  }
+  lastScrollY = y;
+}, { passive:true });
+
+/* =====================================================================
+   Tab switching
+===================================================================== */
+function setTab(tab){
+  TAB = tab;
+  buildNav();
+  $$('.dash-card').forEach(c => c.classList.toggle('active', c.dataset.tab === tab));
+  renderAll();
+}
+
+/* =====================================================================
+   Palette
+===================================================================== */
 function applyPalette(){
   const p = (S && S.tribe && S.tribe.palette) || 'ember';
   document.documentElement.setAttribute('data-palette', p);
   const hue = (S && S.tribe && S.tribe.hue) || 0;
-  document.documentElement.style.setProperty('--thue', hue+'deg');
+  document.documentElement.style.setProperty('--thue', hue + 'deg');
+}
+
+/* End of Part 1. Parts 2 and 3 arrive in the next message. */
+
+/* =====================================================================
+   PART 2 — Home dashboard with peelable cards
+===================================================================== */
+
+/* ---------- dashboard layout ---------- */
+const DASH_LAYOUT = [
+  { id:'campfire', tab:'fire',   size:'hero',  fixed:true },
+  { id:'war',      tab:'war',    size:'pair',  fixed:false },
+  { id:'ranks',    tab:'ranks',  size:'pair',  fixed:false },
+  { id:'tribe',    tab:'tribe',  size:'wide',  fixed:false },
+  { id:'trials',   tab:'trials', size:'wide',  fixed:false },
+  { id:'store',    tab:'store',  size:'pair',  fixed:false },
+  { id:'profile',  tab:'profile',size:'pair',  fixed:false },
+];
+
+function dashCard(id){
+  return $('#dash-' + id);
+}
+
+/* ---------- render dispatcher ---------- */
+function renderAll(){
+  renderTop();
+  renderDashboard();
 }
 
 function renderTop(){
   const u = S.user, t = S.tribe;
-  $('#crestArt').innerHTML = artSvg(t ? t.crest : 'totem');
-  $('#tribeName').textContent = t ? t.name : 'No Tribe';
-  $('#roleName').textContent = u.role || 'Wanderer';
+  const crest = $('#crestArt'); if (crest) crest.innerHTML = artSvg(t ? t.crest : 'totem');
+  const tn = $('#tribeName'); if (tn) tn.textContent = t ? t.name : 'No Tribe';
+  const rn = $('#roleName'); if (rn) rn.textContent = u.role || 'Wanderer';
   animateCounter($('#emberVal'), u.ember);
   updateTonChip();
 }
 
-function setTab(tab){
-  TAB = tab;
-  $$('.nav-i').forEach(b=>b.classList.toggle('active', b.dataset.tab===tab));
-  $$('.screen').forEach(s=>s.classList.toggle('on', s.id==='sc-'+tab));
-  renderScreen(tab);
-  window.scrollTo({ top:0, behavior:'smooth' });
-}
-function renderAll(){
-  renderTop();
-  const host = $('#screens');
-  if(!host.dataset.built){
-    ['fire','tribe','war','ranks','store'].forEach(t=>{
-      const s = el('section','screen','');
-      s.id = 'sc-'+t;
-      host.appendChild(s);
-    });
-    host.dataset.built='1';
+/* ---------- dashboard ---------- */
+function renderDashboard(){
+  const host = $('#screens'); if (!host) return;
+  if (!host.dataset.built){
+    host.innerHTML = '<section class="screen on" id="sc-home"></section>' +
+                     '<section class="screen" id="sc-fire"></section>' +
+                     '<section class="screen" id="sc-tribe"></section>' +
+                     '<section class="screen" id="sc-war"></section>' +
+                     '<section class="screen" id="sc-ranks"></section>' +
+                     '<section class="screen" id="sc-store"></section>' +
+                     '<section class="screen" id="sc-trials"></section>' +
+                     '<section class="screen" id="sc-profile"></section>';
+    host.dataset.built = '1';
   }
-  $$('.screen').forEach(s=>s.classList.toggle('on', s.id==='sc-'+TAB));
-  renderScreen(TAB);
-}
-function renderScreen(tab){
-  const box = $('#sc-'+tab); if(!box) return;
-  if(tab==='fire')  return renderFire(box);
-  if(tab==='tribe') return renderTribe(box);
-  if(tab==='war')   return renderWar(box);
-  if(tab==='ranks') return renderRanks(box);
-  if(tab==='store') return renderStore(box);
+  $$('.screen').forEach(s => s.classList.toggle('on', s.id === 'sc-' + TAB));
+
+  // Home is special: dashboard grid
+  const home = $('#sc-home');
+  if (home){
+    home.innerHTML = '<div class="dash-grid">' +
+      DASH_LAYOUT.map(meta => renderCard(meta)).join('') +
+      '</div>';
+  }
+
+  // Non-home screens render on demand
+  if (TAB === 'fire')    renderFireScreen($('#sc-fire'));
+  if (TAB === 'tribe')   renderTribeScreen($('#sc-tribe'));
+  if (TAB === 'war')     renderWarScreen($('#sc-war'));
+  if (TAB === 'ranks')   renderRanksScreen($('#sc-ranks'));
+  if (TAB === 'store')   renderStoreScreen($('#sc-store'));
+  if (TAB === 'trials')  renderTrialsScreen($('#sc-trials'));
+  if (TAB === 'profile') renderProfileScreen($('#sc-profile'));
 }
 
-async function doAct(btn, fn){
-  if(btn && btn.disabled) return;
-  if(btn){ btn.disabled=true; btn.style.opacity=.6; }
-  try{ await fn(); }
-  catch(e){ toast(e.message||'Something went wrong','bad'); }
-  finally{ if(btn){ btn.disabled=false; btn.style.opacity=1; } }
-}
-function fmtDur(ms){
-  ms = Math.max(0, ms);
-  const d=Math.floor(ms/86400000), h=Math.floor(ms%86400000/3600000), m=Math.floor(ms%3600000/60000);
-  return d>0 ? `${d}d ${h}h` : h>0 ? `${h}h ${m}m` : `${m}m`;
+/* =====================================================================
+   Card renderers
+===================================================================== */
+function renderCard(meta){
+  switch(meta.id){
+    case 'campfire': return cardCampfire();
+    case 'war':      return cardWar();
+    case 'ranks':    return cardRanks();
+    case 'tribe':    return cardTribe();
+    case 'trials':   return cardTrials();
+    case 'store':    return cardStore();
+    case 'profile':  return cardProfile();
+    default:         return '';
+  }
 }
 
-function fireReadyIn(){
+function cardCampfire(){
   const u = S.user;
   const last = u.last_checkin ? new Date(u.last_checkin).getTime() : 0;
-  return (last + 20*3600*1000) - Date.now();
-}
-function renderFire(box){
-  const u = S.user;
-  const readyIn = fireReadyIn();
+  const readyIn = (last + 20*3600*1000) - Date.now();
   const ready = readyIn <= 0;
   const pct = clamp(100*(1 - readyIn/(20*3600*1000)), 0, 100);
-  box.innerHTML = `
-  <div class="hero-fire">
-    <div class="campfire ${ready?'ready':''}" id="campfire" data-act="tapFire" role="button" aria-label="Feed the fire">
-      <div class="halo"></div>
-      <div class="ring"></div>
-      <div class="logs"></div>
-      <div class="flame"></div><div class="flame f2"></div><div class="flame f3"></div>
-      <div class="tap-ring"></div>
-    </div>
-    <div class="tap-hint ${ready?'':'cd'}">
-      ${ready ? 'Tap the fire to feed it 🔥' : 'Next blessing in ' + fmtDur(readyIn)}
-    </div>
-  </div>
-  <div class="card">
-    <div class="checkin">
-      <div class="dial" style="--p:${ready?100:pct.toFixed(0)}"><b>${u.streak||0}<i>STREAK</i></b></div>
-      <div style="flex:1">
-        <h3 style="margin:0 0 4px">Keeper of the Flame</h3>
-        <p class="tiny" style="margin:0">Feed the fire every day to grow your streak. Longer streaks pour out ever more Ember from the ancestors.</p>
-      </div>
-    </div>
-  </div>
-  <div class="card">
-    <div class="hd" style="margin:0 0 10px"><h2 style="font-size:1.05rem">The Ash Pit</h2><span class="pill pill-gold">Idle · Ash → Ember</span></div>
-    <p class="tiny" style="margin:0 0 12px">Cinders gather while you're away — ${S.config.ashCap} charges × ${S.ashUnit} Ember.</p>
-    <div style="display:grid;grid-template-columns:auto 1fr;align-items:center;gap:14px">
-      <div class="dial" style="--p:${((S.ashPending/S.config.ashCap)*100).toFixed(0)}"><b>${S.ashPending}<i>ASH</i></b></div>
-      <button class="btn ${S.ashPending>0?'btn-primary btn-shine':'btn-stone'} btn-block" data-act="ash">
-        ${S.ashPending>0 ? 'Gather '+S.ashPending+' Ash (+'+fmt(S.ashPending*S.ashUnit)+')' : 'Smouldering…'}
-      </button>
-    </div>
-  </div>
-  <div class="hd"><h2>Trials</h2><span class="sub">earn Ember & Loyalty</span></div>
-  <div class="trials">${renderTrialsRows()}</div>`;
+  const substate = ready ? 'Tap to feed it' : 'Feeds again in ' + fmtDur(readyIn);
+  return '<div class="dash-card dash-campfire reveal" id="dash-campfire" data-tab="fire" data-act="peel" data-val="fire">' +
+    '<div class="dash-campfire-inner">' +
+      '<div class="campfire">' +
+        '<div class="halo"></div>' +
+        '<div class="logs"></div>' +
+        '<div class="flame"></div><div class="flame f2"></div><div class="flame f3"></div>' +
+      '</div>' +
+      '<div class="dash-streak">' +
+        '<div class="dash-streak-num" data-v="' + (u.streak || 0) + '">' + (u.streak || 0) + '</div>' +
+        '<div class="dash-streak-lbl">DAY STREAK</div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="dash-campfire-foot">' + esc(substate) + '</div>' +
+    '<div class="dash-ring" style="--p:' + (ready ? 100 : pct).toFixed(0) + '"></div>' +
+  '</div>';
 }
-function renderTrialsRows(){
-  const ts = S.trials || [];
-  if(!ts.length) return '<p class="tiny">No trials right now. Check back soon.</p>';
-  return ts.map(t => {
-    const disabled = !t.available;
-    const reason = !t.available && t.nextIn ? fmtDur(t.nextIn) : '';
-    const emberChip = t.reward_ember ? `<span class="rw">🔥 +${fmt(t.reward_ember)}</span>` : '';
-    const loyChip = t.reward_loyalty ? `<span class="rw loy">❤ +${fmt(t.reward_loyalty)}</span>` : '';
-    const cd = !t.available && reason ? `<span class="ti-cd">${reason}</span>` : '';
-    const chev = t.available ? '<span class="ti-chev">›</span>' : '<span class="ti-check">✓</span>';
-    return `<button class="trial ${disabled?'claimed':''}" data-act="trial" data-val="${esc(t.slug)}" ${disabled?'disabled':''}>
-      <span class="ti-ico">${esc(t.glyph||'🔥')}</span>
-      <span class="ti-body"><b>${esc(t.name)}</b><span>${esc(t.hint||'')}</span></span>
-      <span class="ti-rew">${emberChip}${loyChip}${cd}</span>
-      ${chev}
-    </button>`;
+
+function cardWar(){
+  const u = S.user;
+  const noTribe = !u.tribe_id;
+  if (noTribe){
+    return '<div class="dash-card dash-war muted" data-tab="war" data-act="peel" data-val="war">' +
+      '<div class="dash-card-head"><svg class="icon icon-sm icon-ash"><use href="/assets/icons.svg#nav-war"/></svg><span>WAR</span></div>' +
+      '<div class="dash-card-body"><div class="dash-card-big">—</div><div class="dash-card-sub">Join a tribe</div></div>' +
+    '</div>';
+  }
+  // We may not have live war data yet; use cached from S if present
+  const w = (S && S.war) || null;
+  const fronts = (w && w.fronts) || [{}, {}, {}];
+  const dots = fronts.map(f => {
+    const a = Number(f.attacker_score || 0), d = Number(f.defender_score || 0);
+    if (a > d) return '<span class="war-dot lit"></span>';
+    if (d > a) return '<span class="war-dot"></span>';
+    return '<span class="war-dot half"></span>';
   }).join('');
+  const timeLeft = w && w.end_at ? fmtDur(new Date(w.end_at).getTime() - Date.now()) : '—';
+  return '<div class="dash-card dash-war" data-tab="war" data-act="peel" data-val="war">' +
+    '<div class="dash-card-head"><svg class="icon icon-sm icon-rust"><use href="/assets/icons.svg#nav-war"/></svg><span>WAR</span></div>' +
+    '<div class="war-dots">' + dots + '</div>' +
+    '<div class="dash-card-foot">' + esc(timeLeft) + '</div>' +
+  '</div>';
 }
 
-let tapLock = false;
-function tapFire(campfire){
-  if(tapLock) return;
-  tapLock = true; setTimeout(()=>tapLock=false, 420);
-  campfire.classList.remove('tap'); void campfire.offsetWidth; campfire.classList.add('tap');
-  const rect = campfire.getBoundingClientRect();
-  const cx = rect.left + rect.width/2;
-  const cy = rect.top + rect.height/2;
-  burstEmbers(cx, cy, 16, 130);
-  if(fireReadyIn() > 0){ haptic('soft'); fxPop('⏳', cx, cy-30); return; }
-  api('/checkin').then(r => {
-    if(!r.ok){ haptic('soft'); fxPop('⏳', cx, cy-30); return; }
-    haptic('heavy');
-    burstEmbers(cx, cy, 24, 170);
-    fxPop('+'+fmt(r.reward), cx, cy-40);
-    const emberChip = $('#emberVal').closest('.purse');
-    flyTo(campfire, emberChip, '+'+fmt(r.reward));
-    toast(`Daily blessing! +${fmt(r.reward)} Ember · streak ${r.streak}`,'good');
-    refresh();
-  }).catch(e => toast(e.message,'bad'));
+function cardRanks(){
+  const u = S.user, t = S.tribe;
+  const lb = (S.leaderboard || []);
+  const mine = t ? Number(t.id) : null;
+  let rank = '—';
+  if (mine){
+    const i = lb.findIndex(x => Number(x.id) === mine);
+    if (i >= 0) rank = '#' + (i+1);
+  }
+  const topThree = lb.slice(0, 3).map(x => '<div class="mini-row">' + esc(x.name) + '</div>').join('') || '';
+  return '<div class="dash-card dash-ranks" data-tab="ranks" data-act="peel" data-val="ranks">' +
+    '<div class="dash-card-head"><svg class="icon icon-sm icon-rust"><use href="/assets/icons.svg#nav-ranks"/></svg><span>RANKS</span></div>' +
+    '<div class="dash-card-body"><div class="dash-card-big">' + esc(rank) + '</div>' +
+    '<div class="dash-card-sub">' + esc(t ? t.name : 'No tribe') + '</div></div>' +
+    '<div class="mini-list">' + topThree + '</div>' +
+  '</div>';
 }
 
-async function actAsh(btn){
-  await doAct(btn, async () => {
-    const r = await api('/ash/collect');
-    if(!r.ok){ toast('The ash pit is still smouldering','warn'); return; }
-    burstAt(btn, 18); popAt(btn,'+'+fmt(r.gain)); haptic();
-    toast(`Gathered ${r.units} Ash → +${fmt(r.gain)} Ember`,'good');
-    await refresh();
-  });
+function cardTribe(){
+  const t = S.tribe;
+  if (!t){
+    return '<div class="dash-card dash-tribe invite" data-tab="tribe" data-act="peel" data-val="tribe">' +
+      '<div class="dash-card-head"><svg class="icon icon-sm icon-rust"><use href="/assets/icons.svg#tribe"/></svg><span>TRIBE</span></div>' +
+      '<div class="dash-card-body"><div class="dash-card-big">🪨</div><div class="dash-card-sub">Found or join a tribe</div></div>' +
+    '</div>';
+  }
+  const lvl = (t.level||1);
+  const cap = (S.config.levelTable.caps[lvl-1] || 5);
+  const pct = clamp((Number(t.treasury) || 0) / Math.max(1, Number(t.treasury) + 25000) * 100, 3, 100);
+  return '<div class="dash-card dash-tribe" data-tab="tribe" data-act="peel" data-val="tribe">' +
+    '<div class="dash-card-head"><svg class="icon icon-sm icon-rust"><use href="/assets/icons.svg#tribe"/></svg><span>' + esc(t.name) + '</span></div>' +
+    '<div class="dash-card-foot">' + (t.members||0) + '/' + cap + ' kin</div>' +
+    '<div class="pyre-bar"><i style="width:' + pct + '%"></i></div>' +
+  '</div>';
 }
 
-/* ================= TRIAL DISPATCHER ================= */
+function cardTrials(){
+  const ts = S.trials || [];
+  const ready = ts.filter(t => t.available).length;
+  const cooling = ts.length - ready;
+  const dots = ts.slice(0, 5).map(t => '<span class="trial-dot ' + (t.available ? 'lit' : '') + '"></span>').join('');
+  const names = ts.filter(t => t.available).map(t => esc(t.name)).join(' · ') || 'All on cooldown';
+  return '<div class="dash-card dash-trials" data-tab="trials" data-act="peel" data-val="trials">' +
+    '<div class="dash-card-head"><svg class="icon icon-sm icon-rust"><use href="/assets/icons.svg#chronicle"/></svg><span>TRIALS</span></div>' +
+    '<div class="trial-dots">' + dots + '</div>' +
+    '<div class="dash-card-foot">' + ready + ' ready' + (cooling ? ' · ' + cooling + ' cooling' : '') + '</div>' +
+    '<div class="trial-names">' + names + '</div>' +
+  '</div>';
+}
+
+function cardStore(){
+  const p = (S.payments && S.payments.starItems) || {};
+  const featuredKey = 'starter_bundle';
+  const featured = p[featuredKey];
+  const stars = S.user.stars || 0;
+  return '<div class="dash-card dash-store" data-tab="store" data-act="peel" data-val="store">' +
+    '<div class="dash-card-head"><svg class="icon icon-sm icon-rust"><use href="/assets/icons.svg#nav-store"/></svg><span>STORE</span></div>' +
+    '<div class="dash-card-body">' +
+      '<div class="dash-card-big">' + (featured ? '⭐' : '🪓') + '</div>' +
+      '<div class="dash-card-sub">' + (featured ? esc(featured.title) : 'Trading Post') + '</div>' +
+    '</div>' +
+    '<div class="dash-card-foot">⭐ ' + fmt(stars) + '</div>' +
+  '</div>';
+}
+
+function cardProfile(){
+  const u = S.user;
+  const roleLbl = u.role || 'Wanderer';
+  return '<div class="dash-card dash-profile" data-tab="profile" data-act="peel" data-val="profile">' +
+    '<div class="dash-card-head"><svg class="icon icon-sm icon-rust"><use href="/assets/icons.svg#profile"/></svg><span>YOU</span></div>' +
+    '<div class="profile-chip">' +
+      '<div class="profile-avatar">' + esc((u.first_name||'?').slice(0,1).toUpperCase()) + '</div>' +
+      '<div class="profile-meta"><b>' + esc(u.first_name || u.username || 'Kin') + '</b><span>' + esc(roleLbl) + '</span></div>' +
+    '</div>' +
+    '<div class="dash-card-foot">🔥 ' + fmt(u.ember) + '</div>' +
+  '</div>';
+}
+
+/* =====================================================================
+   Peel animation
+===================================================================== */
+let peelState = { active: false, from: null };
+
+function peelTo(tab, sourceEl){
+  if (peelState.active) return;
+  peelState.active = true;
+
+  const nav = $('.tabbar');
+  if (nav) nav.dataset.recessed = 'true';
+
+  // Card lift
+  if (sourceEl) sourceEl.classList.add('lifting');
+  haptic('light');
+
+  // Use view-transition if available for the morph
+  const doSwap = () => {
+    setTab(tab);
+    if (sourceEl) sourceEl.classList.remove('lifting');
+    if (nav) nav.dataset.recessed = 'false';
+    peelState.active = false;
+  };
+
+  if (document.startViewTransition && TIER() !== 'low' && TIER() !== 'ultra-saver'){
+    document.startViewTransition(doSwap);
+  } else {
+    doSwap();
+  }
+}
+
+/* =====================================================================
+   On-demand screens (Fire, Tribe, War, Ranks, Store, Trials, Profile)
+===================================================================== */
+
+function fmtDur(ms){
+  ms = Math.max(0, ms);
+  const d = Math.floor(ms/86400000), h = Math.floor(ms%86400000/3600000), m = Math.floor(ms%3600000/60000);
+  return d > 0 ? (d + 'd ' + h + 'h') : h > 0 ? (h + 'h ' + m + 'm') : (m + 'm');
+}
+
+/* Fire detail screen */
+function renderFireScreen(box){
+  if (!box) return;
+  const u = S.user;
+  const last = u.last_checkin ? new Date(u.last_checkin).getTime() : 0;
+  const readyIn = (last + 20*3600*1000) - Date.now();
+  const ready = readyIn <= 0;
+  box.innerHTML =
+    '<div class="screen-body">' +
+      '<div class="screen-title">The Fire</div>' +
+      '<div class="fire-detail">' +
+        '<div class="campfire campfire-large' + (ready?' ready':'') + '" id="campfireBig" data-act="tapFire">' +
+          '<div class="halo"></div><div class="logs"></div>' +
+          '<div class="flame"></div><div class="flame f2"></div><div class="flame f3"></div>' +
+        '</div>' +
+        '<div class="fire-hint">' + (ready ? 'Tap to feed it' : 'Feeds again in ' + fmtDur(readyIn)) + '</div>' +
+      '</div>' +
+      '<div class="card"><div class="checkin">' +
+        '<div class="dial" style="--p:' + (ready?100:clamp(100*(1-readyIn/(20*3600*1000)),0,100)) + '"><b>' + (u.streak||0) + '<i>STREAK</i></b></div>' +
+        '<div style="flex:1"><h3 style="margin:0 0 4px">Keeper of the Flame</h3>' +
+        '<p class="tiny" style="margin:0">Feed the fire daily to grow your streak.</p></div>' +
+      '</div></div>' +
+      '<div class="card">' +
+        '<div class="hd" style="margin:0 0 10px"><h2 style="font-size:1.05rem">The Ash Pit</h2>' +
+        '<span class="pill pill-gold">Idle</span></div>' +
+        '<div class="ash-row">' +
+          '<div class="dial" style="--p:' + ((S.ashPending/S.config.ashCap)*100).toFixed(0) + '"><b>' + S.ashPending + '<i>ASH</i></b></div>' +
+          '<button class="btn ' + (S.ashPending>0?'btn-primary btn-shine':'btn-stone') + ' btn-block" data-act="ash">' +
+            (S.ashPending>0 ? 'Gather +' + fmt(S.ashPending * S.ashUnit) : 'Smouldering…') +
+          '</button>' +
+        '</div>' +
+      '</div>' +
+    '</div>';
+}
+
+/* Tribe detail screen */
+function renderTribeScreen(box){
+  if (!box) return;
+  const u = S.user, t = S.tribe;
+  if (!t){
+    box.innerHTML =
+      '<div class="screen-body">' +
+        '<div class="screen-title">Tribe</div>' +
+        '<div class="empty"><span class="big">🪨</span>' +
+        '<h2 style="margin:0;color:var(--gold);font-weight:800">You wander alone</h2>' +
+        '<p class="tiny" style="margin-top:8px">Found your own tribe or join an existing fire.</p></div>' +
+        '<button class="btn btn-primary btn-shine btn-block" data-act="openCreate">Found a Tribe · ' + fmt(S.config.foundEmber) + ' Ember</button>' +
+        '<div id="joinList" style="margin-top:20px"></div>' +
+      '</div>';
+    api('/tribes').then(d => {
+      const host = $('#joinList'); if (!host) return;
+      const list = (d.tribes||[]).slice(0,20);
+      host.innerHTML = list.map(x =>
+        '<div class="card" style="padding:14px;margin-bottom:10px">' +
+          '<div class="row" style="border:0;padding:0">' +
+            '<span class="crest-art">' + artSvg(x.crest) + '</span>' +
+            '<div style="flex:1;min-width:0"><b style="color:var(--gold)">' + esc(x.name) + '</b>' +
+            '<div class="tiny">' + fmt(x.members) + ' kin · ' + fmt(x.loyalty_total) + ' loyalty</div></div>' +
+            '<button class="btn btn-stone" data-act="join" data-val="' + x.id + '">Join</button>' +
+          '</div>' +
+        '</div>'
+      ).join('');
+    }).catch(()=>{});
+    return;
+  }
+  const lvl = t.level || 1;
+  const cap = S.config.levelTable.caps[lvl-1] || 5;
+  box.innerHTML =
+    '<div class="screen-body">' +
+      '<div class="screen-title">' + esc(t.name) + '</div>' +
+      '<div class="card" style="text-align:center">' +
+        '<div class="crest-art" style="width:88px;height:88px;margin:0 auto 10px;border-radius:22px">' + artSvg(t.crest) + '</div>' +
+        '<h2 style="font-size:1.5rem;margin:0;color:var(--gold);font-weight:800">' + esc(t.name) + '</h2>' +
+        '<p class="muted" style="margin:6px 0 12px">' + esc(t.motto || 'We rise from the ash.') + '</p>' +
+        '<div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap">' +
+          '<span class="pill pill-gold">' + esc(u.role) + '</span>' +
+          '<span class="pill pill-jade">🏆 ' + (t.wins||0) + 'W</span>' +
+          '<span class="pill pill-blood">💀 ' + (t.losses||0) + 'L</span>' +
+        '</div>' +
+      '</div>' +
+      '<div class="card"><h3>Kiva</h3><button class="btn btn-primary btn-shine btn-block" data-act="openKiva">Open the Kiva</button></div>' +
+      '<div class="card"><h3>Stoke the Great Pyre</h3>' +
+        '<button class="btn btn-primary btn-shine btn-block" data-act="openDonate">Donate Ember</button></div>' +
+      '<button class="btn btn-danger btn-block" data-act="leave" style="margin-top:8px">Leave the Tribe</button>' +
+    '</div>';
+}
+
+/* War detail screen */
+function renderWarScreen(box){
+  if (!box) return;
+  const u = S.user;
+  if (!u.tribe_id){
+    box.innerHTML = '<div class="screen-body"><div class="screen-title">War</div>' +
+      '<div class="empty"><span class="big">⚔️</span><h2>No banner</h2>' +
+      '<p class="tiny">Join a tribe to wage war.</p></div></div>';
+    return;
+  }
+  box.innerHTML = '<div class="screen-body"><div class="screen-title">War</div>' +
+    '<div id="warBody"><div class="skeleton"></div><div class="skeleton"></div></div></div>';
+  loadWar();
+}
+
+async function loadWar(){
+  const box = $('#warBody'); if (!box) return;
+  let war;
+  try { war = (await api('/war')).war; }
+  catch(e){ box.innerHTML = '<p class="tiny">Could not reach the war drums.</p>'; return; }
+  if (!war){
+    box.innerHTML = '<div class="war-arena">' +
+      '<div class="war-emblem"><div class="vs">WAR DRUMS</div></div>' +
+      '<button class="btn btn-danger btn-shine btn-block" data-act="declareWar">⚔️ Declare War</button>' +
+    '</div>';
+    return;
+  }
+  if (war.status === 'resolved'){
+    const myId = S.tribe ? Number(S.tribe.id) : null;
+    const won = war.winner_id && Number(war.winner_id) === myId;
+    box.innerHTML = '<div class="war-arena" style="text-align:center">' +
+      '<div class="war-emblem"><div class="vs">' + (won?'VICTORY':'DEFEAT') + '</div></div>' +
+      '<span style="font-size:3rem;display:block;margin:8px 0">' + (won?'🏆':'💀') + '</span>' +
+    '</div>';
+    return;
+  }
+  // Active war
+  const mineA = war.mine === 'attacker';
+  const me = mineA ? war.attacker : war.defender;
+  const foe = mineA ? war.defender : war.attacker;
+  const fronts = war.fronts || [];
+  box.innerHTML =
+    '<div class="war-arena">' +
+      '<div class="war-emblem"><div class="vs">⚔️ WAR ⚔️</div></div>' +
+      '<div class="versus">' +
+        '<div class="war-totem"><div class="tm">' + artSvg(me.crest) + '</div><b>' + esc(me.name) + '</b></div>' +
+        '<div class="clash">🔥</div>' +
+        '<div class="war-totem foe"><div class="tm">' + artSvg(foe.crest) + '</div><b>' + esc(foe.name) + '</b></div>' +
+      '</div>' +
+      '<div class="wmeta">' +
+        '<div class="box"><b id="warCd">…</b><span>Time left</span></div>' +
+        '<div class="box"><b>' + war.stake_pct + '%</b><span>Stake</span></div>' +
+      '</div>' +
+    '</div>' +
+    '<div class="fronts-wrap">' + fronts.map((f,i) => frontHtml(f,i)).join('') + '</div>' +
+    '<div class="war-action-panel">' +
+      '<div class="wact-head">Push a front</div>' +
+      '<div class="wact-front-pick" id="frontPick">' +
+        fronts.map((f,i) => '<button class="fp-btn ' + (i===0?'active':'') + '" data-act="pickFront" data-val="' + i + '">' + esc(f.name) + '</button>').join('') +
+      '</div>' +
+      '<div class="wact-btns">' +
+        '<button class="wact-btn" data-act="warAction" data-val="rally"><b>Rally</b><span>+25</span></button>' +
+        '<button class="wact-btn" data-act="warAction" data-val="chant"><b>Chant</b><span>+150</span></button>' +
+        '<button class="wact-btn raid" data-act="warAction" data-val="raid"><b>Raid</b><span>+800</span></button>' +
+      '</div>' +
+    '</div>';
+  startWarTicker(new Date(war.end_at).getTime());
+}
+
+function frontHtml(f, i){
+  const tot = Math.max(1, Number(f.attacker_score) + Number(f.defender_score));
+  const aPct = clamp((Number(f.attacker_score) / tot) * 100, 0, 100);
+  return '<div class="front-card" data-front="' + i + '">' +
+    '<div class="front-head"><span class="front-name">' + esc(f.name) + '</span>' +
+    '<span class="front-scores"><b>' + fmt(f.attacker_score) + '</b> vs <b>' + fmt(f.defender_score) + '</b></span></div>' +
+    '<div class="front-bar"><i style="width:' + aPct + '%"></i><i style="width:' + (100-aPct) + '%"></i></div>' +
+  '</div>';
+}
+
+let warTimer = null;
+function startWarTicker(endAt){
+  if (warTimer) clearInterval(warTimer);
+  const tick = () => {
+    const e = $('#warCd'); if (!e) { clearInterval(warTimer); warTimer = null; return; }
+    const ms = endAt - Date.now();
+    e.textContent = ms <= 0 ? 'resolving…' : fmtDur(ms);
+  };
+  tick();
+  warTimer = setInterval(tick, 1000);
+}
+
+/* Ranks detail screen */
+function renderRanksScreen(box){
+  if (!box) return;
+  const lb = S.leaderboard || [];
+  const top = lb.length ? (Number(lb[0].loyalty_total) || 1) : 1;
+  const mine = S.tribe ? Number(S.tribe.id) : null;
+  box.innerHTML = '<div class="screen-body"><div class="screen-title">Hall of Tribes</div>' +
+    (lb.length ? lb.map((t,i) => {
+      const pct = clamp(Number(t.loyalty_total)/top*100, 4, 100);
+      const me = mine && mine === Number(t.id);
+      const medal = i === 0 ? '🥇' : i === 1 ? '🥈' : i === 2 ? '🥉' : '#' + (i+1);
+      return '<div class="card" style="padding:14px;margin-bottom:10px;' + (me?'border-color:rgba(255,207,122,.4)':'') + '">' +
+        '<div class="row" style="border:0;padding:0 0 10px">' +
+          '<span class="avatar">' + medal + '</span>' +
+          '<div style="flex:1;min-width:0"><b style="color:var(--gold)">' + esc(t.name) + (me?' · you':'') + '</b>' +
+          '<div class="tiny">' + fmt(t.members) + ' kin · Pyre ' + fmt(t.treasury) + '</div></div>' +
+          '<b style="color:var(--gold);white-space:nowrap">' + fmt(t.loyalty_total) + '</b>' +
+        '</div>' +
+        '<div class="bar"><i style="width:' + pct + '%"></i></div>' +
+      '</div>';
+    }).join('') : '<div class="empty"><span class="big">🏆</span><p class="tiny">No tribes yet.</p></div>') +
+  '</div>';
+}
+
+/* Store detail screen */
+function renderStoreScreen(box){
+  if (!box) return;
+  const p = S.payments || {};
+  const star = p.starItems || {};
+  const ton = p.tonItems || {};
+  const featuredKey = 'starter_bundle';
+  const featured = star[featuredKey];
+  const ART_FOR = { spark:'flame', flame:'torch', blaze:'firestone', inferno:'sun', charm:'charm', firestone:'firestone', boneidol:'idol', sundisc:'sun', moonshard:'moon', war_chest_topup:'firestone', rally_burst:'flame' };
+  const sections = { ember:[], relics:[], boosts:[], war:[], cosmetics:[] };
+  const sectionFor = (k) => {
+    if (k === featuredKey) return 'featured';
+    if (k.startsWith('name_color_') || k.startsWith('glow_')) return 'cosmetics';
+    if (k === 'pyreboost') return 'boosts';
+    if (k === 'war_chest_topup' || k === 'rally_burst') return 'war';
+    if (['firestone','boneidol','sundisc','moonshard'].includes(k)) return 'relics';
+    return 'ember';
+  };
+  for (const [k,it] of Object.entries(star)){
+    if (k === featuredKey) continue;
+    const s = sectionFor(k);
+    if (sections[s]) sections[s].push([k,it]);
+  }
+  box.innerHTML = '<div class="screen-body"><div class="screen-title">Trading Post</div>' +
+    (featured ? '<div class="featured"><span class="ft-badge">ONE-TIME</span>' +
+      '<h3>' + esc(featured.title) + '</h3><p>' + esc(featured.desc) + '</p>' +
+      '<button class="b" data-act="buyStars" data-val="' + featuredKey + '">⭐ ' + fmt(featured.stars) + '</button></div>' : '') +
+    '<div class="shop-tabs">' +
+      Object.keys(sections).filter(s => sections[s].length).map((s,i) =>
+        '<button class="shop-tab' + (i===0?' active':'') + '" data-act="shopTab" data-val="' + s + '">' + ({ember:'Ember',relics:'Relics',boosts:'Boosts',war:'War',cosmetics:'Looks'})[s] + '</button>').join('') +
+    '</div>' +
+    Object.entries(sections).map(([s,arr]) =>
+      '<div class="shop-section" data-section="' + s + '" style="' + (s === 'ember' ? '' : 'display:none') + '">' +
+        arr.map(([k,it]) =>
+          '<div class="shop-card"><div class="sc-art">' + artSvg(ART_FOR[k] || 'flame') + '</div>' +
+          '<b>' + esc(it.title) + '</b><p>' + esc(it.desc) + '</p>' +
+          '<button class="b star" data-act="buyStars" data-val="' + k + '">⭐ ' + fmt(it.stars) + '</button>' +
+          '</div>'
+        ).join('') +
+      '</div>'
+    ).join('') +
+  '</div>';
+}
+
+/* Trials detail screen */
+function renderTrialsScreen(box){
+  if (!box) return;
+  const ts = S.trials || [];
+  box.innerHTML = '<div class="screen-body"><div class="screen-title">Trials</div>' +
+    '<div class="trials">' + ts.map(t => {
+      const disabled = !t.available;
+      const reason = !t.available && t.nextIn ? fmtDur(t.nextIn) : '';
+      return '<button class="trial' + (disabled?' claimed':'') + '" data-act="trial" data-val="' + esc(t.slug) + '" ' + (disabled?'disabled':'') + '>' +
+        '<span class="ti-ico">' + esc(t.glyph || '🔥') + '</span>' +
+        '<span class="ti-body"><b>' + esc(t.name) + '</b><span>' + esc(t.hint || '') + '</span></span>' +
+        '<span class="ti-rew">' + (t.reward_ember ? '<span class="rw">🔥 +' + fmt(t.reward_ember) + '</span>' : '') +
+        (t.reward_loyalty ? '<span class="rw loy">❤ +' + fmt(t.reward_loyalty) + '</span>' : '') +
+        (reason ? '<span class="ti-cd">' + reason + '</span>' : '') + '</span>' +
+        '<span class="ti-chev">' + (t.available ? '›' : '✓') + '</span>' +
+      '</button>';
+    }).join('') + '</div>' +
+  '</div>';
+}
+
+/* Profile detail screen */
+function renderProfileScreen(box){
+  if (!box) return;
+  const u = S.user, t = S.tribe;
+  box.innerHTML = '<div class="screen-body"><div class="screen-title">You</div>' +
+    '<div class="card" style="text-align:center">' +
+      '<div class="profile-avatar-large">' + esc((u.first_name||'?').slice(0,1).toUpperCase()) + '</div>' +
+      '<h2 style="margin:8px 0 4px;font-size:1.4rem;color:var(--gold)">' + esc(u.first_name || u.username || 'Kin') + '</h2>' +
+      '<div class="muted" style="font-size:.8rem">' + esc(u.role || 'Wanderer') + (t ? ' · ' + esc(t.name) : '') + '</div>' +
+    '</div>' +
+    '<div class="wmeta">' +
+      '<div class="box"><b>' + fmt(u.ember) + '</b><span>Ember</span></div>' +
+      '<div class="box"><b>' + fmt(u.loyalty) + '</b><span>Loyalty</span></div>' +
+      '<div class="box"><b>' + fmt(u.streak || 0) + '</b><span>Streak</span></div>' +
+    '</div>' +
+  '</div>';
+}
+
+/* End of Part 2. Part 3 (trial mini-games, action registry, init) follows. */
+
+/* =====================================================================
+   PART 3 — Trial mini-games, sheets, Kiva, action registry, init
+===================================================================== */
+
+/* ---------- shared sheet helper ---------- */
+function sheet(html){
+  const root = $('#sheetRoot'); if (!root) return;
+  root.innerHTML = '<div class="sheet-bg" data-act="bgClose"><div class="sheet"><div class="handle"></div>' + html + '</div></div>';
+}
+function closeSheet(){
+  cleanupCry();
+  const root = $('#sheetRoot'); if (root) root.innerHTML = '';
+}
+
+/* ---------- reward sequence (shared) ---------- */
+async function rewardSequence(container, payload, onComplete){
+  // 4 acts over 1.8s
+  const overlay = el('div','reward-overlay');
+  overlay.innerHTML =
+    '<div class="reward-bloom"></div>' +
+    '<div class="reward-card reward-drop">' +
+      '<div class="reward-ico emoji-pop">' + (payload.ico || '🔥') + '</div>' +
+      '<div class="reward-title">' + esc(payload.title || 'Trial complete') + '</div>' +
+      '<div class="reward-amount">' + esc(payload.amount || '') + '</div>' +
+    '</div>';
+  document.body.appendChild(overlay);
+
+  haptic('heavy');
+  // Act 1: freeze (already done by overlay)
+  await sleep(200);
+  // Act 2: bloom
+  overlay.querySelector('.reward-bloom').classList.add('active');
+  await sleep(400);
+  // Act 3: reveal
+  overlay.querySelector('.reward-card').classList.add('revealed');
+  await sleep(600);
+  // Act 4: collect
+  overlay.classList.add('collecting');
+  await sleep(600);
+  overlay.remove();
+  if (typeof onComplete === 'function') onComplete();
+}
+
+/* =====================================================================
+   Trial dispatcher
+===================================================================== */
 function actTrial(btn, slug){
   const t = (S.trials || []).find(x => x.slug === slug);
   if (!t) return;
@@ -407,100 +1116,121 @@ function actTrial(btn, slug){
   return openHoldSheet(t);
 }
 
-/* ---------- 1) Stoke the Fire — drag logs into the fire ---------- */
+/* ---------- 1) STOKE THE FIRE — drag logs with physics ---------- */
 function openStokeSheet(trial){
   const LOGS = 4;
-  sheet(`
-    <h3>${esc(trial.name)}</h3>
-    <div class="sub">Drag ${LOGS} logs into the fire</div>
-    <div class="stoke-wrap">
-      <div class="stoke-logs" id="stokeLogs">
-        ${Array.from({length:LOGS}).map((_,i)=>`
-          <div class="stoke-log" data-log="${i}" data-act="stokeGrab">
-            <svg viewBox="0 0 40 16" width="48" height="20">
-              <rect x="2" y="4" width="36" height="8" rx="4" fill="#6b4326"/>
-              <rect x="2" y="4" width="36" height="3" rx="1.5" fill="#8a5a1c"/>
-            </svg>
-          </div>`).join('')}
-      </div>
-      <div class="stoke-fire" id="stokeFire">
-        <div class="stoke-pit"></div>
-        <div class="stoke-flame" id="stokeFlame"></div>
-      </div>
-      <div class="stoke-progress" id="stokeProgress">0 / ${LOGS}</div>
-    </div>
-    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>
-  `);
-  setTimeout(()=>attachStokeDrag(trial), 20);
+  sheet(
+    '<h3>' + esc(trial.name) + '</h3>' +
+    '<div class="sub">Drag ' + LOGS + ' logs into the fire</div>' +
+    '<div class="stoke-wrap" id="stokeWrap">' +
+      '<div class="stoke-logs" id="stokeLogs">' +
+        Array.from({length:LOGS}).map((_,i) =>
+          '<div class="stoke-log" data-log="' + i + '">' +
+            '<svg viewBox="0 0 40 16" width="54" height="22">' +
+              '<rect x="2" y="4" width="36" height="8" rx="4" fill="#6b4326"/>' +
+              '<rect x="2" y="4" width="36" height="3" rx="1.5" fill="#8a5a1c"/>' +
+              '<circle cx="20" cy="8" r="1.5" fill="#4a2f19" opacity=".6"/>' +
+            '</svg>' +
+          '</div>'
+        ).join('') +
+      '</div>' +
+      '<div class="stoke-fire" id="stokeFire">' +
+        '<div class="stoke-pit"></div>' +
+        '<div class="stoke-flame" id="stokeFlame"></div>' +
+      '</div>' +
+      '<div class="stoke-progress" id="stokeProgress">0 / ' + LOGS + '</div>' +
+    '</div>' +
+    '<button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>'
+  );
+  setTimeout(() => attachStoke(trial), 30);
 }
+
 let stokeCount = 0;
-function attachStokeDrag(trial){
+function attachStoke(trial){
   stokeCount = 0;
   const fire = $('#stokeFire');
   const progress = $('#stokeProgress');
+  const wrap = $('#stokeWrap');
+  if (!fire || !wrap) return;
   const total = 4;
-  if(!fire) return;
-  $$('.stoke-log').forEach(log=>{
-    let dragging=false, sx=0, sy=0, ox=0, oy=0, moved=false;
+
+  $$('.stoke-log').forEach(log => {
+    let dragging = false, sx = 0, sy = 0, ox = 0, oy = 0, moved = false, lastX = 0, lastY = 0;
+
     const onDown = e => {
-      if(log.dataset.used) return;
-      dragging=true; moved=false;
+      if (log.dataset.used) return;
+      dragging = true; moved = false;
       const p = e.touches ? e.touches[0] : e;
-      sx=p.clientX; sy=p.clientY;
+      sx = p.clientX; sy = p.clientY;
+      lastX = sx; lastY = sy;
       const r = log.getBoundingClientRect();
-      ox=r.left; oy=r.top;
-      log.style.position='fixed'; log.style.left=ox+'px'; log.style.top=oy+'px';
-      log.style.zIndex=9999; log.style.pointerEvents='none';
+      ox = r.left; oy = r.top;
+      log.style.position = 'fixed';
+      log.style.left = ox + 'px';
+      log.style.top = oy + 'px';
+      log.style.width = r.width + 'px';
+      log.style.height = r.height + 'px';
+      log.style.zIndex = 9999;
+      log.style.pointerEvents = 'none';
       log.classList.add('dragging');
+      haptic('light');
       e.preventDefault();
     };
     const onMove = e => {
-      if(!dragging) return;
+      if (!dragging) return;
       const p = e.touches ? e.touches[0] : e;
-      const dx=p.clientX-sx, dy=p.clientY-sy;
-      if(Math.abs(dx)+Math.abs(dy)>6) moved=true;
-      log.style.left=(ox+dx)+'px'; log.style.top=(oy+dy)+'px';
+      const dx = p.clientX - sx, dy = p.clientY - sy;
+      if (Math.abs(dx) + Math.abs(dy) > 6) moved = true;
+      const vx = p.clientX - lastX, vy = p.clientY - lastY;
+      lastX = p.clientX; lastY = p.clientY;
+      const tilt = clamp(vx * 0.6, -20, 20);
+      log.style.left = (ox + dx) + 'px';
+      log.style.top = (oy + dy) + 'px';
+      log.style.transform = 'rotate(' + tilt + 'deg) scale(1.08)';
       const fr = fire.getBoundingClientRect();
-      const inFire = p.clientX>fr.left && p.clientX<fr.right && p.clientY>fr.top && p.clientY<fr.bottom;
+      const inFire = p.clientX > fr.left && p.clientX < fr.right && p.clientY > fr.top && p.clientY < fr.bottom;
       fire.classList.toggle('over', inFire);
       e.preventDefault();
     };
     const onUp = e => {
-      if(!dragging) return;
-      dragging=false;
+      if (!dragging) return;
+      dragging = false;
       const p = e.changedTouches ? e.changedTouches[0] : e;
       const fr = fire.getBoundingClientRect();
-      const inFire = p.clientX>fr.left && p.clientX<fr.right && p.clientY>fr.top && p.clientY<fr.bottom;
+      const inFire = p.clientX > fr.left - 20 && p.clientX < fr.right + 20 && p.clientY > fr.top - 20 && p.clientY < fr.bottom + 20;
       log.classList.remove('dragging');
       fire.classList.remove('over');
-      if(inFire && !moved){
-        // treat simple tap as "yes drop it"
-      }
-      if(inFire){
-        log.style.opacity='0';
-        log.dataset.used='1';
-        stokeCount++;
-        haptic('medium');
-        const flame = $('#stokeFlame');
-        if(flame) flame.setAttribute('data-logs', String(stokeCount));
-        burstAt(fire, 12);
-        if(progress) progress.textContent = `${stokeCount} / ${total}`;
-        if(stokeCount >= total){
-          // complete
-          haptic('heavy');
-          burstAt(fire, 30);
-          api('/trials/'+encodeURIComponent(trial.slug)).then(r=>{
-            if(!r.ok){ toast('Not ready','warn'); return; }
-            const parts=[];
-            if(r.reward_ember) parts.push('+'+fmt(r.reward_ember)+' Ember');
-            if(r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
-            toast('Stoked! '+parts.join(' · '),'good');
-            closeSheet(); refresh();
-          }).catch(e=>toast(e.message,'bad'));
-        }
+      if (inFire){
+        log.style.transition = 'all .35s cubic-bezier(.2,.9,.2,1)';
+        log.style.left = (fr.left + fr.width/2 - log.offsetWidth/2) + 'px';
+        log.style.top = (fr.top + fr.height/2) + 'px';
+        log.style.transform = 'rotate(20deg) scale(.4)';
+        log.style.opacity = '0';
+        log.dataset.used = '1';
+        setTimeout(() => {
+          stokeCount++;
+          const flame = $('#stokeFlame');
+          if (flame) flame.setAttribute('data-logs', String(stokeCount));
+          burstAt(fire, 16);
+          if (wrap) {
+            wrap.classList.remove('screen-shake');
+            void wrap.offsetWidth;
+            wrap.classList.add('screen-shake');
+          }
+          if (progress) progress.textContent = stokeCount + ' / ' + total;
+          haptic('medium');
+          if (stokeCount >= total) completeStoke(trial);
+        }, 350);
       } else {
-        // snap back
-        log.style.position=''; log.style.left=''; log.style.top=''; log.style.zIndex=''; log.style.pointerEvents='';
+        log.style.transition = 'all .3s cubic-bezier(.2,.9,.2,1)';
+        log.style.position = '';
+        log.style.left = '';
+        log.style.top = '';
+        log.style.width = '';
+        log.style.height = '';
+        log.style.transform = '';
+        log.style.zIndex = '';
+        log.style.pointerEvents = '';
       }
       e.preventDefault();
     };
@@ -511,59 +1241,72 @@ function attachStokeDrag(trial){
   });
 }
 
-/* ---------- 2) Feed the Kin — hold a bowl, bites fill ---------- */
+async function completeStoke(trial){
+  haptic('heavy');
+  const wrap = $('#stokeWrap');
+  if (wrap) wrap.classList.add('camera-push');
+  await sleep(400);
+  try {
+    const r = await api('/trials/' + encodeURIComponent(trial.slug));
+    if (!r.ok){ toast('Not ready','warn'); return; }
+    const amount = (r.reward_ember ? '+' + fmt(r.reward_ember) + ' Ember' : '') +
+                   (r.reward_loyalty ? ' +' + fmt(r.reward_loyalty) + ' Loyalty' : '');
+    closeSheet();
+    rewardSequence(null, { ico:'🔥', title:'Fire stoked!', amount: amount }, () => refresh());
+  } catch(e){ toast(e.message, 'bad'); }
+}
+
+/* ---------- 2) FEED THE KIN — hold bowl, three bites ---------- */
 function openFeedSheet(trial){
   const BITES = 3;
-  sheet(`
-    <h3>${esc(trial.name)}</h3>
-    <div class="sub">Hold the bowl to feed the kin</div>
-    <div class="feed-wrap">
-      <div class="feed-bowl" id="feedBowl" data-act="feedHold">
-        <div class="feed-fill" id="feedFill"></div>
-        <div class="feed-emoji">🥣</div>
-      </div>
-      <div class="feed-bites" id="feedBites">
-        ${Array.from({length:BITES}).map((_,i)=>`<span class="fb" data-i="${i}">🥩</span>`).join('')}
-      </div>
-    </div>
-    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>
-  `);
-  setTimeout(()=>attachFeed(trial), 20);
+  sheet(
+    '<h3>' + esc(trial.name) + '</h3>' +
+    '<div class="sub">Hold the bowl to feed</div>' +
+    '<div class="feed-wrap">' +
+      '<div class="feed-bowl" id="feedBowl">' +
+        '<div class="feed-fill" id="feedFill"></div>' +
+        '<div class="feed-steam" id="feedSteam"></div>' +
+        '<div class="feed-bowl-ico">🥣</div>' +
+      '</div>' +
+      '<div class="feed-bites" id="feedBites">' +
+        Array.from({length:BITES}).map((_,i) => '<span class="fb" data-i="' + i + '">🥩</span>').join('') +
+      '</div>' +
+    '</div>' +
+    '<button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>'
+  );
+  setTimeout(() => attachFeed(trial), 30);
 }
-let feedRAF=null, feedStart=0, feedBites=0, feedDone=false;
+
+let feedRAF = null, feedStart = 0, feedBites = 0, feedDone = false;
 function attachFeed(trial){
-  const bowl = $('#feedBowl'); if(!bowl) return;
+  const bowl = $('#feedBowl'); if (!bowl) return;
   const fill = $('#feedFill');
   const bites = $$('#feedBites .fb');
-  feedBites=0; feedDone=false;
+  feedBites = 0; feedDone = false;
   const BITE_MS = 800;
+
   const down = e => {
-    if(feedDone) return;
+    if (feedDone) return;
     feedStart = performance.now();
     bowl.classList.add('holding');
     haptic('light');
     const paint = () => {
-      if(feedDone) return;
-      const el = performance.now() - feedStart;
-      const pct = Math.min(100, (el/BITE_MS)*100);
-      if(fill) fill.style.height = pct + '%';
-      if(pct >= 100){
+      if (feedDone) return;
+      const elapsed = performance.now() - feedStart;
+      const pct = Math.min(100, (elapsed / BITE_MS) * 100);
+      if (fill) fill.style.height = pct + '%';
+      if (pct >= 100){
         feedBites++;
-        if(bites[feedBites-1]) bites[feedBites-1].classList.add('on');
+        if (bites[feedBites-1]) bites[feedBites-1].classList.add('on');
         haptic('medium');
-        if(fill) fill.style.height = '0%';
+        if (fill) fill.style.height = '0%';
         burstAt(bowl, 8);
-        if(feedBites >= bites.length){
+        bowl.classList.remove('screen-shake');
+        void bowl.offsetWidth;
+        bowl.classList.add('screen-shake');
+        if (feedBites >= bites.length){
           feedDone = true;
-          haptic('heavy');
-          api('/trials/'+encodeURIComponent(trial.slug)).then(r=>{
-            if(!r.ok){ toast('Not ready','warn'); return; }
-            const parts=[];
-            if(r.reward_ember) parts.push('+'+fmt(r.reward_ember)+' Ember');
-            if(r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
-            toast('Fed the kin! '+parts.join(' · '),'good');
-            closeSheet(); refresh();
-          }).catch(e=>toast(e.message,'bad'));
+          completeFeed(trial);
           return;
         }
         feedStart = performance.now();
@@ -574,155 +1317,182 @@ function attachFeed(trial){
     e.preventDefault();
   };
   const up = () => {
-    if(feedRAF){ cancelAnimationFrame(feedRAF); feedRAF=null; }
+    if (feedRAF){ cancelAnimationFrame(feedRAF); feedRAF = null; }
     bowl.classList.remove('holding');
-    if(fill) fill.style.height = '0%';
+    if (fill) fill.style.height = '0%';
   };
   bowl.addEventListener('pointerdown', down);
-  document.addEventListener('pointerup', up);
-  document.addEventListener('pointercancel', up);
-  document.addEventListener('pointerleave', up);
+  document.addEventListener('pointerup', up, { once:true });
+  document.addEventListener('pointercancel', up, { once:true });
 }
 
-/* ---------- 3) Dawn Cry — tap the drum on the beat 3 times ---------- */
+async function completeFeed(trial){
+  haptic('heavy');
+  await sleep(400);
+  try {
+    const r = await api('/trials/' + encodeURIComponent(trial.slug));
+    if (!r.ok){ toast('Not ready','warn'); return; }
+    const amount = (r.reward_ember ? '+' + fmt(r.reward_ember) + ' Ember' : '') +
+                   (r.reward_loyalty ? ' +' + fmt(r.reward_loyalty) + ' Loyalty' : '');
+    closeSheet();
+    rewardSequence(null, { ico:'🥣', title:'Kin fed!', amount: amount }, () => refresh());
+  } catch(e){ toast(e.message, 'bad'); }
+}
+
+/* ---------- 3) DAWN CRY — tap drum on beat ---------- */
 function openCryTapSheet(trial){
   const BEATS = 3;
-  sheet(`
-    <h3>${esc(trial.name)}</h3>
-    <div class="sub">Tap the drum on the beat</div>
-    <div class="cry-wrap">
-      <div class="cry-beat" id="cryBeat"></div>
-      <button class="cry-drum" id="cryDrum" data-act="cryTap" type="button">
-        <span class="cry-drum-ico">🥁</span>
-      </button>
-      <div class="cry-score" id="cryScore">0 / ${BEATS}</div>
-    </div>
-    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>
-  `);
-  setTimeout(()=>attachCry(trial), 20);
+  sheet(
+    '<h3>' + esc(trial.name) + '</h3>' +
+    '<div class="sub">Tap the drum on the beat</div>' +
+    '<div class="cry-wrap">' +
+      '<div class="cry-pulse"><span class="cry-pulse-ring" id="cryPulse"></span></div>' +
+      '<button class="cry-drum" id="cryDrum"><span class="cry-drum-ico">🥁</span></button>' +
+      '<div class="cry-score" id="cryScore">0 / ' + BEATS + '</div>' +
+    '</div>' +
+    '<button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>'
+  );
+  setTimeout(() => attachCry(trial), 30);
 }
-let cryBeatTimer=null, cryScore=0, cryBeatOn=false, cryListening=false;
+
+let cryRAF = null, cryBeatTimer = null, cryScore = 0, cryBeatOn = false;
 function attachCry(trial){
-  const drum = $('#cryDrum'); if(!drum) return;
-  const beat = $('#cryBeat');
+  const drum = $('#cryDrum'); if (!drum) return;
+  const pulse = $('#cryPulse');
   const scoreEl = $('#cryScore');
   cryScore = 0;
   const BEATS = 3;
   const BEAT_MS = 900;
-  const ON_WINDOW = 260;
+  const ON_WINDOW = 280;
+
   let cycleT = performance.now();
   const loop = () => {
     const now = performance.now();
-    const phase = ((now - cycleT) % BEAT_MS);
+    const phase = (now - cycleT) % BEAT_MS;
     const on = phase < ON_WINDOW;
-    if(on !== cryBeatOn){
+    if (on !== cryBeatOn){
       cryBeatOn = on;
-      if(beat) beat.classList.toggle('on', on);
+      if (pulse) pulse.classList.toggle('on', on);
     }
-    cryBeatTimer = requestAnimationFrame(loop);
+    cryRAF = requestAnimationFrame(loop);
   };
-  cryBeatTimer = requestAnimationFrame(loop);
+  cryRAF = requestAnimationFrame(loop);
 
-  const tap = () => {
-    if(cryScore >= BEATS) return;
-    if(cryBeatOn){
+  drum.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (cryScore >= BEATS) return;
+    if (cryBeatOn){
       cryScore++;
       haptic('medium');
       burstAt(drum, 10);
-      if(scoreEl) scoreEl.textContent = cryScore + ' / ' + BEATS;
-      if(cryScore >= BEATS){
-        cancelAnimationFrame(cryBeatTimer); cryBeatTimer=null;
-        haptic('heavy');
-        api('/trials/'+encodeURIComponent(trial.slug)).then(r=>{
-          if(!r.ok){ toast('Not ready','warn'); return; }
-          const parts=[];
-          if(r.reward_ember) parts.push('+'+fmt(r.reward_ember)+' Ember');
-          if(r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
-          toast('Dawn Cry raised! '+parts.join(' · '),'good');
-          closeSheet(); refresh();
-        }).catch(e=>toast(e.message,'bad'));
-      }
+      drum.classList.remove('hit'); void drum.offsetWidth; drum.classList.add('hit');
+      if (scoreEl) scoreEl.textContent = cryScore + ' / ' + BEATS;
+      if (cryScore >= BEATS) completeCry(trial);
     } else {
-      // miss
       haptic('soft');
       cryScore = 0;
-      if(scoreEl) scoreEl.textContent = '0 / ' + BEATS;
+      if (scoreEl) scoreEl.textContent = '0 / ' + BEATS;
+      drum.classList.remove('miss'); void drum.offsetWidth; drum.classList.add('miss');
     }
-  };
-  drum.addEventListener('pointerdown', e=>{ e.preventDefault(); tap(); });
+  });
 }
 function cleanupCry(){
-  if(cryBeatTimer){ cancelAnimationFrame(cryBeatTimer); cryBeatTimer=null; }
+  if (cryRAF){ cancelAnimationFrame(cryRAF); cryRAF = null; }
+}
+async function completeCry(trial){
+  haptic('heavy');
+  cleanupCry();
+  await sleep(300);
+  try {
+    const r = await api('/trials/' + encodeURIComponent(trial.slug));
+    if (!r.ok){ toast('Not ready','warn'); return; }
+    const amount = (r.reward_ember ? '+' + fmt(r.reward_ember) + ' Ember' : '') +
+                   (r.reward_loyalty ? ' +' + fmt(r.reward_loyalty) + ' Loyalty' : '');
+    closeSheet();
+    rewardSequence(null, { ico:'🥁', title:'Dawn Cry raised!', amount: amount }, () => refresh());
+  } catch(e){ toast(e.message, 'bad'); }
 }
 
-/* ---------- 4) Sift the Ash — pick one of 5 piles ---------- */
+/* ---------- 4) SIFT THE ASH — pick one of 5 piles ---------- */
 function openSiftSheet(trial){
-  sheet(`
-    <h3>${esc(trial.name)}</h3>
-    <div class="sub">Pick a pile. One hides an ember.</div>
-    <div class="sift-grid">
-      ${Array.from({length:5}).map((_,i)=>`
-        <button class="sift-pile" data-act="siftPick" data-val="${i}">
-          <span class="sift-ico">🪨</span>
-          <span class="sift-dust"></span>
-        </button>`).join('')}
-    </div>
-    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>
-  `);
+  sheet(
+    '<h3>' + esc(trial.name) + '</h3>' +
+    '<div class="sub">Pick a pile. One hides an ember.</div>' +
+    '<div class="sift-grid">' +
+      Array.from({length:5}).map((_,i) =>
+        '<button class="sift-pile" data-act="siftPick" data-val="' + i + '">' +
+          '<span class="sift-dust"></span>' +
+          '<span class="sift-ico">🪨</span>' +
+        '</button>'
+      ).join('') +
+    '</div>' +
+    '<button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Cancel</button>'
+  );
 }
+
 async function doSift(btn, idx){
-  const pile = btn.closest('.sift-pile') || btn;
-  if(pile.disabled) return;
-  $$('.sift-pile').forEach(p=>p.disabled=true);
-  try{
-    const t = (S.trials || []).find(x => (x.minigame === 'sift'));
-    if(!t){ toast('No sift trial available','warn'); return; }
-    const r = await api('/trials/'+encodeURIComponent(t.slug), { pick: Number(idx) });
-    if(r.hit){
+  const pile = btn.closest ? btn.closest('.sift-pile') : btn;
+  if (!pile || pile.disabled) return;
+  $$('.sift-pile').forEach(p => p.disabled = true);
+  try {
+    const t = (S.trials || []).find(x => x.minigame === 'sift');
+    if (!t){ toast('No sift trial available', 'warn'); return; }
+    const r = await api('/trials/' + encodeURIComponent(t.slug), { pick: Number(idx) });
+
+    // Dust flies
+    pile.classList.add('sifting');
+    await sleep(800);
+
+    if (r.hit){
       pile.classList.add('hit');
       pile.querySelector('.sift-ico').textContent = '💎';
       haptic('heavy');
       burstAt(pile, 30);
-      const parts=[];
-      if(r.reward_ember) parts.push('+'+fmt(r.reward_ember)+' Ember');
-      if(r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
-      toast('Ember found! '+parts.join(' · '),'good');
-      setTimeout(()=>{ closeSheet(); refresh(); }, 900);
+      await sleep(400);
+      const amount = (r.reward_ember ? '+' + fmt(r.reward_ember) + ' Ember' : '') +
+                     (r.reward_loyalty ? ' +' + fmt(r.reward_loyalty) + ' Loyalty' : '');
+      closeSheet();
+      rewardSequence(null, { ico:'💎', title:'Ember found!', amount: amount }, () => refresh());
     } else {
       pile.classList.add('miss');
       pile.querySelector('.sift-ico').textContent = '🖤';
       haptic('soft');
-      // reveal where the ember actually was
       const correct = $$('.sift-pile')[r.correct];
-      if(correct){ correct.classList.add('reveal'); correct.querySelector('.sift-ico').textContent = '💎'; }
-      setTimeout(()=>{ closeSheet(); refresh(); }, 1100);
+      if (correct){
+        correct.classList.add('reveal');
+        correct.querySelector('.sift-ico').textContent = '💎';
+      }
+      await sleep(1100);
+      closeSheet();
+      toast('The ash was cold — try again tomorrow', 'warn');
+      refresh();
     }
-  }catch(e){ toast(e.message,'bad'); }
+  } catch(e){ toast(e.message, 'bad'); }
 }
 
-/* ---------- fallback: hold-to-confirm ---------- */
+/* ---------- fallback: HOLD ---------- */
 function openHoldSheet(trial){
-  const rewardParts = [];
-  if (trial.reward_ember)   rewardParts.push('🔥 +'+fmt(trial.reward_ember));
-  if (trial.reward_loyalty) rewardParts.push('❤ +'+fmt(trial.reward_loyalty));
-  const rewardText = rewardParts.join(' · ') || 'Reward';
-  sheet(`
-    <h3>${esc(trial.name)}</h3>
-    <div class="sub">${esc(trial.hint||'')}</div>
-    <div class="hold-wrap">
-      <button class="hold-btn" id="holdBtn" data-act="holdStart" data-val="${esc(trial.slug)}" type="button" aria-label="Hold to confirm">
-        <span class="hold-ring"></span>
-        <span class="hold-inner">
-          <span class="hold-ico">${esc(trial.glyph||'🔥')}</span>
-          <span class="hold-txt">Hold 2s</span>
-        </span>
-      </button>
-      <div class="hold-reward">${rewardText}</div>
-    </div>
-    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:14px">Cancel</button>
-  `);
+  const parts = [];
+  if (trial.reward_ember)   parts.push('🔥 +' + fmt(trial.reward_ember));
+  if (trial.reward_loyalty) parts.push('❤ +' + fmt(trial.reward_loyalty));
+  sheet(
+    '<h3>' + esc(trial.name) + '</h3>' +
+    '<div class="sub">' + esc(trial.hint || '') + '</div>' +
+    '<div class="hold-wrap">' +
+      '<button class="hold-btn" id="holdBtn" data-act="holdStart" data-val="' + esc(trial.slug) + '" type="button">' +
+        '<span class="hold-ring"></span>' +
+        '<span class="hold-inner">' +
+          '<span class="hold-ico">' + esc(trial.glyph || '🔥') + '</span>' +
+          '<span class="hold-txt">Hold 2s</span>' +
+        '</span>' +
+      '</button>' +
+      '<div class="hold-reward">' + (parts.join(' · ') || 'Reward') + '</div>' +
+    '</div>' +
+    '<button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:14px">Cancel</button>'
+  );
 }
-let holdTimer = null, holdRAF = null, holdStartAt = 0;
+
+let holdRAF = null, holdStartAt = 0;
 function holdStart(btn, slug){
   const HOLD_MS = 2000;
   const ring = btn.querySelector('.hold-ring');
@@ -738,14 +1508,13 @@ function holdStart(btn, slug){
       holdCancelSilent();
       haptic('heavy');
       burstAt(btn, 12);
-      api('/trials/'+encodeURIComponent(slug)).then(r => {
+      api('/trials/' + encodeURIComponent(slug)).then(r => {
         if (!r.ok){ toast('Not ready yet','warn'); return; }
-        const parts=[];
-        if (r.reward_ember)   parts.push('+'+fmt(r.reward_ember)+' Ember');
-        if (r.reward_loyalty) parts.push('+'+fmt(r.reward_loyalty)+' Loyalty');
-        toast(`Trial complete: ${parts.join(' · ')}`,'good');
-        closeSheet(); refresh();
-      }).catch(e => toast(e.message,'bad'));
+        const amount = (r.reward_ember ? '+' + fmt(r.reward_ember) + ' Ember' : '') +
+                       (r.reward_loyalty ? ' +' + fmt(r.reward_loyalty) + ' Loyalty' : '');
+        closeSheet();
+        rewardSequence(null, { ico:'✓', title:'Trial complete', amount: amount }, () => refresh());
+      }).catch(e => toast(e.message, 'bad'));
       return;
     }
     holdRAF = requestAnimationFrame(paint);
@@ -759,7 +1528,6 @@ function holdCancel(){
 }
 function holdCancelSilent(){
   if (holdRAF){ cancelAnimationFrame(holdRAF); holdRAF = null; }
-  if (holdTimer){ clearTimeout(holdTimer); holdTimer = null; }
   const el = document.querySelector('.hold-btn');
   if (el){
     el.classList.remove('holding');
@@ -768,795 +1536,352 @@ function holdCancelSilent(){
   }
 }
 
+/* ---------- ad placeholder ---------- */
 function openAdSheet(trial){
-  sheet(`
-    <h3>${esc(trial.name)}</h3>
-    <div class="sub">${esc(trial.hint||'Watch a short ad to claim.')}</div>
-    <div class="ad-placeholder">
-      <div class="ad-ico">📺</div>
-      <p class="tiny" style="margin:8px 0 0">Rewarded ads are coming soon.</p>
-    </div>
-    <button class="btn btn-stone btn-block" disabled style="margin-top:14px">Watch ad — coming soon</button>
-    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Close</button>
-  `);
+  sheet(
+    '<h3>' + esc(trial.name) + '</h3>' +
+    '<div class="sub">' + esc(trial.hint || 'Watch a short ad to claim.') + '</div>' +
+    '<div class="ad-placeholder"><div class="ad-ico">📺</div>' +
+    '<p class="tiny" style="margin:8px 0 0">Rewarded ads are coming soon.</p></div>' +
+    '<button class="btn btn-stone btn-block" disabled style="margin-top:14px">Watch ad — coming soon</button>' +
+    '<button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Close</button>'
+  );
+}
+
+/* =====================================================================
+   Other actions
+===================================================================== */
+async function actAsh(btn){
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/ash/collect');
+    if (!r.ok){ toast('The ash pit is still smouldering','warn'); return; }
+    burstAt(btn, 18); fxPopAt(btn, '+' + fmt(r.gain)); haptic();
+    toast('Gathered ' + r.units + ' Ash → +' + fmt(r.gain) + ' Ember', 'good');
+    await refresh();
+  } catch(e){ toast(e.message, 'bad'); }
+  finally { if (btn) btn.disabled = false; }
+}
+
+let tapLock = false;
+function tapFire(campfire){
+  if (tapLock) return;
+  tapLock = true; setTimeout(() => tapLock = false, 420);
+  if (campfire){
+    campfire.classList.remove('tap');
+    void campfire.offsetWidth;
+    campfire.classList.add('tap');
+  }
+  const rect = (campfire || document.body).getBoundingClientRect();
+  const cx = rect.left + rect.width/2;
+  const cy = rect.top + rect.height/2;
+  burstEmbers(cx, cy, 16, 130);
+
+  const u = S.user;
+  const last = u.last_checkin ? new Date(u.last_checkin).getTime() : 0;
+  const since = Date.now() - last;
+  if (since < 20*3600*1000){
+    haptic('soft');
+    fxPop('⏳', cx, cy - 30);
+    return;
+  }
+  api('/checkin').then(r => {
+    if (!r.ok){ haptic('soft'); fxPop('⏳', cx, cy - 30); return; }
+    haptic('heavy');
+    burstEmbers(cx, cy, 24, 170);
+    fxPop('+' + fmt(r.reward), cx, cy - 40);
+    toast('Daily blessing! +' + fmt(r.reward) + ' Ember · streak ' + r.streak, 'good');
+    refresh();
+  }).catch(e => toast(e.message, 'bad'));
 }
 
 async function actShare(btn){
-  await doAct(btn, async () => {
+  try {
     await api('/share');
-    popAt(btn,'+12 ❤'); haptic();
-    try{
-      const link = 'https://t.me/share/url?url='+encodeURIComponent('https://t.me')+'&text='+encodeURIComponent('Join my tribe in TRIBES 🔥⚔️');
-      if(TG && TG.openTelegramLink) TG.openTelegramLink(link);
-    }catch(e){}
-    toast('War Chant spread! +12 Loyalty','good');
+    if (btn) fxPopAt(btn, '+12 ❤');
+    haptic();
+    try {
+      const link = 'https://t.me/share/url?url=' + encodeURIComponent('https://t.me') + '&text=' + encodeURIComponent('Join my tribe in TRIBES 🔥⚔️');
+      if (TG && TG.openTelegramLink) TG.openTelegramLink(link);
+    } catch(e){}
+    toast('War Chant spread! +12 Loyalty', 'good');
     await refresh();
-  });
+  } catch(e){ toast(e.message, 'bad'); }
 }
 
-/* ---------- TRIBE (unchanged) ---------- */
-const CRESTS = ['totem','skull','drum','flame','torch','idol','sun','moon','horn'];
-let pickedCrest='totem', pickedPalette='ember', pickedBanner='sun', pickedNameId=null;
-function renderTribe(box){
-  const u = S.user, t = S.tribe;
-  if(t){
-    const wl = (Number(t.wins)||0)+(Number(t.losses)||0);
-    const levels = S.config.levelTable;
-    const levelName = levels.names[Math.max(0, Math.min(levels.names.length-1, (t.level||1)-1))];
-    const cap = levels.caps[Math.max(0, Math.min(levels.caps.length-1, (t.level||1)-1))];
-    const nextCap = levels.caps[Math.min(levels.caps.length-1, (t.level||1))] || cap;
-    const nextCost = levels.costs[Math.min(levels.costs.length-1, (t.level||1))] || 0;
-    const canUpgrade = Number(t.treasury) >= nextCost && (t.level||1) < levels.costs.length;
-    box.innerHTML = `
-    <div class="card" style="text-align:center">
-      <div class="crest-art" style="width:88px;height:88px;margin:4px auto 10px;border-radius:22px">${artSvg(t.crest)}</div>
-      <h2 style="font-size:1.5rem;margin:0;color:var(--gold);font-weight:800">${esc(t.name)}</h2>
-      <p class="muted" style="font-size:.8rem;margin:6px 0 12px">${esc(t.motto)||'“We rise from the ash.”'}</p>
-      <div style="display:flex;justify-content:center;gap:6px;flex-wrap:wrap">
-        <span class="pill pill-gold">${esc(levelName)}</span>
-        <span class="pill pill-gold">${esc(u.role)}</span>
-        <span class="pill pill-jade">🏆 ${t.wins||0}W</span>
-        <span class="pill pill-blood">💀 ${t.losses||0}L</span>
-      </div>
-    </div>
-    <div class="wmeta" style="margin-bottom:14px">
-      <div class="box"><b>${fmt(t.treasury)}</b><span>Great Pyre</span></div>
-      <div class="box"><b>${fmt(t.loyalty_total)}</b><span>Loyalty</span></div>
-      <div class="box"><b>${t.members||0}/${cap}</b><span>Kin</span></div>
-    </div>
-    <div class="card">
-      <div class="hd" style="margin:0 0 10px"><h2 style="font-size:1.05rem">Kiva</h2><span class="sub">tribe talk</span></div>
-      <div class="kiva-hero" data-act="openKiva">
-        <div class="kh-ico">💬</div>
-        <div class="kh-body"><b>Open the Kiva</b><span>Talk with your kin</span></div>
-        <div class="kh-badge" id="kivaBadge" style="display:none">0</div>
-      </div>
-    </div>
-    <div class="card">
-      <h3>Stoke the Great Pyre</h3>
-      <p class="tiny" style="margin:0 0 14px">Donate your Ember to the tribe treasury. A deep Pyre wins wars — and every gift earns you Loyalty.</p>
-      <button class="btn btn-primary btn-shine btn-block" data-act="openDonate">🔥 Donate Ember to the Pyre</button>
-    </div>
-    <div class="card">
-      <h3>Level Up</h3>
-      <p class="tiny" style="margin:0 0 10px">
-        ${(t.level||1) < levels.costs.length
-          ? `Raise to <b>${esc(levels.names[(t.level||1)])}</b> · cap ${nextCap} · costs ${fmt(nextCost)} Ember from the Pyre.`
-          : 'Your tribe has reached the highest level — Kingdom.'}
-      </p>
-      ${(t.level||1) < levels.costs.length
-        ? `<button class="btn ${canUpgrade?'btn-primary btn-shine':'btn-stone'} btn-block" data-act="upgrade" ${canUpgrade?'':'disabled'}>
-             ${canUpgrade ? '⚡ Raise the level' : 'The Great Pyre is too shallow'}
-           </button>`
-        : ''}
-    </div>
-    <button class="btn btn-danger btn-block" data-act="leave" style="margin-top:4px">Leave the Tribe</button>
-    <p class="tiny" style="text-align:center;margin-top:12px">${wl ? ('Battle record · '+t.wins+' won, '+t.losses+' lost') : 'Your tribe has yet to taste war.'}</p>`;
-    return;
-  }
-  box.innerHTML = `
-  <div class="empty"><span class="big">🪨</span>
-    <h2 style="margin:0;color:var(--gold);font-weight:800">You wander alone</h2>
-    <p class="tiny" style="margin-top:8px">Found your own tribe or join an existing fire. Tribes wage war, hoard the Great Pyre, and climb the ranks together.</p>
-  </div>
-  <button class="btn btn-primary btn-shine btn-block" data-act="openCreate">🔥 Found a Tribe · ${fmt(S.config.foundEmber)} Ember</button>
-  <div class="hd" style="margin-top:20px"><h2>Join a Fire</h2><span class="sub">strongest tribes</span></div>
-  <div id="joinList">${'<div class="skeleton"></div>'.repeat(3)}</div>`;
-  api('/tribes').then(d => {
-    const host = $('#joinList'); if(!host) return;
-    const list = (d.tribes||[]).slice(0,30);
-    if(!list.length){ host.innerHTML = '<p class="tiny">No tribes yet — be the first to found one!</p>'; return; }
-    host.innerHTML = list.map(x => `<div class="card" style="padding:14px;margin-bottom:10px">
-      <div class="row" style="border:0;padding:0">
-        <span class="crest-art">${artSvg(x.crest)}</span>
-        <div style="flex:1;min-width:0"><b style="color:var(--gold)">${esc(x.name)}</b>
-          <div class="tiny">${fmt(x.members)} kin · ${fmt(x.loyalty_total)} loyalty · 🏆${x.wins||0}</div></div>
-        <button class="btn btn-stone" data-act="join" data-val="${x.id}" style="padding:10px 14px;font-size:.8rem">Join</button>
-      </div></div>`).join('');
-  }).catch(()=>{ const h=$('#joinList'); if(h) h.innerHTML='<p class="tiny">Could not reach the other fires.</p>'; });
-}
-async function actUpgrade(btn){
-  await doAct(btn, async () => {
-    const r = await api('/tribe/upgrade');
-    haptic('heavy'); toast(`Risen to ${r.name}!`,'good'); await refresh();
-  });
-}
-async function actJoin(btn, id){
-  await doAct(btn, async () => { await api('/tribe/join', { tribeId: Number(id) }); haptic(); toast('You joined the fire!','good'); await refresh(); });
-}
-async function actLeave(btn){
-  await doAct(btn, async () => { await api('/tribe/leave'); toast('You left the tribe','warn'); await refresh(); });
-}
-
-/* ---------- sheets ---------- */
-function sheet(html){
-  $('#sheetRoot').innerHTML = `<div class="sheet-bg" data-act="bgClose"><div class="sheet"><div class="handle"></div>${html}</div></div>`;
-}
-function closeSheet(){
-  cleanupCry();
-  $('#sheetRoot').innerHTML='';
-}
-
+/* ---------- sheet content: create tribe, donate, etc. ---------- */
 async function openCreate(){
-  pickedCrest='totem'; pickedPalette='ember'; pickedBanner='sun'; pickedNameId=null;
-  sheet(`<h3>Found a Tribe</h3><div class="sub">Costs ${fmt(S.config.foundEmber)} Ember · you become Chief</div>
-    <div class="field"><input id="tMotto" maxlength="80" placeholder="Battle motto (optional)"/></div>
-    <div class="tiny" style="margin:6px 0 8px">Pick a tribe name (first-come, first-served)</div>
-    <div id="nameGrid" class="grid2" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px"><div class="skeleton" style="height:36px"></div><div class="skeleton" style="height:36px"></div></div>
-    <div class="tiny" style="margin-bottom:6px">Pick a banner</div>
-    <div class="grid2" id="bannerGrid" style="grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:14px">
-      ${(S.config.banners||['sun','moon','wolf','bear','spear','shield','tree','flame']).map(b=>`<button class="btn btn-stone" data-act="pickBanner" data-val="${b}" style="padding:10px;font-size:1rem">${bannerGlyph(b)}</button>`).join('')}
-    </div>
-    <div class="tiny" style="margin-bottom:6px">Pick a palette</div>
-    <div class="grid2" id="paletteGrid" style="grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:14px">
-      ${Object.keys(S.config.palette||{}).map(p=>`<button class="btn btn-stone" data-act="pickPalette" data-val="${p}" style="padding:10px;font-size:.78rem;border-left:4px solid ${S.config.palette[p].accent}">${p}</button>`).join('')}
-    </div>
-    <button class="btn btn-primary btn-shine btn-block" data-act="doCreate">Light the First Fire</button>
-    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Cancel</button>`);
-  try{
+  sheet(
+    '<h3>Found a Tribe</h3>' +
+    '<div class="sub">Costs ' + fmt(S.config.foundEmber) + ' Ember · you become Chief</div>' +
+    '<div class="field"><input id="tMotto" maxlength="80" placeholder="Battle motto (optional)"/></div>' +
+    '<div class="tiny" style="margin:6px 0 8px">Pick a name</div>' +
+    '<div id="nameGrid" class="grid2" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px"><div class="skeleton" style="height:36px"></div><div class="skeleton" style="height:36px"></div></div>' +
+    '<button class="btn btn-primary btn-shine btn-block" data-act="doCreate">Light the First Fire</button>' +
+    '<button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Cancel</button>'
+  );
+  try {
     const d = await api('/tribe/names');
-    const grid = $('#nameGrid'); if(!grid) return;
-    const names = (d.names||[]).slice(0,60);
-    if(!names.length){ grid.innerHTML = '<p class="tiny" style="grid-column:span 2">All names are claimed.</p>'; return; }
-    grid.innerHTML = names.map(n=>`<button class="btn btn-stone" data-act="pickName" data-val="${n.id}" style="padding:10px;font-size:.82rem">${esc(n.name)}</button>`).join('');
-  }catch(e){ const grid = $('#nameGrid'); if(grid) grid.innerHTML = '<p class="tiny" style="grid-column:span 2">Could not load names.</p>'; }
-}
-function bannerGlyph(b){ return ({ sun:'☀️', moon:'🌙', wolf:'🐺', bear:'🐻', spear:'🗡️', shield:'🛡️', tree:'🌳', flame:'🔥' })[b] || '🏴'; }
-function pickName(btn,val){ pickedNameId = Number(val); $$('#nameGrid .btn').forEach(b=>b.style.borderColor = (Number(b.dataset.val)===pickedNameId ? 'var(--gold)' : 'var(--line)')); }
-function pickPalette(btn,val){ pickedPalette = val; $$('#paletteGrid .btn').forEach(b=>b.style.borderColor = (b.dataset.val===val ? 'var(--gold)' : 'var(--line)')); }
-function pickBanner(btn,val){ pickedBanner = val; $$('#bannerGrid .btn').forEach(b=>b.style.borderColor = (b.dataset.val===val ? 'var(--gold)' : 'var(--line)')); }
-async function doCreate(btn){
-  await doAct(btn, async () => {
-    if(!pickedNameId){ toast('Pick a name','warn'); return; }
-    const motto = ($('#tMotto')?.value || '').trim();
-    await api('/tribe/create', { nameId: pickedNameId, motto, palette: pickedPalette, banner: pickedBanner, crest: pickedCrest });
-    closeSheet(); haptic('medium'); toast('Your tribe is born!','good'); await refresh();
-  });
-}
-function openDonate(){
-  sheet(`<h3>Stoke the Great Pyre</h3><div class="sub">You hold ${fmt(S.user.ember)} Ember</div>
-    <div class="field"><input id="dAmt" type="number" min="1" placeholder="Ember to donate"/></div>
-    <div style="display:flex;gap:8px;margin-bottom:14px">
-      ${[500,2500,10000].map(v=>`<button class="btn btn-stone" style="flex:1;padding:12px 8px;font-size:.82rem" data-act="setDon" data-val="${v}">${fmt(v)}</button>`).join('')}</div>
-    <button class="btn btn-primary btn-shine btn-block" data-act="doDonate">Donate to the Pyre</button>
-    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Cancel</button>`);
-}
-function setDon(btn, v){ const i=$('#dAmt'); if(i) i.value = v; }
-async function doDonate(btn){
-  await doAct(btn, async () => {
-    const amt = Math.floor(Number($('#dAmt')?.value)||0);
-    if(amt<1){ toast('Enter an amount','warn'); return; }
-    const r = await api('/tribe/donate', { amount: amt });
-    closeSheet(); haptic('medium'); toast('Donated '+fmt(r.donated)+' Ember to the Pyre','good'); await refresh();
-  });
+    const grid = $('#nameGrid'); if (!grid) return;
+    const names = (d.names || []).slice(0, 60);
+    if (!names.length){ grid.innerHTML = '<p class="tiny" style="grid-column:span 2">All names claimed.</p>'; return; }
+    let pickedId = null;
+    grid.innerHTML = names.map(n => '<button class="btn btn-stone" data-act="pickName" data-val="' + n.id + '" style="padding:10px;font-size:.82rem">' + esc(n.name) + '</button>').join('');
+    window.__pickName = (id) => { pickedId = id; };
+    grid.querySelectorAll('[data-act="pickName"]').forEach(b => {
+      b.addEventListener('click', () => {
+        grid.querySelectorAll('.btn').forEach(x => x.style.borderColor = 'var(--line)');
+        b.style.borderColor = 'var(--gold)';
+        pickedId = Number(b.dataset.val);
+      });
+    });
+    const doCreate = $('#doCreateBtn') || null;
+    window.__doCreate = async (btn) => {
+      if (!pickedId){ toast('Pick a name', 'warn'); return; }
+      const motto = ($('#tMotto')?.value || '').trim();
+      try {
+        await api('/tribe/create', { nameId: pickedId, motto, palette: 'ember', banner: 'sun', crest: 'totem' });
+        closeSheet(); haptic('medium'); toast('Your tribe is born!', 'good'); await refresh();
+      } catch(e){ toast(e.message, 'bad'); }
+    };
+  } catch(e){}
 }
 
-/* ---------- KIVA (unchanged) ---------- */
+function openDonate(){
+  sheet(
+    '<h3>Stoke the Great Pyre</h3>' +
+    '<div class="sub">You hold ' + fmt(S.user.ember) + ' Ember</div>' +
+    '<div class="field"><input id="dAmt" type="number" min="1" placeholder="Ember to donate"/></div>' +
+    '<button class="btn btn-primary btn-shine btn-block" data-act="doDonate">Donate to the Pyre</button>' +
+    '<button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Cancel</button>'
+  );
+}
+async function doDonate(btn){
+  const amt = Math.floor(Number($('#dAmt')?.value) || 0);
+  if (amt < 1){ toast('Enter an amount', 'warn'); return; }
+  try {
+    const r = await api('/tribe/donate', { amount: amt });
+    closeSheet(); haptic('medium');
+    toast('Donated ' + fmt(r.donated) + ' Ember to the Pyre', 'good');
+    await refresh();
+  } catch(e){ toast(e.message, 'bad'); }
+}
+
+async function actJoin(btn, id){
+  try {
+    await api('/tribe/join', { tribeId: Number(id) });
+    haptic(); toast('You joined the fire!', 'good'); await refresh();
+  } catch(e){ toast(e.message, 'bad'); }
+}
+async function actLeave(){
+  try { await api('/tribe/leave'); toast('You left the tribe', 'warn'); await refresh(); }
+  catch(e){ toast(e.message, 'bad'); }
+}
+
+async function actUpgrade(){
+  try {
+    const r = await api('/tribe/upgrade');
+    haptic('heavy');
+    toast('Risen to ' + r.name + '!', 'good');
+    await refresh();
+  } catch(e){ toast(e.message, 'bad'); }
+}
+
+/* ---------- Kiva ---------- */
 let kivaEs = null, kivaPoll = null, kivaLastId = 0, kivaOpen = false;
 async function openKiva(){
-  if(!S.tribe) return;
+  if (!S.tribe) return;
   kivaOpen = true;
-  sheet(`<div class="kiva-sheet">
-    <div class="kiva-head"><b>${esc(S.tribe.name)} — Kiva</b>
-      <button class="btn btn-ghost" data-act="closeKiva" style="padding:6px 10px;font-size:.72rem">Close</button></div>
-    <div class="kiva-feed" id="kivaFeed"><div class="skeleton" style="height:44px"></div></div>
-    <div class="kiva-compose">
-      <input id="kivaInput" maxlength="280" placeholder="Say something to the tribe…"/>
-      <button class="send" data-act="sendKiva">➤</button>
-    </div>
-  </div>`);
+  sheet(
+    '<div class="kiva-sheet">' +
+      '<div class="kiva-head"><b>' + esc(S.tribe.name) + ' — Kiva</b>' +
+      '<button class="btn btn-ghost" data-act="closeSheet" style="padding:6px 10px;font-size:.72rem">Close</button></div>' +
+      '<div class="kiva-feed" id="kivaFeed"><div class="skeleton" style="height:44px"></div></div>' +
+      '<div class="kiva-compose"><input id="kivaInput" maxlength="280" placeholder="Say something…"/>' +
+      '<button class="send" data-act="sendKiva">➤</button></div>' +
+    '</div>'
+  );
   await loadKiva(); connectKivaStream();
 }
-function closeKiva(){
-  kivaOpen = false;
-  if(kivaEs){ try{ kivaEs.close(); }catch(e){} kivaEs=null; }
-  if(kivaPoll){ clearInterval(kivaPoll); kivaPoll=null; }
-  closeSheet();
-}
 async function loadKiva(){
-  try{
+  try {
     const d = await api('/kiva');
     const rows = d.messages || [];
     kivaLastId = rows.length ? rows[rows.length-1].id : 0;
     renderKivaFeed(rows);
-  }catch(e){ const f=$('#kivaFeed'); if(f) f.innerHTML = '<p class="tiny">Could not reach the Kiva.</p>'; }
+  } catch(e){ const f = $('#kivaFeed'); if (f) f.innerHTML = '<p class="tiny">Could not reach the Kiva.</p>'; }
 }
 function renderKivaFeed(rows){
-  const feed = $('#kivaFeed'); if(!feed) return;
+  const feed = $('#kivaFeed'); if (!feed) return;
   feed.innerHTML = rows.map(m => kivaMsgHtml(m)).join('');
   feed.scrollTop = feed.scrollHeight;
 }
 function kivaMsgHtml(m){
-  if(m.kind==='system' || m.kind==='war' || m.kind==='level'){
-    return `<div class="kiva-msg system"><b>${esc(m.body)}</b></div>`;
+  if (m.kind === 'system' || m.kind === 'war' || m.kind === 'level'){
+    return '<div class="kiva-msg system"><b>' + esc(m.body) + '</b></div>';
   }
   const mine = S.user && m.user_id === S.user.id;
-  const role = (m.role||'').toLowerCase();
-  const roleTag = (role && role!=='toddler') ? `<span class="km-role">${esc(m.role)}</span>` : '';
-  const pin = m.pinned ? '📌 ' : '';
+  const role = (m.role || '').toLowerCase();
+  const roleTag = (role && role !== 'toddler') ? '<span class="km-role">' + esc(m.role) + '</span>' : '';
   const canPin = ['Chief','Head','Elder'].includes(S.user.role);
-  return `<div class="kiva-msg ${mine?'self':''} ${m.pinned?'pinned':''}" data-mid="${m.id}">
-    <div class="km-av" style="${m.name_color?('color:'+m.name_color):''}">${esc((m.first_name||'?').slice(0,1).toUpperCase())}</div>
-    <div class="km-body">
-      <div class="km-meta"><span class="km-name">${esc(m.first_name||m.username||'Kin')}</span>${roleTag}<span>${fmtTime(m.created_at)}</span></div>
-      <div class="km-text">${pin}${esc(m.body)}</div>
-      ${canPin?`<div class="km-actions"><button data-act="pinKiva" data-val="${m.id}">${m.pinned?'Unpin':'Pin'}</button></div>`:''}
-    </div>
-  </div>`;
+  return '<div class="kiva-msg ' + (mine?'self':'') + '" data-mid="' + m.id + '">' +
+    '<div class="km-av">' + esc((m.first_name || '?').slice(0,1).toUpperCase()) + '</div>' +
+    '<div class="km-body"><div class="km-meta"><span class="km-name">' + esc(m.first_name || m.username || 'Kin') + '</span>' + roleTag + '</div>' +
+    '<div class="km-text">' + esc(m.body) + '</div>' +
+    (canPin ? '<div class="km-actions"><button data-act="pinKiva" data-val="' + m.id + '">Pin</button></div>' : '') +
+    '</div></div>';
 }
-function fmtTime(t){ try{ const d=new Date(t); return String(d.getHours()).padStart(2,'0')+':'+String(d.getMinutes()).padStart(2,'0'); }catch(e){ return ''; } }
 function connectKivaStream(){
-  if(!S.tribe) return;
-  try{
-    kivaEs = new EventSource('/api/kiva/stream?tribeId='+encodeURIComponent(S.tribe.id));
+  if (!S.tribe) return;
+  try {
+    kivaEs = new EventSource('/api/kiva/stream?tribeId=' + encodeURIComponent(S.tribe.id));
     let opened = false;
-    const guard = setTimeout(()=>{ if(!opened && kivaEs){ kivaEs.close(); kivaEs=null; startKivaPoll(); } }, 3000);
-    kivaEs.onopen = ()=>{ opened = true; clearTimeout(guard); if(kivaPoll){ clearInterval(kivaPoll); kivaPoll=null; } };
+    const guard = setTimeout(() => { if (!opened && kivaEs){ kivaEs.close(); kivaEs = null; startKivaPoll(); } }, 3000);
+    kivaEs.onopen = () => { opened = true; clearTimeout(guard); if (kivaPoll){ clearInterval(kivaPoll); kivaPoll = null; } };
     kivaEs.onmessage = ev => {
-      try{
+      try {
         const msg = JSON.parse(ev.data);
-        if(msg.type==='message' && msg.message && msg.message.id > kivaLastId){
+        if (msg.type === 'message' && msg.message && msg.message.id > kivaLastId){
           kivaLastId = msg.message.id;
           const feed = $('#kivaFeed');
-          if(feed){ feed.insertAdjacentHTML('beforeend', kivaMsgHtml(msg.message)); feed.scrollTop = feed.scrollHeight; }
-        } else if(msg.type==='pin'){
-          const node = document.querySelector(`[data-mid="${msg.id}"]`);
-          if(node) node.classList.toggle('pinned', !!msg.pinned);
+          if (feed){ feed.insertAdjacentHTML('beforeend', kivaMsgHtml(msg.message)); feed.scrollTop = feed.scrollHeight; }
         }
-      }catch(e){}
+      } catch(e){}
     };
-  }catch(e){ startKivaPoll(); }
+  } catch(e){ startKivaPoll(); }
 }
 function startKivaPoll(){
-  if(kivaPoll) return;
-  kivaPoll = setInterval(async ()=>{
-    if(!kivaOpen){ clearInterval(kivaPoll); kivaPoll=null; return; }
-    try{
-      const d = await api('/kiva?since='+kivaLastId);
+  if (kivaPoll) return;
+  kivaPoll = setInterval(async () => {
+    if (!kivaOpen){ clearInterval(kivaPoll); kivaPoll = null; return; }
+    try {
+      const d = await api('/kiva?since=' + kivaLastId);
       const rows = d.messages || [];
-      if(rows.length){
-        const feed = $('#kivaFeed');
-        for(const m of rows){
-          if(m.id > kivaLastId){
-            kivaLastId = m.id;
-            if(feed){ feed.insertAdjacentHTML('beforeend', kivaMsgHtml(m)); feed.scrollTop = feed.scrollHeight; }
-          }
-        }
+      const feed = $('#kivaFeed');
+      for (const m of rows){
+        if (m.id > kivaLastId){ kivaLastId = m.id; if (feed){ feed.insertAdjacentHTML('beforeend', kivaMsgHtml(m)); feed.scrollTop = feed.scrollHeight; } }
       }
-    }catch(e){}
+    } catch(e){}
   }, 6000);
 }
 async function sendKiva(){
-  const inp = $('#kivaInput'); if(!inp) return;
-  const body = inp.value.trim(); if(!body) return;
+  const inp = $('#kivaInput'); if (!inp) return;
+  const body = inp.value.trim(); if (!body) return;
   inp.value = '';
-  try{ await api('/kiva', { body }); haptic(); }
-  catch(e){ toast(e.message,'bad'); inp.value = body; }
+  try { await api('/kiva', { body }); haptic(); }
+  catch(e){ toast(e.message, 'bad'); inp.value = body; }
 }
-async function pinKiva(messageId){
-  try{
-    const node = document.querySelector(`[data-mid="${messageId}"]`);
-    const pinned = node ? !node.classList.contains('pinned') : true;
-    await api('/kiva/pin', { id: Number(messageId), pinned });
-    if(node) node.classList.toggle('pinned', pinned);
-  }catch(e){ toast(e.message,'bad'); }
+async function pinKiva(id){
+  try { await api('/kiva/pin', { id: Number(id), pinned: true }); toast('Pinned'); }
+  catch(e){ toast(e.message, 'bad'); }
 }
 
-/* ================= WAR (patched render) ================= */
-let warState = null, warTimer = null, warData = null, selectedFront = 0;
-function stopWarTicker(){ if(warTimer){ clearInterval(warTimer); warTimer=null; } }
-function startWarTicker(endAt){
-  stopWarTicker();
-  const tick = ()=>{
-    const e = $('#warCd'); if(!e){ stopWarTicker(); return; }
-    const ms = endAt - Date.now();
-    e.textContent = ms<=0 ? 'resolving…' : fmtDur(ms);
-  };
-  tick();
-  warTimer = setInterval(tick, 1000);
-}
-function warWrap(box){
-  if (!warState || warState.wrap.parentNode !== box){
-    warState = { wrap: document.createElement('div'), mode: null };
-    box.replaceChildren(warState.wrap);
-  }
-  return warState.wrap;
-}
-function setMode(mode){
-  if (warState.mode !== mode){ warState.wrap.replaceChildren(); warState.mode = mode; }
-}
-async function renderWar(box){
-  const u = S.user;
-  const wrap = warWrap(box);
-  if(!u.tribe_id){
-    stopWarTicker(); setMode('no-tribe');
-    if (warState.rendered === 'no-tribe') return;
-    warState.rendered = 'no-tribe';
-    wrap.innerHTML = `<div class="empty"><span class="big">⚔️</span>
-      <h2 style="margin:0;color:var(--gold);font-weight:800">No banner to raise</h2>
-      <p class="tiny" style="margin-top:8px">You must belong to a tribe before you can wage war.</p></div>
-      <button class="btn btn-primary btn-shine btn-block" data-act="gotoTribe">Go to Tribe</button>`;
-    return;
-  }
-  if (!warData){
-    setMode('loading');
-    if (warState.rendered !== 'loading'){
-      warState.rendered = 'loading';
-      wrap.innerHTML = '<div class="skeleton"></div><div class="skeleton"></div>';
-    }
-  }
-  let war = null;
-  try{ war = (await api('/war')).war; }
-  catch(e){
-    if (TAB==='war'){
-      setMode('error');
-      if (warState.rendered !== 'error'){ warState.rendered = 'error'; wrap.innerHTML = '<p class="tiny">Could not reach the war drums.</p>'; }
-    }
-    return;
-  }
-  if (TAB !== 'war') return;
-  warData = war;
-  if (!war){ renderWarNone(wrap); return; }
-  if (war.status === 'resolved'){ renderWarDone(wrap, war); return; }
-  renderWarActive(wrap, war);
-}
-function renderWarNone(wrap){
-  stopWarTicker(); setMode('none');
-  const can = ['Chief','Head','Elder'].includes(S.user.role);
-  const stances = (S.config.war_stances||[]);
-  if (warState.rendered === 'none'){
-    const btn = wrap.querySelector('[data-act="declareWar"]');
-    if (btn){
-      btn.disabled = !can;
-      btn.className = 'btn ' + (can ? 'btn-danger btn-shine' : 'btn-stone') + ' btn-block';
-      btn.textContent = can ? '⚔️ Declare War' : 'Only Elders, Heads & the Chief may declare war';
-    }
-    return;
-  }
-  warState.rendered = 'none';
-  wrap.innerHTML = `
-  <div class="war-arena">
-    <div class="war-emblem"><div class="vs">WAR DRUMS</div>
-      <p class="tiny" style="margin:6px 0 14px">Declare war to be matched against a random rival tribe. Choose a stance first.</p></div>
-    <div class="stance-row">
-      ${stances.map(s=>`<button class="stance-card" data-act="pickStance" data-val="${esc(s.id)}">
-        <b>${esc(s.name)}</b><span>${esc(s.desc)}</span></button>`).join('')}
-    </div>
-    <div class="stance-chosen" id="stanceChosen" data-val="${esc((stances[0]||{}).id||'')}">Selected: <b>${esc((stances[0]||{}).name||'—')}</b></div>
-    <button class="btn ${can?'btn-danger btn-shine':'btn-stone'} btn-block" ${can?'data-act="declareWar"':'disabled'} style="margin-top:14px">
-      ${can ? '⚔️ Declare War' : 'Only Elders, Heads & the Chief may declare war'}
-    </button>
-  </div>
-  <div class="hd"><h2>Trials of War</h2><span class="sub">${S.challenges.length} possible</span></div>
-  ${S.challenges.map(c=>`<div class="card" style="padding:14px;margin-bottom:10px">
-    <div class="row" style="border:0;padding:0"><span style="font-size:1.7rem">${c.glyph}</span>
-      <div style="flex:1"><b style="color:var(--gold)">${esc(c.name)}</b>
-        <div class="tiny">${esc(c.desc)}</div></div>
-      <span class="pill pill-blood">${c.days}d · ${c.stake}%</span></div></div>`).join('')}`;
-}
-function renderWarActive(wrap, war){
-  const mineA = war.mine === 'attacker';
-  const me = mineA ? war.attacker : war.defender;
-  const foe = mineA ? war.defender : war.attacker;
-  const fronts = war.fronts || [];
-  const momentum = war.momentum || [];
-  const legendary = war.legendary;
-  const sameWar = warState.rendered === 'active' && warState.warId === war.id;
-  if (!sameWar){
-    setMode('active'); warState.rendered = 'active'; warState.warId = war.id; selectedFront = 0;
-    const meMom = momentum.find(m => Number(m.tribe_id) === Number(me.id)) || { tokens:0, on_rout:false };
-    const foeMom = momentum.find(m => Number(m.tribe_id) === Number(foe.id)) || { tokens:0, on_rout:false };
-    wrap.innerHTML = `
-    <div class="war-arena">
-      <div class="war-emblem"><div class="vs">⚔️ WAR ⚔️</div>
-        <div class="war-meta-line"><span class="pill pill-gold">Stance: ${esc(war.stance||'—')}</span>${war.cry_used?`<span class="pill pill-blood">Cry raised</span>`:''}</div>
-      </div>
-      <div class="versus">
-        <div class="war-totem"><div class="tm">${artSvg(me.crest)}</div><b>${esc(me.name)}</b></div>
-        <div class="clash">🔥</div>
-        <div class="war-totem foe"><div class="tm">${artSvg(foe.crest)}</div><b>${esc(foe.name)}</b></div>
-      </div>
-      <div class="momentum-row">
-        <div class="mom-pill ${meMom.on_rout?'rout':''}" data-war="me-mom">
-          <span class="mom-tok">${'●'.repeat(Math.min(6, meMom.tokens||0))}${'○'.repeat(Math.max(0, 6-(meMom.tokens||0)))}</span>
-          <b>${esc(me.name)}</b>${meMom.on_rout?' <span class="rout-tag">ON ROUT</span>':''}
-        </div>
-        <div class="mom-pill ${foeMom.on_rout?'rout':''}" data-war="foe-mom">
-          <span class="mom-tok">${'●'.repeat(Math.min(6, foeMom.tokens||0))}${'○'.repeat(Math.max(0, 6-(foeMom.tokens||0)))}</span>
-          <b>${esc(foe.name)}</b>${foeMom.on_rout?' <span class="rout-tag">ON ROUT</span>':''}
-        </div>
-      </div>
-      <div class="legend-row" id="legendRow" style="${legendary?'':'display:none'}">
-        <span class="leg-ico">⚡</span>
-        <span class="leg-text">LEGENDARY — all actions ×${legendary?legendary.multiplier:'3'}</span>
-      </div>
-      <div class="wmeta">
-        <div class="box"><b id="warCd" class="cd-live">…</b><span>Time left</span></div>
-        <div class="box"><b>${war.stake_pct||20}%</b><span>Stake</span></div>
-      </div>
-    </div>
-    <div class="fronts-wrap" id="frontsWrap">
-      ${fronts.map((f, i) => frontHtml(f, i, me, foe)).join('')}
-    </div>
-    <div class="war-action-panel">
-      <div class="wact-head">Push a front</div>
-      <div class="wact-front-pick" id="frontPick">
-        ${fronts.map((f, i) => `<button class="fp-btn ${i===0?'active':''}" data-act="pickFront" data-val="${i}">${esc(f.name)}</button>`).join('')}
-      </div>
-      <div class="wact-btns">
-        <button class="wact-btn" data-act="warAction" data-val="rally"><b>Rally</b><span>+25 pts</span></button>
-        <button class="wact-btn" data-act="warAction" data-val="chant"><b>Chant</b><span>+150 pts</span></button>
-        <button class="wact-btn raid" data-act="warAction" data-val="raid"><b>Raid</b><span>+800 pts</span></button>
-      </div>
-      <div class="wact-foot">Spend from the tribe's war chest.</div>
-    </div>
-    <div class="war-extra-row">
-      <button class="btn btn-ghost" data-act="openChronicle">📜 Chronicle</button>
-      <button class="btn btn-ghost" data-act="openLeaderboard">🏅 Top warriors</button>
-      ${['Chief','Head','Elder'].includes(S.user.role) && !war.cry_used ? `<button class="btn btn-primary" data-act="openCry">📣 Raise a Cry</button>` : ''}
-    </div>`;
-    startWarTicker(new Date(war.end_at).getTime());
-  }
-  fronts.forEach((f, i) => {
-    const r = wrap.querySelector(`[data-front="${i}"]`);
-    if(!r) return;
-    const aPct = clamp((f.attacker_score / Math.max(1, f.attacker_score + f.defender_score)) * 100, 0, 100);
-    const aBar = r.querySelector('[data-fr="a"]');
-    const dBar = r.querySelector('[data-fr="d"]');
-    const aScore = r.querySelector('[data-fr="as"]');
-    const dScore = r.querySelector('[data-fr="ds"]');
-    if(aBar) aBar.style.width = aPct + '%';
-    if(dBar) dBar.style.width = (100 - aPct) + '%';
-    if(aScore) aScore.textContent = fmt(f.attacker_score);
-    if(dScore) dScore.textContent = fmt(f.defender_score);
-  });
-}
-function frontHtml(f, i, me, foe){
-  const aPct = clamp((f.attacker_score / Math.max(1, f.attacker_score + f.defender_score)) * 100, 0, 100);
-  return `<div class="front-card" data-front="${i}">
-    <div class="front-head">
-      <span class="front-name">${esc(f.name)}</span>
-      <span class="front-scores"><b data-fr="as">${fmt(f.attacker_score)}</b> vs <b data-fr="ds">${fmt(f.defender_score)}</b></span>
-    </div>
-    <div class="front-bar"><i data-fr="a" style="width:${aPct}%"></i><i data-fr="d" style="width:${100-aPct}%"></i></div>
-    ${f.fortify_until && new Date(f.fortify_until).getTime() > Date.now() ? `<div class="front-fortified">🛡️ Fortified</div>` : ''}
-  </div>`;
-}
-function renderWarDone(wrap, war){
-  stopWarTicker();
-  const myId = S.tribe ? Number(S.tribe.id) : null;
-  const won = war.winner_id && Number(war.winner_id) === myId;
-  const draw = !war.winner_id;
-  const mineA = war.mine === 'attacker';
-  const foe = mineA ? war.defender : war.attacker;
-  const big = draw?'🤝':won?'🏆':'💀';
-  setMode('done');
-  if (warState.rendered === 'done' && warState.warId === war.id) return;
-  warState.rendered = 'done'; warState.warId = war.id;
-  wrap.innerHTML = `
-  <div class="war-arena" style="text-align:center">
-    <div class="war-emblem"><div class="vs">${draw?'STALEMATE':won?'VICTORY':'DEFEAT'}</div></div>
-    <span style="font-size:3.2rem;display:block;margin:6px 0 4px">${big}</span>
-    <p class="tiny" style="max-width:280px;margin:6px auto 0">${draw?'Neither fire could break the other.':won
-      ?('Your tribe crushed '+esc(foe.name)+', seizing '+fmt(war.reward_ember)+' Ember and '+fmt(war.tribute||0)+' tribute.')
-      :('Your tribe fell to '+esc(foe.name)+', paying '+fmt(war.tribute||0)+' Ember in tribute.')}</p>
-  </div>
-  <button class="btn btn-primary btn-shine btn-block" data-act="declareWar" ${['Chief','Head','Elder'].includes(S.user.role)?'':'disabled'}>⚔️ Rally for a New War</button>
-  <button class="btn btn-ghost btn-block" data-act="openChronicle" style="margin-top:8px">📜 View Chronicle</button>`;
-}
-function pickStance(btn, id){
-  $$('.stance-card').forEach(b=>b.classList.toggle('active', b.dataset.val===id));
-  const c = $('#stanceChosen');
-  if(c){ c.dataset.val = id; const s = (S.config.war_stances||[]).find(x=>x.id===id); if(s) c.innerHTML = 'Selected: <b>'+esc(s.name)+'</b>'; }
-  haptic('light');
-}
+/* ---------- War actions ---------- */
+let selectedFront = 0;
 function pickFront(btn, idx){
   selectedFront = Number(idx);
-  $$('.fp-btn').forEach(b=>b.classList.toggle('active', Number(b.dataset.val)===selectedFront));
+  $$('.fp-btn').forEach(b => b.classList.toggle('active', Number(b.dataset.val) === selectedFront));
   haptic('light');
 }
 async function actWarAction(btn, kind){
-  await doAct(btn, async () => {
+  if (btn) btn.disabled = true;
+  try {
     const r = await api('/war/action', { front: selectedFront, kind });
-    haptic('heavy'); burstAt(btn, 18); popAt(btn, '+'+fmt(r.points));
-    toast(`${kind} · +${fmt(r.points)} on ${r.front}${r.multiplier>1?' (×'+r.multiplier.toFixed(2)+')':''}`,'good');
-    warData = null; await refresh(); renderScreen('war');
-  });
+    haptic('heavy'); burstAt(btn, 18); fxPopAt(btn, '+' + fmt(r.points));
+    toast(kind + ' · +' + fmt(r.points), 'good');
+    loadWar();
+  } catch(e){ toast(e.message, 'bad'); }
+  finally { if (btn) btn.disabled = false; }
 }
-function openCrySheet(){
-  const cries = (S.config.war_cries||[]);
-  sheet(`<h3>Raise a War Cry</h3><div class="sub">Announced in both tribes' Kivas. One per war.</div>
-    ${cries.map(c=>`<button class="cry-card" data-act="doCry" data-val="${esc(c.id)}">
-      <b>${esc(c.name)}</b><span>${esc(c.desc||'')}</span>
-      <span class="cry-cost">${fmt(c.cost)} Ember</span>
-    </button>`).join('')}
-    <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Cancel</button>`);
-}
-async function doCry(btn, id){
-  await doAct(btn, async () => {
-    await api('/war/cry', { cry: id });
-    haptic('heavy'); toast('War Cry raised!','good'); closeSheet();
-    warData = null; await refresh(); renderScreen('war');
-  });
-}
-async function openChronicle(){
-  try{
-    const d = await api('/war/chronicle');
-    const rows = d.chronicles || [];
-    sheet(`<div class="chronicle-sheet"><h3>Chronicle</h3><div class="sub">Permanent record of your wars.</div>
-      ${rows.length ? rows.map(c=>`<div class="chron-card">
-        <div class="chron-top"><b>${esc(c.attacker_name||'?')}</b> vs <b>${esc(c.defender_name||'?')}</b></div>
-        <div class="chron-scores">${fmt(c.score_a||0)} — ${fmt(c.score_d||0)}</div>
-        <div class="tiny">Stance ${esc(c.stance||'—')} · Tribute ${fmt(c.tribute||0)}</div>
-      </div>`).join('') : '<p class="tiny">No wars yet.</p>'}
-      <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Close</button>
-    </div>`);
-  }catch(e){ toast(e.message,'bad'); }
-}
-async function openLeaderboard(){
-  try{
-    const d = await api('/war/leaderboard');
-    const rows = d.rows || [];
-    sheet(`<div class="chronicle-sheet"><h3>Top Warriors</h3><div class="sub">Contribution in the current war.</div>
-      ${rows.length ? rows.map((r,i)=>`<div class="chron-card">
-        <div class="chron-top">#${i+1} <b>${esc(r.first_name||r.username||'Kin')}</b> <span class="pill pill-blood">${esc(r.side)}</span></div>
-        <div class="chron-scores">${fmt(r.points)} pts</div>
-      </div>`).join('') : '<p class="tiny">No actions yet.</p>'}
-      <button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:10px">Close</button>
-    </div>`);
-  }catch(e){ toast(e.message,'bad'); }
-}
-async function actDeclare(btn){
-  await doAct(btn, async () => {
-    const chosen = ($('#stanceChosen')||{}).dataset?.val || ((S.config.war_stances||[{}])[0].id);
+async function actDeclare(){
+  try {
+    const chosen = 'skirmish';
     const r = await api('/war/declare', { stance: chosen });
-    haptic('heavy'); toast('War declared against '+r.war.defender.name+'!','good');
-    warData = null; warState.rendered = null; await refresh(); renderScreen('war');
-  });
+    haptic('heavy');
+    toast('War declared against ' + r.war.defender.name + '!', 'good');
+    await refresh(); loadWar();
+  } catch(e){ toast(e.message, 'bad'); }
 }
 
-/* ================= RANKS (patched render) ================= */
-let ranksState = null;
-function buildRanksScreen(){
-  const p = PERF || null;
-  const e = (tag, props, ...kids) => p ? p.h(tag, props, ...kids) : (()=>{
-    const n=document.createElement(tag);
-    if(props){ for(const k in props){ if(k==='class') n.className=props[k]; else if(k==='text') n.textContent=props[k]; else n.setAttribute(k, props[k]); }}
-    for(const c of kids.flat()) if(c) n.appendChild(typeof c==='string'?document.createTextNode(c):c);
-    return n;
-  })();
-  const list = e('div', { class:'ranks-list', id:'ranksList' });
-  const root = e('div', { class:'ranks-wrap' }, e('div', { class:'hd' }, e('h2', { text:'Hall of Tribes' }), e('span', { class:'sub', text:'ranked by loyalty' })), list);
-  return { root, listEl: list, rows: new Map() };
+/* ---------- payments ---------- */
+async function buyStars(itemId){
+  if (!TG){ toast('Open in Telegram to pay with Stars', 'warn'); return; }
+  try {
+    const link = (await api('/stars/invoice', { itemId })).link;
+    haptic('medium');
+    TG.openInvoice(link, async status => {
+      if (status === 'paid'){ toast('Payment complete!', 'good'); setTimeout(refresh, 1400); }
+      else if (status === 'failed') toast('Payment failed', 'bad');
+      else if (status === 'cancelled') toast('Payment cancelled', 'warn');
+    });
+  } catch(e){ toast(e.message, 'bad'); }
 }
-function buildRanksRow(t, i, top, mineId){
-  const p = PERF || null;
-  const e = (tag, props, ...kids) => p ? p.h(tag, props, ...kids) : (()=>{
-    const n=document.createElement(tag);
-    if(props){ for(const k in props){ if(k==='class') n.className=props[k]; else if(k==='text') n.textContent=props[k]; else n.setAttribute(k, props[k]); }}
-    for(const c of kids.flat()) if(c) n.appendChild(typeof c==='string'?document.createTextNode(c):c);
-    return n;
-  })();
-  const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':('#'+(i+1));
-  const isMe = mineId && Number(t.id)===Number(mineId);
-  const pct = clamp(Number(t.loyalty_total)/top*100, 4, 100);
-  const name = e('b', { class:'rk-name', html:'' });
-  const meta = e('div', { class:'tiny' });
-  const score = e('b', { class:'rk-score' });
-  const barFill = e('i', { class:'rk-fill', style:{ width: pct.toFixed(1)+'%' } });
-  const bar = e('div', { class:'bar' }, barFill);
-  const avatar = e('span', { class:'avatar', text: medal });
-  const info = e('div', { style:{ flex:'1', minWidth:'0' } }, name, meta);
-  const topRow = e('div', { class:'row', style:{ border:'0', padding:'0 0 10px' } }, avatar, info, score);
-  const card = e('div', { class:'card', style:{ padding:'14px', marginBottom:'10px', borderColor: isMe ? 'color-mix(in srgb, var(--gold) 40%, transparent)' : '' } }, topRow, bar);
-  return { card, name, meta, score, barFill, avatar };
-}
-function patchRanksRow(row, t, i, top, mineId){
-  const p = PERF || null;
-  const setText = p ? p.setText : (el,v)=>{ if(el.textContent!==String(v)) el.textContent=String(v); };
-  const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':('#'+(i+1));
-  const isMe = mineId && Number(t.id)===Number(mineId);
-  const pct = clamp(Number(t.loyalty_total)/top*100, 4, 100);
-  setText(row.avatar, medal);
-  row.name.innerHTML = `${esc(t.name)}${isMe?' · you':''}`;
-  setText(row.meta, `${fmt(t.members)} kin · 🏆${t.wins||0} 💀${t.losses||0} · Pyre ${fmt(t.treasury)}`);
-  setText(row.score, fmt(t.loyalty_total));
-  if (row.barFill.style.width !== (pct.toFixed(1)+'%')) row.barFill.style.width = pct.toFixed(1)+'%';
-  row.card.style.borderColor = isMe ? 'color-mix(in srgb, var(--gold) 40%, transparent)' : '';
-}
-function renderRanks(box){
-  if (!PERF){
-    const lb = S.leaderboard||[];
-    const top = lb.length ? (Number(lb[0].loyalty_total)||1) : 1;
-    const mine = S.tribe ? Number(S.tribe.id) : null;
-    box.innerHTML = `<div class="hd"><h2>Hall of Tribes</h2><span class="sub">ranked by loyalty</span></div>
-    ${lb.length ? lb.map((t,i)=>{
-      const pct = clamp(Number(t.loyalty_total)/top*100, 4, 100);
-      const me = mine && mine===Number(t.id);
-      const medal = i===0?'🥇':i===1?'🥈':i===2?'🥉':('#'+(i+1));
-      return `<div class="card" style="padding:14px;margin-bottom:10px;${me?'border-color:color-mix(in srgb, var(--gold) 40%, transparent)':''}">
-        <div class="row" style="border:0;padding:0 0 10px">
-          <span class="avatar">${medal}</span>
-          <div style="flex:1;min-width:0"><b style="color:var(--gold)">${esc(t.name)}${me?' · you':''}</b>
-            <div class="tiny">${fmt(t.members)} kin · 🏆${t.wins||0} 💀${t.losses||0} · Pyre ${fmt(t.treasury)}</div></div>
-          <b style="color:var(--gold);white-space:nowrap">${fmt(t.loyalty_total)}</b></div>
-        <div class="bar"><i style="width:${pct}%"></i></div></div>`;
-    }).join('') : '<div class="empty"><span class="big">🏆</span><p class="tiny">No tribes have risen yet.</p></div>'}`;
-    return;
-  }
-  const lb = S.leaderboard || [];
-  const top = lb.length ? (Number(lb[0].loyalty_total)||1) : 1;
-  const mine = S.tribe ? Number(S.tribe.id) : null;
-  if (!ranksState){ ranksState = buildRanksScreen(); box.replaceChildren(ranksState.root); }
-  if (!lb.length){
-    ranksState.listEl.replaceChildren(PERF.h('div', { class:'empty' }, PERF.h('span', { class:'big', text:'🏆' }), PERF.h('p', { class:'tiny', text:'No tribes have risen yet.' })));
-    ranksState.rows.clear(); return;
-  }
-  const seen = new Set();
-  lb.forEach((t, i) => {
-    seen.add(String(t.id));
-    let row = ranksState.rows.get(String(t.id));
-    if (!row){
-      const built = buildRanksRow(t, i, top, mine);
-      ranksState.rows.set(String(t.id), built);
-      ranksState.listEl.appendChild(built.card);
-      patchRanksRow(built, t, i, top, mine);
-    } else {
-      patchRanksRow(row, t, i, top, mine);
-      const expectedNode = ranksState.listEl.children[i];
-      if (expectedNode !== row.card) ranksState.listEl.insertBefore(row.card, expectedNode || null);
-    }
-  });
-  for (const [id, row] of [...ranksState.rows]){
-    if (!seen.has(id)){ row.card.remove(); ranksState.rows.delete(id); }
-  }
+async function shopTab(btn, key){
+  $$('.shop-tab').forEach(b => b.classList.toggle('active', b.dataset.val === key));
+  $$('.shop-section').forEach(s => s.style.display = (s.dataset.section === key ? '' : 'none'));
 }
 
-/* ---------- STORE (unchanged) ---------- */
-const ART_FOR = { spark:'flame', flame:'torch', blaze:'firestone', inferno:'sun', charm:'charm', auto:'torch', firestone:'firestone', boneidol:'idol', sundisc:'sun', moonshard:'moon', name_color_ember:'flame', name_color_jade:'flame', name_color_void:'moon', glow_ember:'flame', glow_frost:'moon', war_chest_topup:'firestone', rally_burst:'flame' };
-function storeSectionFor(key, it){
-  if(key==='starter_bundle') return 'featured';
-  if(key.startsWith('name_color_')||key.startsWith('glow_')) return 'cosmetics';
-  if(key==='pyreboost') return 'boosts';
-  if(key==='war_chest_topup'||key==='rally_burst') return 'war';
-  if(['firestone','boneidol','sundisc','moonshard'].includes(key)) return 'relics';
-  return 'ember';
+/* ---------- refresh ---------- */
+async function refresh(){
+  try {
+    S = await api('/state');
+    applyPalette();
+    renderAll();
+  } catch(e){ console.warn(e); }
 }
-function renderStore(box){
-  const p = S.payments;
-  const star = p.starItems||{};
-  const ton = p.tonItems||{};
-  const featuredKey = 'starter_bundle';
-  const featured = star[featuredKey];
-  const sections = { ember:[], relics:[], boosts:[], war:[], cosmetics:[] };
-  for(const [k,it] of Object.entries(star)){
-    if(k===featuredKey) continue;
-    const s = storeSectionFor(k, it);
-    if(sections[s]) sections[s].push([k,it]);
-  }
-  box.innerHTML = `<div class="hd"><h2>Trading Post</h2><span class="sub">⭐ Stars · ◈ TON</span></div>
-    ${!TG ? '<p class="tiny" style="margin-bottom:12px">Open inside Telegram to pay with Stars.</p>' : ''}
-    ${featured ? `<div class="featured"><span class="ft-badge">ONE-TIME</span><div class="ft-art">${artSvg('firestone')}</div>
-      <h3>${esc(featured.title)}</h3><p>${esc(featured.desc)}</p>
-      <div class="ft-price"><button class="b" data-act="buyStars" data-val="${featuredKey}">⭐ ${fmt(featured.stars)}</button></div>
-    </div>` : ''}
-    <div class="shop-tabs">
-      ${Object.keys(sections).filter(s=>sections[s].length).map((s,i)=>`<button class="shop-tab ${i===0?'active':''}" data-act="shopTab" data-val="${s}">${({ember:'Ember Packs',relics:'Relics',boosts:'Tribe Boosts',war:'War',cosmetics:'Cosmetics'})[s]}</button>`).join('')}
-    </div>
-    ${Object.entries(sections).map(([s,arr])=>`
-      <div class="shop-section" data-section="${s}" style="${s==='ember'?'':'display:none'}">
-        <div class="shop-rail">${arr.map(([k,it])=>{
-          const hasTon = p.tonEnabled && ton[k];
-          const rar = (it.grant&&it.grant.relic)?'<span class="rar pill pill-gold">Relic</span>':(it.grant&&it.grant.cosmetic)?'<span class="rar pill pill-jade">Look</span>':(s==='war')?'<span class="rar pill pill-blood">War</span>':'';
-          return `<div class="shop-card">${rar}
-            <div class="sc-art">${artSvg(ART_FOR[k]||'flame')}</div>
-            <b>${esc(it.title)}</b><p>${esc(it.desc)}</p>
-            <div class="sc-price"><button class="b star" data-act="buyStars" data-val="${k}">⭐ ${fmt(it.stars)}</button>
-            ${hasTon?`<button class="b ton" data-act="buyTon" data-val="${k}">◈ ${ton[k].ton}</button>`:''}</div>
-          </div>`;
-        }).join('') || '<p class="tiny">Coming soon.</p>'}</div>
-      </div>`).join('')}
-    <p class="tiny" style="text-align:center;margin-top:16px">Secured by Telegram Stars &amp; the TON blockchain.</p>`;
-}
-function shopTab(btn, key){
-  $$('.shop-tab').forEach(b=>b.classList.toggle('active', b.dataset.val===key));
-  $$('.shop-section').forEach(s=>s.style.display = (s.dataset.section===key ? '' : 'none'));
-}
+window.refresh = refresh;
 
-let bonfireTimer = null;
-function startBonfireTicker(){
-  if(bonfireTimer) clearInterval(bonfireTimer);
-  bonfireTimer = setInterval(renderBonfire, 1000);
-  renderBonfire();
-}
-function renderBonfire(){
-  const bf = S && S.bonfire;
-  const node = $('#bonfireBanner'); if(!node) return;
-  if(!bf){ node.style.display='none'; return; }
-  const end = new Date(bf.end_at).getTime();
-  const ms = end - Date.now();
-  if(ms <= 0){ node.style.display='none'; return; }
-  node.style.display='flex';
-  node.innerHTML = `<span class="bf-ico">🔥</span>
-    <span class="bf-text"><b>${esc(bf.title)}</b> · ${esc(bf.metric)} ×${bf.multiplier}</span>
-    <span class="bf-cd" id="bfCd">${fmtDur(ms)}</span>`;
-}
-let pushTimer = null;
-function startPushPoller(){
-  if(pushTimer) return;
-  pushTimer = setInterval(()=>{ if(document.visibilityState==='visible') refresh(); }, 45000);
-}
-
-/* ---------- action registry ---------- */
+/* =====================================================================
+   Action registry
+===================================================================== */
 const ACTS = {
-  tapFire:   (b)=>tapFire(b),
-  ash:       actAsh,
-  trial:     actTrial,
-  holdStart: (b,v)=>holdStart(b,v),
-  siftPick:  (b,v)=>doSift(b, v),
-  share:     actShare,
-  openCreate, pickName, pickPalette, pickBanner,
-  doCreate, join: actJoin, leave: actLeave,
-  openDonate, setDon, doDonate,
-  openKiva, closeKiva, sendKiva, pinKiva,
-  upgrade:   actUpgrade,
-  buyStars:  (b,v)=>buyStars(v),
-  buyTon:    (b,v)=>buyTon(v),
-  declareWar:actDeclare,
-  pickStance, pickFront,
-  warAction: actWarAction,
-  openCry:   ()=>openCrySheet(),
-  doCry,
-  openChronicle, openLeaderboard,
-  gotoTribe: ()=>setTab('tribe'),
+  peel:        (btn, tab) => peelTo(tab, btn.closest('.dash-card')),
+  tapFire:     (btn) => tapFire(btn),
+  ash:         actAsh,
+  trial:       actTrial,
+  holdStart:   (btn, slug) => holdStart(btn, slug),
+  siftPick:    (btn, i) => doSift(btn, i),
+  share:       actShare,
+  openCreate, doCreate: (btn) => window.__doCreate && window.__doCreate(btn),
+  pickName:    (btn, id) => window.__pickName && window.__pickName(id),
+  join:        actJoin, leave: actLeave,
+  openDonate, doDonate,
+  openKiva, sendKiva, pinKiva,
+  upgrade:     actUpgrade,
+  buyStars:    (btn, id) => buyStars(id),
+  declareWar:  actDeclare,
+  pickFront,
+  warAction:   actWarAction,
   shopTab,
-  closeSheet:()=>closeSheet(),
-  bgClose:(b,v,e)=>{ if(e&&e.target&&e.target.classList&&e.target.classList.contains('sheet-bg')) closeSheet(); },
+  closeSheet:  () => closeSheet(),
+  bgClose:     (btn, v, e) => { if (e && e.target && e.target.classList && e.target.classList.contains('sheet-bg')) closeSheet(); },
 };
 
+/* =====================================================================
+   Init
+===================================================================== */
 function init(){
-  document.addEventListener('click', e=>{
+  document.addEventListener('click', e => {
     const b = e.target.closest('[data-act]');
-    if(b){ const f = ACTS[b.dataset.act]; if(f){ f(b, b.dataset.val, e); return; } }
-    const nav = e.target.closest('.nav-i');
-    if(nav){ haptic(); setTab(nav.dataset.tab); return; }
-    if(e.target.closest('#crestBtn')){ setTab('tribe'); return; }
-    if(e.target.closest('#tonBtn')){ tonToggle(); return; }
+    if (b){ const f = ACTS[b.dataset.act]; if (f){ f(b, b.dataset.val, e); return; } }
+    const card = e.target.closest('.dash-card');
+    if (card){ peelTo(card.dataset.tab, card); return; }
   });
-  document.addEventListener('pointerdown', e=>{
-    const btn = e.target.closest('.hold-btn');
-    if(!btn) return;
-    e.preventDefault();
-    holdStart(btn, btn.dataset.val);
+
+  document.addEventListener('pointerdown', e => {
+    const holdBtn = e.target.closest('.hold-btn');
+    if (holdBtn){ e.preventDefault(); holdStart(holdBtn, holdBtn.dataset.val); return; }
   });
   document.addEventListener('pointerup', holdCancel);
   document.addEventListener('pointercancel', holdCancel);
-  document.addEventListener('pointerleave', holdCancel);
-  const rb = $('#retryBtn'); if(rb) rb.addEventListener('click', ()=>{ setBoot('Waking the ancestors…'); boot(); });
-  const gr = $('#gateRetry'); if(gr) gr.addEventListener('click', ()=>{ $('#gate').style.display='none'; setBoot('Waking…'); boot(); });
-  setInterval(()=>{
-    if(TAB==='war' && document.visibilityState==='visible' && S && S.user && S.user.tribe_id) renderScreen('war');
-  }, 20000);
+
+  const rb = $('#retryBtn'); if (rb) rb.addEventListener('click', () => boot());
+  const gr = $('#gateRetry'); if (gr) gr.addEventListener('click', () => boot());
+
   boot();
+  buildNav();
 }
+
 init();
+
+/* End of file. Last line should be: init(); */

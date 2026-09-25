@@ -1,106 +1,42 @@
-// =====================================================================
-// TRIBES — perf.js
-// Small DOM helpers + device-tier detection.
-// Exposes window.__tribes_perf.* for app.js to consume.
-// If this script fails to load, app.js falls back to innerHTML rendering.
-// =====================================================================
+/* =====================================================================
+   TRIBES — Device tier detection.
+   Detects ultra / high / mid / low. Refines with a 3-second frame probe.
+   Respects user override, battery level, and reduced-motion.
+   Sets data-tier on <html>. Exposes window.__tribes_perf.
+===================================================================== */
 (function(){
 'use strict';
 
-/* ---------- element creation ---------- */
-function h(tag, props, ...children){
-  const el = document.createElement(tag);
-  if (props){
-    for (const k in props){
-      if (k === 'class') el.className = props[k];
-      else if (k === 'style' && typeof props[k] === 'object'){
-        for (const sk in props[k]) el.style[sk] = props[k][sk];
-      }
-      else if (k === 'text') el.textContent = props[k];
-      else if (k === 'html') el.innerHTML = props[k];
-      else if (k.startsWith('on') && typeof props[k] === 'function'){
-        el.addEventListener(k.slice(2).toLowerCase(), props[k]);
-      }
-      else if (k === 'dataset' && typeof props[k] === 'object'){
-        for (const dk in props[k]) el.dataset[dk] = props[k][dk];
-      }
-      else el.setAttribute(k, props[k]);
-    }
+const STORAGE_KEY = 'tribes.tier';
+
+/* ---------- static detection ---------- */
+function detectStatic(){
+  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches){
+    return 'low';
   }
-  for (const c of children.flat()){
-    if (c == null || c === false) continue;
-    el.appendChild(typeof c === 'string' || typeof c === 'number'
-      ? document.createTextNode(String(c))
-      : c);
-  }
-  return el;
-}
-
-/* ---------- attribute patching ---------- */
-// Only sets properties that changed. Avoids reflow when nothing changed.
-function patch(el, props){
-  if (!el || !props) return;
-  for (const k in props){
-    const v = props[k];
-    if (k === 'text'){
-      if (el.textContent !== String(v)) el.textContent = String(v);
-    } else if (k === 'class'){
-      if (el.className !== v) el.className = v;
-    } else if (k === 'style' && typeof v === 'object'){
-      for (const sk in v){
-        const cur = el.style[sk];
-        const next = String(v[sk]);
-        if (cur !== next) el.style[sk] = next;
-      }
-    } else if (k === 'html'){
-      if (el.innerHTML !== v) el.innerHTML = v;
-    } else if (k.startsWith('data-')){
-      const dk = k.slice(5).replace(/-([a-z])/g, (_, c)=>c.toUpperCase());
-      if (el.dataset[dk] !== String(v)) el.dataset[dk] = String(v);
-    } else if (k.startsWith('on') && typeof v === 'function'){
-      // listeners are attached once in h() and not patched
-    } else {
-      const cur = el.getAttribute(k);
-      const next = String(v);
-      if (cur !== next) el.setAttribute(k, next);
-    }
-  }
-}
-
-/* ---------- cheap text setter ---------- */
-function setText(el, v){
-  if (!el) return;
-  const s = String(v);
-  if (el.textContent !== s) el.textContent = s;
-}
-
-/* ---------- mount / unmount ---------- */
-function mount(parent, node){
-  if (!parent || !node) return;
-  // Replace all children of parent with node in one operation.
-  parent.replaceChildren(node);
-}
-
-function unmount(node){
-  if (node && node.parentNode) node.parentNode.removeChild(node);
-}
-
-/* ---------- device tier detection ---------- */
-function detectTier(){
-  const override = localStorage.getItem('tribes.perf');
-  if (override === 'high' || override === 'mid' || override === 'low') return override;
-
-  if (window.matchMedia && window.matchMedia('(prefers-reduced-motion: reduce)').matches) return 'low';
-
   const ua = navigator.userAgent || '';
   const isIOS = /iPhone|iPad|iPod/.test(ua);
-  const isAndroid = /Android/.test(ua);
+
+  // WebGL renderer is the strongest signal
+  let gpu = '';
+  try {
+    const c = document.createElement('canvas');
+    const gl = c.getContext('webgl') || c.getContext('experimental-webgl');
+    if (gl){
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      if (ext) gpu = gl.getParameter(ext.UNMASKED_RENDERER_WEBGL) || '';
+    }
+  } catch(e){}
+
+  if (/Adreno (7\d\d|8\d\d)|Apple A1[5-9]|Mali-G7\d\d|Immortalis|Xclipse/i.test(gpu)) return 'ultra';
+  if (/Adreno 6\d\d|Apple A1[2-4]|Mali-G5[27]|Mali-G68/i.test(gpu)) return 'high';
+  if (/Adreno 5\d\d|Apple A(9|10|11)|Mali-G51|Mali-T8/i.test(gpu)) return 'mid';
+  if (/Adreno (3|4)\d\d|Mali-4|PowerVR SGX/i.test(gpu)) return 'low';
+
+  // Fallback heuristics
   const cores = navigator.hardwareConcurrency || 2;
   const mem = navigator.deviceMemory || 0;
-
-  if (isIOS) return (mem && mem <= 2) ? 'mid' : 'high';
-  if (!isAndroid) return 'high';
-
+  const dpr = window.devicePixelRatio || 1;
   let score = 0;
   if (cores >= 8) score += 2;
   else if (cores >= 6) score += 1;
@@ -108,18 +44,58 @@ function detectTier(){
   if (mem >= 6) score += 2;
   else if (mem >= 4) score += 1;
   else if (mem && mem <= 2) score -= 1;
+  if (dpr >= 3) score += 1;
+  if (isIOS && !/iPhone(6|7|8|SE)/.test(ua)) score += 1;
 
   if (score >= 3) return 'high';
   if (score >= 0) return 'mid';
   return 'low';
 }
 
-function applyTier(tier){
-  document.documentElement.setAttribute('data-perf', tier);
+/* ---------- user override + battery + network adjustments ---------- */
+async function applyOverridesAndContext(tier){
+  // User override wins above all
+  const override = localStorage.getItem(STORAGE_KEY);
+  if (override && override !== 'auto'){
+    return override;
+  }
+
+  // Network: saveData or 2g → downgrade one tier
+  try {
+    const conn = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (conn){
+      if (conn.saveData) tier = downgrade(tier);
+      const et = conn.effectiveType || '';
+      if (et === '2g' || et === 'slow-2g') tier = downgrade(tier);
+    }
+  } catch(e){}
+
+  // Battery: <20% and not charging → downgrade one tier
+  try {
+    if (navigator.getBattery){
+      const b = await navigator.getBattery();
+      if (!b.charging && b.level < 0.2) tier = downgrade(tier);
+    }
+  } catch(e){}
+
+  return tier;
 }
 
-/* ---------- frame-time probe (downgrades only) ---------- */
-function measureAndRefine(){
+function downgrade(t){
+  if (t === 'ultra') return 'high';
+  if (t === 'high')  return 'mid';
+  if (t === 'mid')   return 'low';
+  return 'ultra-saver';
+}
+
+/* ---------- apply ---------- */
+function applyTier(tier){
+  document.documentElement.setAttribute('data-tier', tier);
+  document.documentElement.setAttribute('data-perf', tier); // legacy compat
+}
+
+/* ---------- frame-time refinement (never upgrades, only downgrades) ---------- */
+function measureAndRefine(startingTier){
   let frames = 0, longFrames = 0;
   const start = performance.now();
   let last = start;
@@ -127,16 +103,21 @@ function measureAndRefine(){
     const dt = now - last; last = now;
     frames++;
     if (dt > 22) longFrames++;
-    if (now - start < 2000) requestAnimationFrame(tick);
-    else {
+    if (now - start < 3000){
+      requestAnimationFrame(tick);
+    } else {
       const avgFps = frames / ((now - start) / 1000);
       const longPct = longFrames / frames;
-      const current = localStorage.getItem('tribes.perf.resolved') || detectTier();
-      let next = current;
-      if (avgFps < 30) next = 'low';
-      else if ((avgFps < 42 || longPct > 0.25) && current === 'high') next = 'mid';
-      if (next !== current){
-        localStorage.setItem('tribes.perf.resolved', next);
+      let next = startingTier;
+      if (avgFps < 25 || longPct > 0.4){
+        next = startingTier === 'ultra' ? 'mid'
+             : startingTier === 'high'  ? 'mid'
+             : 'low';
+      } else if (avgFps < 40 || longPct > 0.2){
+        next = startingTier === 'ultra' ? 'high' : 'mid';
+      }
+      if (next !== startingTier){
+        localStorage.setItem('tribes.tier.resolved', next);
         applyTier(next);
       }
     }
@@ -144,55 +125,36 @@ function measureAndRefine(){
   requestAnimationFrame(tick);
 }
 
-/* ---------- FPS overlay (debug) ---------- */
-function installFpsOverlay(){
-  if (window.__tribesFpsBox) return;
-  const box = document.createElement('div');
-  box.id = 'tribes-fps';
-  box.style.cssText = 'position:fixed;top:6px;right:6px;z-index:99999;background:rgba(0,0,0,.7);color:#ffcf7a;font:11px monospace;padding:4px 6px;border-radius:6px;pointer-events:none';
-  document.body.appendChild(box);
-  window.__tribesFpsBox = box;
-  let last = performance.now(), frames = 0, acc = 0;
-  function loop(now){
-    const dt = now - last; last = now;
-    frames++; acc += dt;
-    if (acc >= 500){
-      const fps = Math.round(frames * 1000 / acc);
-      box.textContent = fps + ' fps';
-      frames = 0; acc = 0;
-    }
-    requestAnimationFrame(loop);
-  }
-  requestAnimationFrame(loop);
-}
-
 /* ---------- public API ---------- */
 const api = {
-  h, patch, setText, mount, unmount,
-  detectTier, applyTier, measureAndRefine,
-  installFpsOverlay,
+  detect: detectStatic,
+  apply: applyTier,
+  set(mode){
+    // mode: 'auto' | 'ultra' | 'high' | 'mid' | 'low' | 'ultra-saver'
+    if (mode === 'auto'){
+      localStorage.removeItem(STORAGE_KEY);
+      localStorage.removeItem('tribes.tier.resolved');
+    } else {
+      localStorage.setItem(STORAGE_KEY, mode);
+    }
+    location.reload();
+  },
+  current(){
+    return document.documentElement.getAttribute('data-tier') || 'mid';
+  },
 };
 
 window.__tribes_perf = api;
 
-// install tier immediately so CSS can react on first paint
-const initialTier = localStorage.getItem('tribes.perf.resolved') || detectTier();
-applyTier(initialTier);
+/* ---------- boot ---------- */
+(async function boot(){
+  // Cached resolved tier overrides static detection
+  const cached = localStorage.getItem('tribes.tier.resolved');
+  const initial = cached || await applyOverridesAndContext(detectStatic());
+  applyTier(initial);
+  if (!cached){
+    setTimeout(()=> measureAndRefine(initial), 1500);
+  }
+})();
 
-// expose dev toggles
-window.__tribesSetPerf = function(mode){
-  if (mode === 'auto'){ localStorage.removeItem('tribes.perf'); localStorage.removeItem('tribes.perf.resolved'); }
-  else localStorage.setItem('tribes.perf', mode);
-  location.reload();
-};
-Object.defineProperty(window, '__tribesFPS', {
-  set(v){
-    if (v) installFpsOverlay();
-    else if (window.__tribesFpsBox){ window.__tribesFpsBox.remove(); window.__tribesFpsBox = null; }
-  },
-  get(){ return !!window.__tribesFpsBox; }
-});
-
-// run measurement once, after the app has had time to settle
-setTimeout(measureAndRefine, 3000);
 })();
