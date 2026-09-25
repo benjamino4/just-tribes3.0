@@ -384,7 +384,6 @@ CREATE TABLE IF NOT EXISTS calendar_state (
   last_claim     TIMESTAMPTZ,
   CHECK (id = 1)
 );
-INSERT INTO calendar_state (id) VALUES (1) ON CONFLICT DO NOTHING;
 `;
 
 async function runMigrations(){
@@ -415,8 +414,14 @@ async function runMigrations(){
 
 export async function initDb(){
   if (!pool) return false;
-  await pool.query(SCHEMA);
-  console.log('[db] base schema ready');
+  try {
+    console.log('[db] applying base schema…');
+    await pool.query(SCHEMA);
+    console.log('[db] base schema ready');
+  } catch (e){
+    console.error('[db] base schema FAILED:', e.message);
+    throw e;
+  }
   if (process.env.MIGRATE === '1'){
     console.log('[db] MIGRATE=1 → running migrations');
     await runMigrations();
