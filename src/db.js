@@ -383,7 +383,6 @@ CREATE TABLE IF NOT EXISTS calendar_state (
   total_claims   INT DEFAULT 0,
   last_claim     TIMESTAMPTZ,
   CHECK (id = 1)
-);
 `;
 
 async function runMigrations(){
@@ -397,14 +396,14 @@ async function runMigrations(){
     const sql = await fs.readFile(path.join(MIGRATIONS_DIR, f), 'utf8');
     const client = await pool.connect();
     try {
-      console.log(`[db] running migration ${f}`);
+      console.log('[db] running migration ' + f);
       await client.query('BEGIN');
       await client.query(sql);
       await client.query('COMMIT');
-      console.log(`[db] migration ${f} applied`);
+      console.log('[db] migration ' + f + ' applied');
     } catch (e){
       await client.query('ROLLBACK').catch(() => {});
-      console.error(`[db] migration ${f} FAILED:`, e.message);
+      console.error('[db] migration ' + f + ' FAILED:', e.message);
       client.release();
       throw e;
     }
