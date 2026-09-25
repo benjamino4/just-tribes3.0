@@ -864,4 +864,5 @@ function buildWarden(){
     },
   };
 }
+/* ---------- expose for app.js ACTS registry ---------- */
 })();
