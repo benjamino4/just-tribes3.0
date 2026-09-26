@@ -1,21 +1,24 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import path from 'path';
 
-// Frontend builds into ../server/public so the existing Express server
-// serves it as a single Render web service (no second service needed).
+// Vite builds into ../../server/public so the Express server serves the SPA.
 export default defineConfig({
   plugins: [react()],
   build: {
-    outDir: '../server/public',
+    outDir: path.resolve(__dirname, '..', 'server', 'public'),
     emptyOutDir: true,
-    target: 'es2019',
+    target: 'es2020',
+    sourcemap: false,
+    assetsInlineLimit: 4096,
   },
   server: {
     port: 5173,
-    // During `npm run dev`, proxy API calls to the local Express server.
     proxy: {
-      '/api': 'http://localhost:3000',
-      '/tonconnect-manifest.json': 'http://localhost:3000',
+      '/api': { target: 'http://localhost:3000', changeOrigin: true },
     },
+  },
+  resolve: {
+    alias: { '@': path.resolve(__dirname, 'src') },
   },
 });
