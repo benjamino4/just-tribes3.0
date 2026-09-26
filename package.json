@@ -1,15 +1,13 @@
 {
   "name": "tribes",
-  "version": "2.0.0",
+  "version": "3.0.0",
   "private": true,
-  "description": "TRIBES — Telegram Mini App: stone-age tribe idle game with live Tribe Wars, TON Connect and Telegram Stars.",
-  "type": "module",
+  "description": "TRIBES — Rise of the Tribes. React + vanilla hybrid frontend + Node/Postgres backend, deployed as one Render web service.",
   "engines": { "node": ">=18" },
   "scripts": {
-    "start": "node src/index.js"
-  },
-  "dependencies": {
-    "express": "4.19.2",
-    "pg": "8.12.0"
+    "build": "npm --prefix web install && npm --prefix web run build && npm --prefix server install",
+    "start": "npm --prefix server start",
+    "dev:web": "npm --prefix web run dev",
+    "dev:server": "npm --prefix server start"
   }
 }

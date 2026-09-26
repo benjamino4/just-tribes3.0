@@ -3,10 +3,13 @@ services:
     name: tribes
     runtime: node
     plan: free
-    buildCommand: npm install
+    # Build the React frontend into server/public, then install server deps.
+    buildCommand: npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     envVars:
+      - key: NODE_VERSION
+        value: "20"
       - key: NODE_ENV
         value: production
       - key: DATABASE_URL

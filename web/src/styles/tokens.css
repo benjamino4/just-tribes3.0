@@ -1,0 +1,79 @@
+/* =====================================================================
+   TRIBES Design System — "Ember Glass"
+   A fluid, tactile language blending iOS 26/27 liquid glass, HarmonyOS
+   depth layering, and OxygenOS crisp geometry. Stone-age warmth on top.
+===================================================================== */
+:root {
+  /* ---- Brand / ember palette ---- */
+  --ember-50:  #fff4e6;
+  --ember-200: #ffcf8f;
+  --ember-400: #ff9f45;
+  --ember-500: #ff7a18;
+  --ember-600: #f4560b;
+  --ember-700: #c53a05;
+  --ash:       #b8a99a;
+  --gold:      #ffd27a;
+
+  /* ---- Surfaces (dark, warm-neutral) ---- */
+  --bg-0: #07060a;   /* deepest */
+  --bg-1: #0d0b12;
+  --bg-2: #14111b;
+  --ink:   #f6efe6;
+  --ink-dim: #b7ad9f;
+  --ink-faint: #7d7466;
+
+  /* ---- Liquid glass ---- */
+  --glass-bg: rgba(28, 22, 34, 0.55);
+  --glass-bg-strong: rgba(30, 24, 36, 0.78);
+  --glass-brd: rgba(255, 255, 255, 0.10);
+  --glass-hi: rgba(255, 255, 255, 0.28);   /* specular top edge */
+  --glass-blur: 22px;
+  --glass-sat: 160%;
+
+  /* ---- Semantic ---- */
+  --good: #5ce39a;
+  --bad:  #ff6b6b;
+  --info: #7cc4ff;
+  --warn: #ffd15c;
+
+  /* ---- Radii (OxygenOS-ish generous rounding) ---- */
+  --r-xs: 10px;
+  --r-sm: 14px;
+  --r-md: 20px;
+  --r-lg: 28px;
+  --r-xl: 36px;
+  --r-pill: 999px;
+
+  /* ---- Elevation (soft, colored, HarmonyOS depth) ---- */
+  --sh-1: 0 1px 2px rgba(0,0,0,.4);
+  --sh-2: 0 6px 20px rgba(0,0,0,.45);
+  --sh-3: 0 18px 50px rgba(0,0,0,.55);
+  --sh-ember: 0 10px 40px rgba(255,122,24,.28);
+  --sh-inset-hi: inset 0 1px 0 var(--glass-hi);
+
+  /* ---- Motion (spring feel via easing) ---- */
+  --ease-out: cubic-bezier(.22,1,.36,1);
+  --ease-spring: cubic-bezier(.34,1.56,.64,1);
+  --ease-soft: cubic-bezier(.4,0,.2,1);
+  --dur-1: .18s;
+  --dur-2: .32s;
+  --dur-3: .55s;
+
+  /* ---- Layout ---- */
+  --safe-top: env(safe-area-inset-top, 0px);
+  --safe-bot: env(safe-area-inset-bottom, 0px);
+  --tabbar-h: 68px;
+  --topbar-h: 56px;
+  --maxw: 520px;
+
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+  --font-display: 'Cinzel Decorative', Georgia, serif;
+}
+
+/* Reduced-effects tier (perf / user setting) trims blur + heavy shadows. */
+:root[data-fx='reduced'] {
+  --glass-blur: 0px;
+  --glass-bg: rgba(24, 19, 29, 0.92);
+  --glass-bg-strong: rgba(26, 21, 31, 0.96);
+  --sh-3: 0 8px 22px rgba(0,0,0,.5);
+}

@@ -1,16 +1,6 @@
-# dependencies
 node_modules/
-
-# secrets / local env
+# server/public is a build artifact produced by `npm run build`
+server/public/
 .env
-.env.*
-!.env.example
-
-# logs & OS cruft
-*.log
-npm-debug.log*
 .DS_Store
-Thumbs.db
-
-# backups
-*.bak
+*.log
