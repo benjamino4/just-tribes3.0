@@ -86,7 +86,10 @@ app.use('/api/admin', adminRouter);
 
 /* ---------- TON Connect manifest ---------- */
 app.get('/tonconnect-manifest.json', (req, res) => {
-  const origin = `${req.protocol}://${req.get('host')}`;
+  const xfProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
+  const mHost = req.get('host') || '';
+  const mLocal = mHost.startsWith('localhost') || mHost.startsWith('127.') || mHost.startsWith('0.0.0.0');
+  const origin = `${mLocal ? (xfProto || req.protocol || 'http') : 'https'}://${mHost}`;
   res.json({
     url: origin, name: 'TRIBES',
     iconUrl: origin + '/icon.png',

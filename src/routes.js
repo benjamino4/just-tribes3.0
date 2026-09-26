@@ -8,6 +8,8 @@ import {
   CHALLENGES, pickChallenge, maybeResolve, getTribeMetric,
   createFronts, getFronts, recordAction, momentumFor, activeLegendary,
   scheduleLegendary, recordDefenderAction, currentSeason, tribeScore,
+  listTactics, warHint, pickFoe, getVengeance, listVengeance,
+  areAllied, formBloodAlliance, breakBloodAlliance, listAlliances,
 } from './war.js';
 import { STAR_ITEMS, createStarInvoice, handleWebhook } from './stars.js';
 import { TON_ITEMS, makeIntent, verifyPayment, linkWallet, tonConfigured, receiveAddress } from './ton.js';
@@ -873,12 +875,8 @@ router.post('/war/declare', rateLimit('war', 6), async (req, res, next) => { try
   const stances = cfgJSON('war_stances', []);
   const stance = stances.find(s => s.id === stanceId) || stances[0] || { durMult: 1 };
 
-  const foe = (await q(
-    `SELECT id FROM tribes t WHERE t.id<>$1
-      AND NOT EXISTS (SELECT 1 FROM wars w WHERE w.status='active' AND (w.attacker_id=t.id OR w.defender_id=t.id))
-      ORDER BY random() LIMIT 1`, [u.tribe_id]
-  )).rows[0];
-  if (!foe) return res.status(400).json({ error:'no rival tribe is available' });
+  const foe = await pickFoe(u.tribe_id);
+  if (!foe) return res.status(400).json({ error:'no fair rival is available (matched by level; allies are excluded)' });
 
   const c = pickChallenge();
   const capHours = Number(CFG.war_cap_hours) || 72;
@@ -1012,6 +1010,77 @@ router.get('/war/chronicle', rateLimit('war_chr', 60), async (req, res, next) =>
       )).rows;
   res.json({ chronicles: rows });
 } catch(e){ next(e); } });
+
+/* ---------- BATCH A: tactics, hint, wiki, vengeance, alliances ---------- */
+router.get('/war/tactics', rateLimit('war', 120), async (req, res, next) => { try {
+  res.json(listTactics());
+} catch(e){ next(e); } });
+
+router.get('/war/hint', rateLimit('war', 60), async (req, res, next) => { try {
+  const u = req.user;
+  if (!u.tribe_id) return res.json({ hint: 'Join a tribe to hear the elders.' });
+  const war = await currentWar(u.tribe_id);
+  if (!war || war.status !== 'active') return res.json({ hint: 'No war rages right now.' });
+  const side = Number(war.attacker_id) === Number(u.tribe_id) ? 'attacker' : 'defender';
+  res.json(await warHint(war, side));
+} catch(e){ next(e); } });
+
+router.get('/war/wiki', rateLimit('war', 120), async (req, res, next) => { try {
+  const t = listTactics();
+  res.json({
+    rules: [
+      'A war is fought across ' + (Number(CFG.war_front_count) || 3) + ' fronts. Each front has its own terrain.',
+      'Whoever wins the most fronts wins the war (best-of-fronts). Ties fall to total score, with a defender edge.',
+      'Terrain favours some tactics (+' + t.bonusPct + '%) and resists others (-' + t.penaltyPct + '%).',
+      'Beaten tribes earn Vengeance against the victor — a bonus in the rematch that fades over time.',
+      'Blood Allies cannot be matched against each other while the pact holds.',
+      'Rivals are matched within ' + (Number(CFG.war_matchmaking_level_cap) || 2) + ' levels of your tribe.',
+    ],
+    terrain: t.terrain,
+    offensive: t.offensive,
+    defensive: t.defensive,
+  });
+} catch(e){ next(e); } });
+
+router.get('/war/vengeance', rateLimit('war', 60), async (req, res, next) => { try {
+  const u = req.user;
+  if (!u.tribe_id) return res.json({ grudges: [] });
+  res.json({ grudges: await listVengeance(u.tribe_id) });
+} catch(e){ next(e); } });
+
+router.get('/war/alliances', rateLimit('war', 60), async (req, res, next) => { try {
+  const u = req.user;
+  if (!u.tribe_id) return res.json({ alliances: [] });
+  res.json({ alliances: await listAlliances(u.tribe_id) });
+} catch(e){ next(e); } });
+
+router.post('/war/alliance', rateLimit('war', 6), async (req, res, next) => { try {
+  const u = req.user;
+  if (!u.tribe_id) return res.status(400).json({ error:'join a tribe first' });
+  if (!['Chief','Head','Elder'].includes(u.role))
+    return res.status(403).json({ error:'only Elders+' });
+  const target = Number(req.body?.tribe);
+  if (!target || target === Number(u.tribe_id)) return res.status(400).json({ error:'pick another tribe' });
+  const exists = (await q('SELECT 1 FROM tribes WHERE id=$1', [target])).rowCount;
+  if (!exists) return res.status(404).json({ error:'no such tribe' });
+  const pact = await formBloodAlliance(u.tribe_id, target, u.id);
+  const tname = (await q('SELECT name FROM tribes WHERE id=$1', [target])).rows[0]?.name || 'a tribe';
+  await Kiva.postMessage(u.tribe_id, u.id, `A Blood Alliance is sworn with ${tname}.`, 'war');
+  await Kiva.postMessage(target, u.id, `A Blood Alliance is sworn with your tribe.`, 'war');
+  res.json({ ok:true, alliance: pact });
+} catch(e){ res.status(400).json({ error: e.message }); } });
+
+router.post('/war/alliance/break', rateLimit('war', 6), async (req, res, next) => { try {
+  const u = req.user;
+  if (!u.tribe_id) return res.status(400).json({ error:'join a tribe first' });
+  if (!['Chief','Head','Elder'].includes(u.role))
+    return res.status(403).json({ error:'only Elders+' });
+  const target = Number(req.body?.tribe);
+  if (!target) return res.status(400).json({ error:'pick a tribe' });
+  const broken = await breakBloodAlliance(u.tribe_id, target);
+  if (!broken) return res.status(400).json({ error:'no active pact with that tribe' });
+  res.json({ ok:true });
+} catch(e){ res.status(400).json({ error: e.message }); } });
 
 router.get('/war/leaderboard', rateLimit('war_lb', 60), async (req, res, next) => { try {
   const u = req.user;

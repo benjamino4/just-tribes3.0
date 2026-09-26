@@ -98,6 +98,16 @@ export const DEFAULTS = {
   momentum_lock_limit: 2,
   chronicle_share_enabled: 1,
   chronicle_retention: 50,
+
+  // ---- BATCH A: tactical war layer ----
+  war_matchmaking_level_cap: 2,     // foe must be within +/- this many levels
+  war_terrain_bonus_pct: 35,        // tactic that favours a front's terrain gets this bonus
+  war_terrain_penalty_pct: 20,      // tactic that fights against terrain loses this
+  war_hint_enabled: 1,
+  war_vengeance_tokens: 3,          // grudge tokens granted to a beaten tribe
+  war_vengeance_bonus_pct: 25,      // per-token attack bonus vs the old victor
+  war_vengeance_ttl_h: 168,         // grudge lasts 7 days
+  war_blood_alliance_enabled: 1,
 };
 
 export const PALETTES = {

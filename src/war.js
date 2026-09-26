@@ -28,6 +28,71 @@ export const CHALLENGES = [
     desc:'Outlast the cold — hoard the deepest Pyre over three long days.' },
 ];
 
+/* =====================================================================
+   BATCH A — terrain + tactics catalogs.
+   Terrain is rolled per front on war creation and stored in
+   war_fronts.terrain. Each terrain favours some tactics and resists
+   others, applied as a multiplier inside recordAction.
+===================================================================== */
+export const TERRAIN = [
+  { id:'plains',   name:'Open Plains', glyph:'🌾', desc:'Flat ground. Rewards direct force and cavalry.',
+    favors:['charge','rally'],           resists:['night_raid','flank'] },
+  { id:'forest',   name:'Deep Forest', glyph:'🌲', desc:'Cover everywhere. Rewards flanking and stealth.',
+    favors:['flank','skirmish_strike'],  resists:['charge','siege_push'] },
+  { id:'hills',    name:'High Hills',  glyph:'⛰️', desc:'Elevation favours skirmishers and probing.',
+    favors:['skirmish_strike','probe'],  resists:['charge'] },
+  { id:'swamp',    name:'Black Swamp', glyph:'🪨', desc:'Mud and mist. Night raids thrive; heavy pushes bog down.',
+    favors:['night_raid','probe'],       resists:['siege_push','charge'] },
+  { id:'ruins',    name:'Old Ruins',   glyph:'🏰', desc:'Broken walls. Siege engines and firestorms dominate.',
+    favors:['siege_push','firestorm'],   resists:['skirmish_strike'] },
+  { id:'ashlands', name:'The Ashlands', glyph:'🌋', desc:'Scorched earth. Fire spreads; morale rallies falter.',
+    favors:['firestorm','raid'],         resists:['rally'] },
+];
+export const TERRAIN_IDS = TERRAIN.map(t => t.id);
+export const terrainById = id => TERRAIN.find(t => t.id === id) || null;
+
+// Offensive tactics flow through /war/action -> recordAction.
+// rally/chant/raid keep their legacy config keys so the Warden can still tune them.
+export const OFFENSIVE_TACTICS = [
+  { id:'rally',           name:'Rally',             glyph:'🔥', cost:500,   base:25,  desc:'Cheap, steady pressure. Good anywhere.' },
+  { id:'chant',           name:'War Chant',         glyph:'📣', cost:2000,  base:150, desc:'Rouse the kin for a bigger surge.' },
+  { id:'raid',            name:'Raid',              glyph:'⚔️', cost:10000, base:800, desc:'Expensive alpha strike on a front.' },
+  { id:'charge',          name:'Cavalry Charge',    glyph:'🐎', cost:4000,  base:300, desc:'Smashes open ground; useless in cover.' },
+  { id:'flank',           name:'Flanking Maneuver', glyph:'💨', cost:3000,  base:220, desc:'Slips through forest and broken lines.' },
+  { id:'siege_push',      name:'Siege Push',        glyph:'🪨', cost:6000,  base:480, desc:'Grinds fortifications and ruins down.' },
+  { id:'skirmish_strike', name:'Skirmish Strike',   glyph:'🏹', cost:1200,  base:90,  desc:'Fast harassment; thrives on high ground.' },
+  { id:'night_raid',      name:'Night Raid',        glyph:'🌑', cost:5000,  base:380, desc:'Strikes under cover of dark and mist.' },
+  { id:'firestorm',       name:'Firestorm',         glyph:'🌋', cost:8000,  base:650, desc:'Unleashes fire — devastating in ruins/ash.' },
+  { id:'probe',           name:'Probing Attack',    glyph:'🔍', cost:800,   base:50,  desc:'Low-cost feint that tests the front.' },
+];
+// Defensive tactics flow through /war/defend -> recordDefenderAction.
+export const DEFENSIVE_TACTICS = [
+  { id:'fortify',   name:'Fortify',    glyph:'🧱', desc:'Harden a front for a window of time.' },
+  { id:'ambush',    name:'Ambush',     glyph:'🕶️', desc:'Punish the next enemy strike on this front.' },
+  { id:'reinforce', name:'Reinforce',  glyph:'🛡️', desc:'Shore up a weakening front with fresh kin.' },
+  { id:'scout',     name:'Scout',      glyph:'🔭', desc:'Reveal terrain and enemy momentum early.' },
+  { id:'rally_kin', name:'Rally Kin',  glyph:'🥁', desc:'Tribe-wide morale boost for the defence.' },
+];
+export const TACTICS = [...OFFENSIVE_TACTICS, ...DEFENSIVE_TACTICS];
+export function listTactics(){
+  return {
+    terrain: TERRAIN,
+    offensive: OFFENSIVE_TACTICS,
+    defensive: DEFENSIVE_TACTICS,
+    bonusPct: Number(CFG.war_terrain_bonus_pct) || 0,
+    penaltyPct: Number(CFG.war_terrain_penalty_pct) || 0,
+  };
+}
+
+// terrain multiplier for an offensive tactic on a given terrain
+function terrainMult(terrainId, tacticId){
+  const t = terrainById(terrainId);
+  if (!t) return 1;
+  if (Array.isArray(t.favors)  && t.favors.includes(tacticId))  return 1 + (Number(CFG.war_terrain_bonus_pct)  || 0) / 100;
+  if (Array.isArray(t.resists) && t.resists.includes(tacticId)) return 1 - (Number(CFG.war_terrain_penalty_pct) || 0) / 100;
+  return 1;
+}
+
 const rnd = (a,b) => a + Math.floor(Math.random() * (b - a + 1));
 export function pickChallenge(){
   const c = CHALLENGES[Math.floor(Math.random() * CHALLENGES.length)];
@@ -45,11 +110,14 @@ export async function createFronts(warId){
   const names = cfgJSON('war_front_names', ['North','Center','South']);
   const count = Number(CFG.war_front_count) || 3;
   const use = names.slice(0, count);
+  // roll a distinct terrain per front (fall back to repeats if fronts > terrains)
+  const bag = [...TERRAIN_IDS].sort(() => Math.random() - 0.5);
   for (let i = 0; i < use.length; i++){
+    const terrain = bag[i % bag.length];
     await q(
-      `INSERT INTO war_fronts (war_id, idx, name) VALUES ($1,$2,$3)
-       ON CONFLICT (war_id, idx) DO NOTHING`,
-      [warId, i, use[i]]
+      `INSERT INTO war_fronts (war_id, idx, name, terrain) VALUES ($1,$2,$3,$4)
+       ON CONFLICT (war_id, idx) DO UPDATE SET terrain = COALESCE(war_fronts.terrain, EXCLUDED.terrain)`,
+      [warId, i, use[i], terrain]
     );
   }
   return use;
@@ -57,7 +125,7 @@ export async function createFronts(warId){
 
 export async function getFronts(warId){
   return (await q(
-    `SELECT idx, name, attacker_score, defender_score, fortify_until
+    `SELECT idx, name, terrain, attacker_score, defender_score, fortify_until
        FROM war_fronts WHERE war_id=$1 ORDER BY idx`,
     [warId]
   )).rows;
@@ -79,15 +147,15 @@ export async function tribeScore(warId, side){
 
 /* ---------- transactional action ---------- */
 export async function recordAction(war, user, tribe, side, frontIdx, kind){
-  const kindCfg = ({
-    rally: { costKey:'war_action_rally_cost', pointsKey:'war_action_rally_points' },
-    chant: { costKey:'war_action_chant_cost', pointsKey:'war_action_chant_points' },
-    raid:  { costKey:'war_action_raid_cost',  pointsKey:'war_action_raid_points'  },
-  })[kind];
-  if (!kindCfg) throw new Error('unknown action');
+  const tactic = OFFENSIVE_TACTICS.find(t => t.id === kind);
+  if (!tactic) throw new Error('unknown tactic');
 
-  const cost = Number(CFG[kindCfg.costKey]) || 0;
-  const base = Number(CFG[kindCfg.pointsKey]) || 0;
+  // legacy config still tunes the three original tactics
+  let cost = Number(tactic.cost) || 0;
+  let base = Number(tactic.base) || 0;
+  if (kind === 'rally'){ cost = Number(CFG.war_action_rally_cost) || cost; base = Number(CFG.war_action_rally_points) || base; }
+  if (kind === 'chant'){ cost = Number(CFG.war_action_chant_cost) || cost; base = Number(CFG.war_action_chant_points) || base; }
+  if (kind === 'raid') { cost = Number(CFG.war_action_raid_cost)  || cost; base = Number(CFG.war_action_raid_points)  || base; }
 
   const chestCol = side === 'attacker' ? 'attacker_chest' : 'defender_chest';
   const scoreCol = side === 'attacker' ? 'attacker_score' : 'defender_score';
@@ -105,7 +173,7 @@ export async function recordAction(war, user, tribe, side, frontIdx, kind){
     if (Number(warRow.chest) < cost) throw new Error('not enough Ember in the war chest');
 
     const front = (await client.query(
-      `SELECT idx, name FROM war_fronts WHERE war_id=$1 AND idx=$2`,
+      `SELECT idx, name, terrain FROM war_fronts WHERE war_id=$1 AND idx=$2`,
       [war.id, frontIdx]
     )).rows[0];
     if (!front) throw new Error('no such front');
@@ -134,6 +202,21 @@ export async function recordAction(war, user, tribe, side, frontIdx, kind){
     )).rows[0];
     if (momentum && momentum.on_rout) mult *= (1 + Number(CFG.war_rout_bonus_pct)/100);
 
+    // BATCH A: terrain affinity for this tactic on this front
+    mult *= terrainMult(front.terrain, kind);
+
+    // BATCH A: vengeance — standing grudge bonus vs the old victor
+    const foeId = side === 'attacker' ? war.defender_id : war.attacker_id;
+    const grudge = (await client.query(
+      `SELECT COALESCE(SUM(GREATEST(0, tokens - spent)),0)::int AS tok
+         FROM war_vengeance
+        WHERE tribe_id=$1 AND target_id=$2
+          AND (expires_at IS NULL OR expires_at > now())`,
+      [tribe.id, foeId]
+    )).rows[0];
+    const gTok = grudge ? Number(grudge.tok) : 0;
+    if (gTok > 0) mult *= (1 + gTok * (Number(CFG.war_vengeance_bonus_pct) || 0) / 100);
+
     const points = Math.round(base * mult);
 
     await client.query(
@@ -145,13 +228,13 @@ export async function recordAction(war, user, tribe, side, frontIdx, kind){
       [points, war.id, frontIdx]
     );
     await client.query(
-      `INSERT INTO war_actions (war_id, user_id, tribe_id, side, front_idx, kind, cost_ember, points, multiplier)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [war.id, user.id, tribe.id, side, frontIdx, kind, cost, points, mult]
+      `INSERT INTO war_actions (war_id, user_id, tribe_id, side, front_idx, kind, cost_ember, points, multiplier, tactic)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
+      [war.id, user.id, tribe.id, side, frontIdx, kind, cost, points, mult, kind]
     );
 
     await client.query('COMMIT');
-    return { ok:true, points, multiplier:mult, front: front.name, side, kind };
+    return { ok:true, points, multiplier:mult, front: front.name, terrain: front.terrain, side, kind };
   } catch (e){
     await client.query('ROLLBACK').catch(() => {});
     throw e;
@@ -236,34 +319,49 @@ export async function activeLegendary(warId){
 /* ---------- defender actions ---------- */
 export async function recordDefenderAction(war, user, tribe, kind, frontIdx){
   const cfg = ({
-    fortify:   { costKey:'war_defender_fortify_cost', maxKey:'war_defender_fortify_max' },
-    ambush:    { costKey:'war_defender_ambush_cost',  maxKey:'war_defender_ambush_max'  },
-    rally_kin: { costKey:'war_defender_rally_cost',   maxKey:'war_defender_rally_max'   },
+    fortify:   { costKey:'war_defender_fortify_cost', maxKey:'war_defender_fortify_max', costDef:8000,  maxDef:3 },
+    ambush:    { costKey:'war_defender_ambush_cost',  maxKey:'war_defender_ambush_max',  costDef:12000, maxDef:2 },
+    reinforce: { costKey:'war_defender_fortify_cost', maxKey:'war_defender_fortify_max', costDef:6000,  maxDef:3 },
+    scout:     { costKey:'',                          maxKey:'',                         costDef:1500,  maxDef:5 },
+    rally_kin: { costKey:'war_defender_rally_cost',   maxKey:'war_defender_rally_max',   costDef:20000, maxDef:1 },
   })[kind];
   if (!cfg) throw new Error('unknown defender action');
 
+  const maxUses = Number(CFG[cfg.maxKey]) || cfg.maxDef;
   const used = (await q(
     `SELECT count(*)::int AS n FROM war_defender_actions
       WHERE war_id=$1 AND tribe_id=$2 AND kind=$3`,
     [war.id, tribe.id, kind]
   )).rows[0].n;
-  if (used >= Number(CFG[cfg.maxKey])) throw new Error('no uses left');
+  if (used >= maxUses) throw new Error('no uses left');
 
-  const cost = Number(CFG[cfg.costKey]);
+  const cost = Number(CFG[cfg.costKey]) || cfg.costDef;
   await q('UPDATE tribes SET treasury = treasury - $1 WHERE id=$2', [cost, tribe.id]);
 
   await q(
-    `INSERT INTO war_defender_actions (war_id, tribe_id, user_id, kind, front_idx, cost_ember)
-     VALUES ($1,$2,$3,$4,$5,$6)`,
-    [war.id, tribe.id, user.id, kind, frontIdx || null, cost]
+    `INSERT INTO war_defender_actions (war_id, tribe_id, user_id, kind, front_idx, cost_ember, tactic)
+     VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+    [war.id, tribe.id, user.id, kind, frontIdx || null, cost, kind]
   );
 
+  let reveal = null;
   if (kind === 'fortify' && frontIdx != null){
     const until = new Date(Date.now() + Number(CFG.war_defender_fortify_h) * 3600 * 1000);
     await q(`UPDATE war_fronts SET fortify_until=$1 WHERE war_id=$2 AND idx=$3`,
       [until, war.id, frontIdx]);
+  } else if (kind === 'reinforce' && frontIdx != null){
+    // reinforce pours defensive points straight onto a weakening front
+    const pts = Math.round((Number(CFG.war_action_chant_points) || 150) * 0.6);
+    await q(`UPDATE war_fronts SET defender_score = defender_score + $1 WHERE war_id=$2 AND idx=$3`,
+      [pts, war.id, frontIdx]);
+  } else if (kind === 'scout'){
+    // scout reveals terrain + current momentum so defenders can react
+    reveal = {
+      fronts: await getFronts(war.id),
+      momentum: await momentumFor(war.id),
+    };
   }
-  return { ok:true, kind };
+  return { ok:true, kind, reveal };
 }
 
 /* ---------- resolution ---------- */
@@ -346,6 +444,22 @@ export async function maybeResolve(war){
     // ---- post-war spoils: warband ember + relic drops to the victors ----
     try { await distributeSpoils(war, winnerId); }
     catch (e){ console.error('[war] distributeSpoils', e.message); }
+
+    // ---- BATCH A: the beaten tribe earns a grudge against the victor ----
+    try {
+      const tok  = Number(CFG.war_vengeance_tokens) || 0;
+      const ttlH = Number(CFG.war_vengeance_ttl_h) || 168;
+      if (tok > 0){
+        // any grudge the loser was spending vs this foe is now satisfied
+        await q(`UPDATE war_vengeance SET spent = tokens WHERE tribe_id=$1 AND target_id=$2`,
+          [loserId, winnerId]);
+        await q(
+          `INSERT INTO war_vengeance (tribe_id, target_id, war_id, tokens, expires_at)
+           VALUES ($1,$2,$3,$4, now() + ($5 || ' hours')::interval)`,
+          [loserId, winnerId, war.id, tok, String(ttlH)]
+        );
+      }
+    } catch(e){ console.error('[war] vengeance', e.message); }
   }
 
   const top_a = (await q(
@@ -463,4 +577,138 @@ export async function endSeason(){
     );
   }
   return { season: s, titled: tops.length };
+}
+/* =====================================================================
+   BATCH A — vengeance, blood alliances, matchmaking, hint
+===================================================================== */
+
+// how many live grudge tokens tribe holds against target (0 if none)
+export async function getVengeance(tribeId, targetId){
+  const r = await q(
+    `SELECT COALESCE(SUM(GREATEST(0, tokens - spent)),0)::int AS tok
+       FROM war_vengeance
+      WHERE tribe_id=$1 AND target_id=$2
+        AND (expires_at IS NULL OR expires_at > now())`,
+    [tribeId, targetId]
+  );
+  return Number(r.rows[0]?.tok) || 0;
+}
+
+// list every active grudge a tribe currently holds (for the war UI)
+export async function listVengeance(tribeId){
+  return (await q(
+    `SELECT v.target_id, t.name AS target_name,
+            SUM(GREATEST(0, v.tokens - v.spent))::int AS tokens,
+            MAX(v.expires_at) AS expires_at
+       FROM war_vengeance v JOIN tribes t ON t.id = v.target_id
+      WHERE v.tribe_id=$1 AND (v.expires_at IS NULL OR v.expires_at > now())
+      GROUP BY v.target_id, t.name
+     HAVING SUM(GREATEST(0, v.tokens - v.spent)) > 0
+      ORDER BY tokens DESC`,
+    [tribeId]
+  )).rows;
+}
+
+const allyKey = (a, b) => [Math.min(a, b), Math.max(a, b)];
+
+export async function areAllied(a, b){
+  const [x, y] = allyKey(Number(a), Number(b));
+  const r = await q(
+    `SELECT 1 FROM blood_alliances WHERE tribe_a=$1 AND tribe_b=$2 AND active=true`,
+    [x, y]
+  );
+  return r.rowCount > 0;
+}
+
+export async function formBloodAlliance(a, b, byUserId){
+  if (!Number(CFG.war_blood_alliance_enabled)) throw new Error('blood alliances are sealed');
+  if (Number(a) === Number(b)) throw new Error('a tribe cannot ally itself');
+  const active = await q(
+    `SELECT 1 FROM wars WHERE status='active'
+       AND ((attacker_id=$1 AND defender_id=$2) OR (attacker_id=$2 AND defender_id=$1))`,
+    [a, b]
+  );
+  if (active.rowCount) throw new Error('you cannot swear peace mid-war');
+  const [x, y] = allyKey(Number(a), Number(b));
+  const r = await q(
+    `INSERT INTO blood_alliances (tribe_a, tribe_b, formed_by, active)
+     VALUES ($1,$2,$3,true)
+     ON CONFLICT (tribe_a, tribe_b) DO UPDATE
+       SET active=true, formed_by=EXCLUDED.formed_by, formed_at=now(), broken_at=NULL
+     RETURNING *`,
+    [x, y, byUserId || null]
+  );
+  return r.rows[0];
+}
+
+export async function breakBloodAlliance(a, b){
+  const [x, y] = allyKey(Number(a), Number(b));
+  const r = await q(
+    `UPDATE blood_alliances SET active=false, broken_at=now()
+      WHERE tribe_a=$1 AND tribe_b=$2 AND active=true RETURNING *`,
+    [x, y]
+  );
+  return r.rows[0] || null;
+}
+
+export async function listAlliances(tribeId){
+  return (await q(
+    `SELECT CASE WHEN tribe_a=$1 THEN tribe_b ELSE tribe_a END AS ally_id,
+            t.name AS ally_name, ba.formed_at
+       FROM blood_alliances ba
+       JOIN tribes t
+         ON t.id = CASE WHEN ba.tribe_a=$1 THEN ba.tribe_b ELSE ba.tribe_a END
+      WHERE (ba.tribe_a=$1 OR ba.tribe_b=$1) AND ba.active=true
+      ORDER BY ba.formed_at DESC`,
+    [tribeId]
+  )).rows;
+}
+
+// pick a fair rival: not at war, not an ally, within the level cap
+export async function pickFoe(tribeId){
+  const cap = Number(CFG.war_matchmaking_level_cap) || 2;
+  const me = (await q('SELECT level FROM tribes WHERE id=$1', [tribeId])).rows[0];
+  const myLevel = Number(me?.level) || 1;
+  const foe = (await q(
+    `SELECT t.id FROM tribes t
+      WHERE t.id <> $1
+        AND ABS(COALESCE(t.level,1) - $2) <= $3
+        AND NOT EXISTS (SELECT 1 FROM wars w WHERE w.status='active' AND (w.attacker_id=t.id OR w.defender_id=t.id))
+        AND NOT EXISTS (
+          SELECT 1 FROM blood_alliances ba
+           WHERE ba.active=true
+             AND ((ba.tribe_a=$1 AND ba.tribe_b=t.id) OR (ba.tribe_a=t.id AND ba.tribe_b=$1)))
+      ORDER BY random() LIMIT 1`,
+    [tribeId, myLevel, cap]
+  )).rows[0];
+  return foe || null;
+}
+
+// contextual advice for the war screen ("Hint" button)
+export async function warHint(war, side){
+  if (!Number(CFG.war_hint_enabled)) return { hint: 'The elders keep their counsel.' };
+  const fronts = await getFronts(war.id);
+  const mineCol = side === 'attacker' ? 'attacker_score' : 'defender_score';
+  const foeCol  = side === 'attacker' ? 'defender_score' : 'attacker_score';
+  // find the front where we trail by the most
+  let worst = null, gap = Infinity;
+  for (const f of fronts){
+    const g = Number(f[mineCol]) - Number(f[foeCol]);
+    if (g < gap){ gap = g; worst = f; }
+  }
+  if (!worst) return { hint: 'Hold the line \u2014 all fronts are steady.' };
+  const terr = terrainById(worst.terrain);
+  const best = terr && terr.favors && terr.favors.length
+    ? OFFENSIVE_TACTICS.find(t => t.id === terr.favors[0])
+    : null;
+  const where = worst.name + (terr ? ' (' + terr.glyph + ' ' + terr.name + ')' : '');
+  if (gap < 0 && best){
+    return { front: worst.idx, terrain: worst.terrain, tactic: best.id,
+      hint: `You are losing ${where}. Its terrain favours ${best.glyph} ${best.name} \u2014 press there.` };
+  }
+  if (best){
+    return { front: worst.idx, terrain: worst.terrain, tactic: best.id,
+      hint: `Reinforce ${where} with ${best.glyph} ${best.name} to widen your lead.` };
+  }
+  return { front: worst.idx, terrain: worst.terrain, hint: `Focus ${where}.` };
 }

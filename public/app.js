@@ -161,7 +161,7 @@ async function api(path, body, opts){
   if (TG && TG.initData) headers['X-Init-Data'] = TG.initData;
   headers['X-Guest-Id'] = GUEST;
 
-  const READ_PATHS = new Set(['/state','/health','/war','/war/chronicle','/war/leaderboard','/tribes','/tribe/names','/kiva','/bonfire','/cosmetics','/trials','/referral']);
+  const READ_PATHS = new Set(['/state','/health','/war','/war/chronicle','/war/leaderboard','/war/tactics','/war/hint','/war/wiki','/war/vengeance','/war/alliances','/tribes','/tribe/names','/kiva','/bonfire','/cosmetics','/trials','/referral']);
   const pathOnly = path.split('?')[0];
   const method = opts.method
     || (body !== undefined ? 'POST' : (READ_PATHS.has(pathOnly) ? 'GET' : 'POST'));
@@ -1009,6 +1009,7 @@ function renderWarScreen(box){
 
 async function loadWar(){
   const box = $('#warBody'); if (!box) return;
+  await ensureTactics();
   let war;
   try { war = (await api('/war')).war; }
   catch(e){ box.innerHTML = '<p class="tiny">Could not reach the war drums.</p>'; return; }
@@ -1036,6 +1037,18 @@ async function loadWar(){
   const foe = mineA ? war.defender : war.attacker;
   const fronts = war.fronts || [];
 
+  // BATCH A: vengeance grudge banner against the current foe
+  let grudgeBanner = '';
+  try {
+    const vg = await api('/war/vengeance');
+    const foeId = foe && foe.id != null ? Number(foe.id) : null;
+    const g = (vg.grudges || []).find(x => Number(x.target_id) === foeId);
+    if (g && g.tokens > 0){
+      grudgeBanner = '<div class="grudge-banner">☠️ Blood debt against <b>' + esc(g.target_name || (foe && foe.name) || 'them') +
+        '</b> — <b>' + fmt(g.tokens) + '</b> Vengeance in play. Your strikes hit harder.</div>';
+    }
+  } catch(e){ /* vengeance is optional flavour */ }
+
   box.innerHTML =
     '<div class="war-arena">' +
       '<div class="war-emblem"><div class="vs">WAR</div></div>' +
@@ -1049,17 +1062,22 @@ async function loadWar(){
         '<div class="box"><b>' + war.stake_pct + '%</b><span>Stake</span></div>' +
       '</div>' +
     '</div>' +
+    (grudgeBanner || '') +
     '<div class="fronts-wrap">' + fronts.map((f, i) => frontHtml(f, i)).join('') + '</div>' +
+    '<div class="war-tools">' +
+      '<button class="war-tool" data-act="warHint"><span class="wt-ico">💡</span> Hint</button>' +
+      '<button class="war-tool" data-act="warWiki"><span class="wt-ico">📖</span> War Wiki</button>' +
+    '</div>' +
     '<div class="war-action-panel">' +
-      '<div class="wact-head">Push a front</div>' +
+      '<div class="wact-head">Choose a front</div>' +
       '<div class="wact-front-pick" id="frontPick">' +
         fronts.map((f, i) => '<button class="fp-btn' + (i === 0 ? ' active' : '') + '" data-act="pickFront" data-val="' + i + '">' + esc(f.name) + '</button>').join('') +
       '</div>' +
-      '<div class="wact-btns">' +
-        '<button class="wact-btn" data-act="warAction" data-val="rally"><b>Rally</b><span>+25</span></button>' +
-        '<button class="wact-btn" data-act="warAction" data-val="chant"><b>Chant</b><span>+150</span></button>' +
-        '<button class="wact-btn raid" data-act="warAction" data-val="raid"><b>Raid</b><span>+800</span></button>' +
-      '</div>' +
+      '<div class="wact-head">Tactics</div>' +
+      '<div class="tactic-grid">' + offensiveTacticsHtml() + '</div>' +
+      (mineA ? '' :
+        '<div class="wact-head">Defensive tactics</div>' +
+        '<div class="tactic-grid def">' + defensiveTacticsHtml() + '</div>') +
     '</div>';
   startWarTicker(new Date(war.end_at).getTime());
   if (window.hydrateIcons) window.hydrateIcons();
@@ -1068,11 +1086,46 @@ async function loadWar(){
 function frontHtml(f, i){
   const tot = Math.max(1, Number(f.attacker_score) + Number(f.defender_score));
   const aPct = clamp((Number(f.attacker_score) / tot) * 100, 0, 100);
+  const terr = f.terrain ? terrainInfo(f.terrain) : null;
+  const terrTag = terr ? '<span class="front-terrain" title="' + esc(terr.desc || '') + '">' + terr.glyph + ' ' + esc(terr.name) + '</span>' : '';
   return '<div class="front-card" data-front="' + i + '">' +
-    '<div class="front-head"><span class="front-name">' + esc(f.name) + '</span>' +
+    '<div class="front-head"><span class="front-name">' + esc(f.name) + terrTag + '</span>' +
     '<span class="front-scores"><b>' + fmt(f.attacker_score) + '</b> vs <b>' + fmt(f.defender_score) + '</b></span></div>' +
     '<div class="front-bar"><i data-fr="a" style="width:' + aPct + '%"></i><i data-fr="d" style="width:' + (100 - aPct) + '%"></i></div>' +
   '</div>';
+}
+
+/* ---------- BATCH A: tactics catalog cache + terrain lookup ---------- */
+let TACTICS_CACHE = null;
+async function ensureTactics(){
+  if (TACTICS_CACHE) return TACTICS_CACHE;
+  try { TACTICS_CACHE = await api('/war/tactics'); }
+  catch(e){ TACTICS_CACHE = { terrain:[], offensive:[], defensive:[] }; }
+  return TACTICS_CACHE;
+}
+function terrainInfo(id){
+  const list = (TACTICS_CACHE && TACTICS_CACHE.terrain) || [];
+  return list.find(t => t.id === id) || null;
+}
+function offensiveTacticsHtml(){
+  const list = (TACTICS_CACHE && TACTICS_CACHE.offensive) || [];
+  if (!list.length) return '<button class="wact-btn" data-act="warAction" data-val="rally"><b>Rally</b><span>+25</span></button>';
+  return list.map(t =>
+    '<button class="tactic-btn" data-act="warAction" data-val="' + esc(t.id) + '" title="' + esc(t.desc || '') + '">' +
+      '<span class="tg">' + (t.glyph || '⚔️') + '</span>' +
+      '<b>' + esc(t.name) + '</b>' +
+      '<span class="tc">+' + fmt(t.base) + ' · ' + fmt(t.cost) + '⭐️</span>' +
+    '</button>'
+  ).join('');
+}
+function defensiveTacticsHtml(){
+  const list = (TACTICS_CACHE && TACTICS_CACHE.defensive) || [];
+  return list.map(t =>
+    '<button class="tactic-btn def" data-act="warDefend" data-val="' + esc(t.id) + '" title="' + esc(t.desc || '') + '">' +
+      '<span class="tg">' + (t.glyph || '🛡️') + '</span>' +
+      '<b>' + esc(t.name) + '</b>' +
+    '</button>'
+  ).join('');
 }
 
 let warTimer = null;
@@ -1666,10 +1719,57 @@ async function actWarAction(btn, kind){
     haptic('heavy');
     burstAt(btn, 18);
     fxPopAt(btn, '+' + fmt(r.points));
-    toast(kind + ' · +' + fmt(r.points), 'good');
+    const mult = r.multiplier && r.multiplier !== 1 ? ' (×' + r.multiplier.toFixed(2) + ')' : '';
+    toast(kind + ' · +' + fmt(r.points) + mult, 'good');
     loadWar();
   } catch(e){ toast(e.message, 'bad'); }
   finally { if (btn) btn.disabled = false; }
+}
+async function actWarDefend(btn, kind){
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/war/defend', { front: selectedFront, kind });
+    haptic('medium');
+    burstAt(btn, 12);
+    toast(kind + (r.reveal ? ' · ' + r.reveal : ' · defence set'), 'good');
+    loadWar();
+  } catch(e){ toast(e.message, 'bad'); }
+  finally { if (btn) btn.disabled = false; }
+}
+async function actWarHint(btn){
+  if (btn) btn.disabled = true;
+  try {
+    const r = await api('/war/hint');
+    haptic('light');
+    toast(r.hint || 'The elders are silent.', 'warn');
+    if (r.front != null){ selectedFront = Number(r.front); pickFront(null, r.front); }
+  } catch(e){ toast(e.message, 'bad'); }
+  finally { if (btn) btn.disabled = false; }
+}
+async function actWarWiki(){
+  try {
+    const w = await api('/war/wiki');
+    const rules = (w.rules || []).map(r => '<li>' + esc(r) + '</li>').join('');
+    const terr = (w.terrain || []).map(t =>
+      '<div class="wiki-row"><span class="wg">' + (t.glyph || '') + '</span><b>' + esc(t.name) + '</b><span class="wd">' + esc(t.desc || '') + '</span></div>'
+    ).join('');
+    const off = (w.offensive || []).map(t =>
+      '<div class="wiki-row"><span class="wg">' + (t.glyph || '') + '</span><b>' + esc(t.name) + '</b><span class="wd">' + esc(t.desc || '') + ' · +' + fmt(t.base) + ' / ' + fmt(t.cost) + '⭐️</span></div>'
+    ).join('');
+    const def = (w.defensive || []).map(t =>
+      '<div class="wiki-row"><span class="wg">' + (t.glyph || '') + '</span><b>' + esc(t.name) + '</b><span class="wd">' + esc(t.desc || '') + '</span></div>'
+    ).join('');
+    sheet(
+      '<div class="sheet-title">📖 War Wiki</div>' +
+      '<div class="wiki-body">' +
+        '<h4>Rules of War</h4><ul class="wiki-rules">' + rules + '</ul>' +
+        '<h4>Terrain</h4>' + terr +
+        '<h4>Offensive Tactics</h4>' + off +
+        '<h4>Defensive Tactics</h4>' + def +
+      '</div>' +
+      '<button class="btn wide" data-act="closeSheet">Close</button>'
+    );
+  } catch(e){ toast(e.message, 'bad'); }
 }
 async function actDeclare(){
   try {
@@ -1738,6 +1838,9 @@ const ACTS = {
   declareWar:   actDeclare,
   pickFront:    (btn, i) => pickFront(btn, i),
   warAction:    actWarAction,
+  warDefend:    actWarDefend,
+  warHint:      actWarHint,
+  warWiki:      actWarWiki,
   shopTab:      (btn, key) => shopTab(btn, key),
   closeSheet:   () => closeSheet(),
   bgClose:      (btn, v, e) => {

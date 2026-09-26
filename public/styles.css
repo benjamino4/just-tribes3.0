@@ -671,6 +671,43 @@ b{font-weight:800}
 .wact-btn.raid b{color:#ff9a86}
 .wact-btn[disabled]{opacity:.5;pointer-events:none}
 
+/* ---------- BATCH A: terrain + tactics + wiki + vengeance ---------- */
+.front-terrain{display:inline-block;margin-left:8px;font-size:.66rem;font-weight:700;
+  color:var(--ash);letter-spacing:.02em;text-transform:none}
+.war-tools{display:flex;gap:8px;margin:0 0 12px}
+.war-tool{flex:1;padding:10px 8px;border-radius:12px;font-size:.76rem;font-weight:800;
+  background:rgba(255,255,255,.04);border:1px solid var(--line);color:var(--bone);
+  display:flex;align-items:center;justify-content:center;gap:6px;transition:transform .12s}
+.war-tool:active{transform:scale(.96)}
+.war-tool .wt-ico{font-size:1rem;line-height:1}
+.tactic-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px}
+.tactic-grid.def{grid-template-columns:1fr 1fr 1fr}
+.tactic-btn{padding:10px 8px;border-radius:14px;text-align:center;
+  background:linear-gradient(160deg,rgba(44,33,24,.9),rgba(26,19,13,.9));
+  border:1px solid rgba(255,200,120,.22);color:var(--bone);transition:transform .12s;
+  display:flex;flex-direction:column;align-items:center;gap:2px}
+.tactic-btn:active{transform:scale(.96)}
+.tactic-btn .tg{font-size:1.15rem;line-height:1.1}
+.tactic-btn b{font-weight:900;color:var(--gold);font-size:.78rem;line-height:1.1}
+.tactic-btn .tc{font-size:.6rem;color:var(--ash)}
+.tactic-btn.def{border-color:rgba(120,160,200,.28)}
+.tactic-btn.def b{color:#bcd6ff}
+.tactic-btn[disabled]{opacity:.5;pointer-events:none}
+.grudge-banner{margin:10px 0;padding:10px 12px;border-radius:14px;font-size:.74rem;line-height:1.35;
+  color:#ffd9cf;background:linear-gradient(160deg,rgba(122,31,20,.35),rgba(60,15,10,.3));
+  border:1px solid rgba(192,57,43,.45)}
+.grudge-banner b{color:#ff9a86;font-weight:900}
+.sheet-title{font-size:1rem;font-weight:900;color:var(--gold);margin-bottom:12px;letter-spacing:.03em}
+.wiki-body{max-height:64vh;overflow:auto;padding-right:4px;margin-bottom:12px}
+.wiki-body h4{font-size:.8rem;font-weight:800;color:var(--gold);margin:14px 0 8px;
+  text-transform:uppercase;letter-spacing:.05em}
+.wiki-rules{margin:0 0 4px;padding-left:18px}
+.wiki-rules li{font-size:.74rem;color:var(--bone);line-height:1.45;margin-bottom:5px}
+.wiki-row{display:flex;align-items:baseline;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.05)}
+.wiki-row .wg{font-size:1rem;min-width:20px;text-align:center}
+.wiki-row b{font-size:.76rem;color:var(--gold);font-weight:800;min-width:110px}
+.wiki-row .wd{font-size:.7rem;color:var(--ash);line-height:1.35;flex:1}
+
 /* ---------- Kiva ---------- */
 .kiva-hero{display:flex;align-items:center;gap:14px;padding:16px;border-radius:22px;margin-bottom:14px;
   background:linear-gradient(160deg,rgba(34,26,18,.72),rgba(15,11,8,.68));
