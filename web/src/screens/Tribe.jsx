@@ -1,22 +1,28 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Icon from '../components/Icon.jsx';
-import { Card, SectionHeader, Button, ProgressBar } from '../components/UI.jsx';
+import AnimatedIcon from '../components/AnimatedIcon.jsx';
+import Hint from '../components/Hint.jsx';
+import Shape, { RADII } from '../components/Shape.jsx';
+import { Card, Button, ProgressBar } from '../components/UI.jsx';
 import { toast } from '../components/Toast.jsx';
 import { useGame } from '../store.js';
-import { fmt } from '../lib/format.js';
+import { fmt, timeLeft } from '../lib/format.js';
+import { haptic } from '../lib/telegram.js';
 
-const ROSTER = [
-  { name: 'Kael', role: 'Chief', online: true, loyalty: 42000 },
-  { name: 'Mira', role: 'Elder', online: true, loyalty: 31500 },
-  { name: 'Doon', role: 'Hunter', online: false, loyalty: 22100 },
-  { name: 'Vex', role: 'Hunter', online: true, loyalty: 19800 },
-  { name: 'Ora', role: 'Kin', online: false, loyalty: 9400 },
+const SECTIONS = [
+  { id: 'kiva',      name: 'The Kiva',    icon: 'scroll', shape: 'blob',   tone: '#ff9f45', sub: 'Tribe chat' },
+  { id: 'elections', name: 'Council',    icon: 'shield', shape: 'shield', tone: '#ffd27a', sub: 'Roles & votes' },
+  { id: 'war',       name: 'War Room',   icon: 'bolt',   shape: 'curved', tone: '#ff5a3c', sub: 'Raids & rivals' },
+  { id: 'members',   name: 'Roster',     icon: 'spark',  shape: 'circle', tone: '#7cc4ff', sub: 'The tribe' },
 ];
 
 export default function Tribe() {
+  const nav = useNavigate();
   const data = useGame((s) => s.data) || {};
   const tribe = data.tribe;
+  const war = data.war;
 
   if (!tribe) {
     return (
@@ -33,7 +39,8 @@ export default function Tribe() {
 
   return (
     <div className="col" style={{ gap: 4 }}>
-      <Card strong style={{ overflow: 'hidden' }}>
+      <Shape kind="soft" className="card strong" style={{ overflow: 'hidden', position: 'relative' }}>
+        <div style={{ position: 'absolute', top: 12, right: 12 }}><Hint text="Your tribe rises together. Feed the Great Pyre, win wars, and elect a Chief to climb the global ranks." /></div>
         <div className="row" style={{ gap: 14 }}>
           <motion.span className="crest-art" style={{ width: 54, height: 54 }} animate={{ rotate: [0, -4, 4, 0] }} transition={{ duration: 6, repeat: Infinity }}>
             <Icon name="tribe" size={28} style={{ color: '#2a1200' }} />
@@ -49,41 +56,44 @@ export default function Tribe() {
           <div className="col"><span className="tiny">Members</span><b>{tribe.members}</b></div>
           <div className="col"><span className="tiny">Loyalty</span><b className="tabular">{fmt(tribe.loyalty_total)}</b></div>
         </div>
-      </Card>
+      </Shape>
 
-      {/* The Great Pyre */}
-      <Card>
+      {/* Great Pyre summary → full page */}
+      <Shape kind="curved" className="card" onClick={() => { haptic('medium'); nav('/tribe/pyre'); }} style={{ cursor: 'pointer' }}>
         <div className="row between" style={{ marginBottom: 10 }}>
-          <b className="row" style={{ gap: 6 }}><Icon name="fire" size={18} style={{ color: 'var(--ember-400)' }} /> The Great Pyre</b>
+          <b className="row" style={{ gap: 8 }}><AnimatedIcon name="flame" size={24} tone="var(--ember-400)" /> The Great Pyre</b>
           <span className="chip tabular">{fmt(tribe.treasury)}</span>
         </div>
         <ProgressBar value={tribe.treasury % 200000} max={200000} />
-        <div className="row" style={{ gap: 8, marginTop: 12 }}>
-          <Button variant="primary" block onClick={() => toast('+500 stoked into the Pyre', 'good')}>Stoke +500</Button>
-          <Button variant="ghost" block onClick={() => toast('Donate flow coming next', 'info')}>Custom</Button>
+        <div className="row between" style={{ marginTop: 10 }}>
+          <span className="tiny">Level {tribe.level} → {tribe.level + 1}</span>
+          <span className="tiny" style={{ color: 'var(--ember-200)' }}>Tap to stoke ›</span>
         </div>
-      </Card>
+      </Shape>
 
-      <SectionHeader>Roster</SectionHeader>
-      {ROSTER.map((m, i) => (
-        <motion.div key={m.name} initial={{ opacity: 0, x: -10 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.04 }}>
-          <Card className="roster">
-            <div className="row between">
-              <div className="row">
-                <span className="crest-art" style={{ background: 'linear-gradient(180deg,#4a4038,#241f1a)', position: 'relative' }}>
-                  <b style={{ fontSize: 15 }}>{m.name[0]}</b>
-                  <span style={{ position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: 99, border: '2px solid var(--bg-2)', background: m.online ? 'var(--good)' : 'var(--ink-faint)' }} />
-                </span>
-                <div className="col" style={{ gap: 1 }}>
-                  <b style={{ fontSize: 14 }}>{m.name}</b>
-                  <span className="tiny">{m.role}</span>
-                </div>
-              </div>
-              <span className="tiny tabular">{fmt(m.loyalty)} loyalty</span>
+      {war?.active && (
+        <Shape kind="blob" className="card" onClick={() => { haptic('medium'); nav('/tribe/war'); }} style={{ cursor: 'pointer', borderColor: 'rgba(255,90,60,.4)' }}>
+          <div className="row between">
+            <div className="row"><AnimatedIcon name="bolt" size={26} tone="var(--ember-400)" /><div className="col" style={{ gap: 1 }}><b style={{ fontSize: 14 }}>War vs {war.opponent}</b><span className="tiny">{fmt(war.attacker_score)} – {fmt(war.defender_score)} · {timeLeft(war.ends_in_ms)} left</span></div></div>
+            <Icon name="chevron" size={18} style={{ color: 'var(--ink-dim)' }} />
+          </div>
+        </Shape>
+      )}
+
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
+        {SECTIONS.map((s, i) => (
+          <motion.button key={s.id}
+            initial={{ opacity: 0, y: 14 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05, type: 'spring', stiffness: 300, damping: 26 }}
+            whileTap={{ scale: 0.95 }} onClick={() => { haptic('medium'); nav('/tribe/' + s.id); }}
+            className="glass" style={{ padding: 16, textAlign: 'left', borderRadius: RADII[s.shape], minHeight: 118, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', overflow: 'hidden' }}>
+            <div style={{ alignSelf: s.shape === 'circle' ? 'center' : 'flex-start' }}><AnimatedIcon name={s.icon} size={38} tone={s.tone} /></div>
+            <div className="row between" style={{ width: '100%' }}>
+              <div className="col" style={{ gap: 0 }}><b style={{ fontSize: 15 }}>{s.name}</b><span className="tiny">{s.sub}</span></div>
+              <Icon name="chevron" size={16} style={{ color: 'var(--ink-dim)' }} />
             </div>
-          </Card>
-        </motion.div>
-      ))}
+          </motion.button>
+        ))}
+      </div>
     </div>
   );
 }

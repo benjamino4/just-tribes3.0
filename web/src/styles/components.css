@@ -116,3 +116,50 @@
   border: 1px solid rgba(255,180,100,.30);
   box-shadow: 0 6px 18px rgba(255,122,24,.25), var(--sh-inset-hi);
 }
+
+/* ---- Kiva (tribe chat) ---- */
+.kiva-bubble {
+  align-self: flex-start; max-width: 82%;
+  padding: 10px 13px; border-radius: 18px 18px 18px 6px;
+  background: var(--glass-bg); border: 1px solid var(--glass-brd);
+  -webkit-backdrop-filter: blur(12px); backdrop-filter: blur(12px);
+  display: flex; flex-direction: column;
+}
+.kiva-bubble.mine {
+  align-self: flex-end;
+  border-radius: 18px 18px 6px 18px;
+  background: linear-gradient(180deg, rgba(255,122,24,.20), rgba(196,58,5,.12));
+  border-color: rgba(255,180,100,.32);
+}
+.kiva-bubble.chief {
+  border-color: rgba(255,210,122,.5);
+  box-shadow: 0 0 18px rgba(255,210,122,.18), var(--sh-inset-hi);
+}
+.kiva-composer {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--safe-bot) + 10px); z-index: 40;
+  width: calc(100% - 24px); max-width: calc(var(--maxw) - 24px);
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px; border-radius: var(--r-xl);
+}
+.kiva-input {
+  flex: 1; min-width: 0; background: transparent; border: none;
+  color: var(--ink); font-size: 14.5px; padding: 6px 4px;
+}
+.kiva-input:focus { outline: none; }
+
+/* ---- Emoji picker ---- */
+.emoji-grid { display: grid; grid-template-columns: repeat(5, 1fr); gap: 8px; margin-top: 8px; }
+.emoji-cell {
+  aspect-ratio: 1; display: grid; place-items: center;
+  font-size: 24px; border-radius: 12px;
+  background: rgba(255,255,255,.05); border: 1px solid var(--glass-brd);
+}
+
+/* ---- Admin tabs ---- */
+.admin-tabs {
+  display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 10px;
+  -ms-overflow-style: none; scrollbar-width: none;
+}
+.admin-tabs::-webkit-scrollbar { display: none; }
+.admin-tabs .chip { flex: 0 0 auto; white-space: nowrap; }

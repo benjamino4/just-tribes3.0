@@ -1,9 +1,13 @@
 import React from 'react';
 import { motion } from 'framer-motion';
+import { useNavigate } from 'react-router-dom';
 import Icon from '../components/Icon.jsx';
+import AnimatedIcon from '../components/AnimatedIcon.jsx';
 import { Card, SectionHeader, Button, ProgressBar } from '../components/UI.jsx';
 import { toast } from '../components/Toast.jsx';
 import { fmt } from '../lib/format.js';
+import { useConfig } from '../lib/config.js';
+import { haptic } from '../lib/telegram.js';
 
 const PACKS = [
   { stars: 100, bonus: '', price: '100 ⭐' },
@@ -22,6 +26,8 @@ const RELICS = [
 ];
 
 export default function Store() {
+  const nav = useNavigate();
+  const packs = useConfig((s) => s.cfg.packs);
   return (
     <div className="col" style={{ gap: 4 }}>
       {/* Battle pass */}
@@ -60,6 +66,21 @@ export default function Store() {
           </div>
         </Card>
       ))}
+
+      <SectionHeader>Relic Packs</SectionHeader>
+      <div className="row" style={{ gap: 10, alignItems: 'stretch' }}>
+        {packs.map((p) => (
+          <motion.div key={p.id} whileTap={{ scale: 0.96 }} style={{ flex: 1 }} onClick={() => { haptic('medium'); nav('/store/pack/' + p.id); }}>
+            <Card style={{ textAlign: 'center', padding: 14, height: '100%', cursor: 'pointer', borderColor: p.glow + '55' }}>
+              <motion.div animate={{ y: [0, -4, 0] }} transition={{ duration: 3, repeat: Infinity }} style={{ width: 46, height: 46, margin: '0 auto 8px', borderRadius: 14, display: 'grid', placeItems: 'center', background: `radial-gradient(circle at 30% 25%, ${p.glow}, #2a1200)`, boxShadow: `0 6px 18px ${p.glow}66` }}>
+                <AnimatedIcon name="flame" size={26} tone="#fff" />
+              </motion.div>
+              <b style={{ fontSize: 13, display: 'block' }}>{p.name}</b>
+              <span className="tiny" style={{ color: 'var(--gold)' }}>{p.price} ⭐</span>
+            </Card>
+          </motion.div>
+        ))}
+      </div>
 
       <SectionHeader>Relic NFTs</SectionHeader>
       <div className="row" style={{ gap: 10 }}>

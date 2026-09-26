@@ -9,13 +9,13 @@ import Tribe from './screens/Tribe.jsx';
 import Ranks from './screens/Ranks.jsx';
 import Lands from './screens/Lands.jsx';
 import Store from './screens/Store.jsx';
+import Profile from './screens/Profile.jsx';
+import HomeSub from './screens/home/index.jsx';
+import TribeSub from './screens/tribe/index.jsx';
+import PackOpen from './screens/store/PackOpen.jsx';
+import Admin from './screens/admin/Admin.jsx';
 import { useGame } from './store.js';
-
-const page = {
-  initial: { opacity: 0, y: 14, scale: 0.985 },
-  animate: { opacity: 1, y: 0, scale: 1 },
-  exit: { opacity: 0, y: -10, scale: 0.99 },
-};
+import { variantFor } from './lib/transitions.js';
 
 function Boot() {
   return (
@@ -27,38 +27,40 @@ function Boot() {
   );
 }
 
+// Sub-pages live outside the tab bar; the tab bar only shows on the 5 roots.
+const ROOTS = ['/', '/tribe', '/ranks', '/lands', '/store'];
+
 export default function App() {
   const { loading, load } = useGame();
   const loc = useLocation();
-
   useEffect(() => { load(); }, [load]);
-
   if (loading) return <Boot />;
+
+  const v = variantFor(loc.pathname);
+  const showTabs = ROOTS.includes(loc.pathname);
 
   return (
     <div className="app-frame">
       <TopBar />
       <div className="scroller">
         <AnimatePresence mode="wait">
-          <motion.div
-            key={loc.pathname}
-            variants={page}
-            initial="initial"
-            animate="animate"
-            exit="exit"
-            transition={{ type: 'spring', stiffness: 320, damping: 32 }}
-          >
+          <motion.div key={loc.pathname} initial={v.initial} animate={v.animate} exit={v.exit} transition={v.transition}>
             <Routes location={loc}>
               <Route path="/" element={<Fire />} />
               <Route path="/tribe" element={<Tribe />} />
               <Route path="/ranks" element={<Ranks />} />
               <Route path="/lands" element={<Lands />} />
               <Route path="/store" element={<Store />} />
+              <Route path="/profile" element={<Profile />} />
+              <Route path="/home/:id" element={<HomeSub />} />
+              <Route path="/tribe/:id" element={<TribeSub />} />
+              <Route path="/store/pack/:id" element={<PackOpen />} />
+              <Route path="/admin" element={<Admin />} />
             </Routes>
           </motion.div>
         </AnimatePresence>
       </div>
-      <TabBar />
+      {showTabs && <TabBar />}
       <ToastHost />
     </div>
   );
