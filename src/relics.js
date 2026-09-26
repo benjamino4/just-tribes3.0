@@ -128,11 +128,82 @@ export async function relicEvents(userId, limit = 30){
 }
 
 /* ---------------------------------------------------------------------
+   RELIC FUSION (Batch C) — melt duplicate copies up into a higher rarity.
+   Cost: FUSE_COST surplus copies (count-1) at a rarity yields one relic of
+   the next rarity. Legendary cannot be fused further.
+--------------------------------------------------------------------- */
+export const FUSE_COST = 3;
+function nextRarity(rarity){
+  const i = RARITY_ORDER.indexOf(rarity);
+  return (i < 0 || i >= RARITY_ORDER.length - 1) ? null : RARITY_ORDER[i + 1];
+}
+// How many spare (duplicate) copies the user holds at each rarity.
+export async function fusionState(userId){
+  const rows = (await q(
+    `SELECT r.rarity, COALESCE(SUM(GREATEST(ur.count - 1, 0)),0)::int AS spare
+       FROM user_relics ur JOIN relics r ON r.id = ur.relic_id
+      WHERE ur.user_id=$1 GROUP BY r.rarity`,
+    [userId]
+  )).rows;
+  const spare = { common: 0, rare: 0, epic: 0, legendary: 0 };
+  rows.forEach(r => { spare[r.rarity] = Number(r.spare) || 0; });
+  const can = {};
+  RARITY_ORDER.forEach(rr => { can[rr] = nextRarity(rr) && spare[rr] >= FUSE_COST; });
+  return { spare, cost: FUSE_COST, can };
+}
+export async function fuseRelics(user, rarity){
+  const to = nextRarity(rarity);
+  if (!to) throw new Error('that rarity cannot be fused up');
+  // pull the user's duplicate copies at this rarity, most-duplicated first
+  const dups = (await q(
+    `SELECT ur.relic_id, ur.count, r.slug FROM user_relics ur
+       JOIN relics r ON r.id = ur.relic_id
+      WHERE ur.user_id=$1 AND r.rarity=$2 AND ur.count > 1
+      ORDER BY ur.count DESC`,
+    [user.id, rarity]
+  )).rows;
+  const total = dups.reduce((a, d) => a + (d.count - 1), 0);
+  if (total < FUSE_COST) throw new Error(`need ${FUSE_COST} duplicate ${rarity} relics to fuse`);
+  // consume FUSE_COST surplus copies
+  let need = FUSE_COST;
+  for (const d of dups){
+    if (need <= 0) break;
+    const take = Math.min(need, d.count - 1);
+    await q('UPDATE user_relics SET count = count - $1 WHERE user_id=$2 AND relic_id=$3',
+      [take, user.id, d.relic_id]);
+    need -= take;
+  }
+  // grant a relic at the next rarity, preferring one not yet owned
+  let reward = (await q(
+    `SELECT r.* FROM relics r
+      WHERE r.active=true AND r.rarity=$1
+        AND NOT EXISTS (SELECT 1 FROM user_relics ur WHERE ur.user_id=$2 AND ur.relic_id=r.id)
+      ORDER BY random() LIMIT 1`,
+    [to, user.id]
+  )).rows[0];
+  if (!reward){
+    reward = (await q(
+      'SELECT * FROM relics WHERE active=true AND rarity=$1 ORDER BY random() LIMIT 1',
+      [to]
+    )).rows[0];
+  }
+  if (!reward) throw new Error(`no ${to} relics exist to forge`);
+  await grantRelic(user.id, reward, { tribeId: user.tribe_id, detail: `fused from ${FUSE_COST}× ${rarity}` });
+  await q(
+    `INSERT INTO relic_fusions (user_id, from_rarity, to_rarity, consumed, result_id, result_slug)
+     VALUES ($1,$2,$3,$4,$5,$6)`,
+    [user.id, rarity, to, FUSE_COST, reward.id, reward.slug]
+  );
+  return { ok: true, reward, from: rarity, to, consumed: FUSE_COST };
+}
+
+/* ---------------------------------------------------------------------
    PACKS (chance-based, pity)
 --------------------------------------------------------------------- */
 export async function getPacks(){
   return (await q(
-    `SELECT slug, name, description, price_stars, pool, odds_json, pity_epic_in, active
+    `SELECT slug, name, description, price_stars, pool, odds_json, pity_epic_in,
+            anim_preset, anim_json, active
        FROM relic_packs WHERE active = true ORDER BY price_stars ASC`
   )).rows;
 }
@@ -210,7 +281,8 @@ export async function openPack(user, packSlug){
   }
 
   const balance = (await q('SELECT stars FROM users WHERE id=$1', [user.id])).rows[0]?.stars;
-  return { ok: true, relic, rarity, cost: price, stars: Number(balance || 0) };
+  return { ok: true, relic, rarity, cost: price, stars: Number(balance || 0),
+           anim_preset: pack.anim_preset || 'ember', anim_json: pack.anim_json || {} };
 }
 
 // Pick a relic the user doesn't own from a pool at (or near) a rarity.

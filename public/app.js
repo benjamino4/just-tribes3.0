@@ -161,7 +161,7 @@ async function api(path, body, opts){
   if (TG && TG.initData) headers['X-Init-Data'] = TG.initData;
   headers['X-Guest-Id'] = GUEST;
 
-  const READ_PATHS = new Set(['/state','/health','/war','/war/chronicle','/war/leaderboard','/war/tactics','/war/hint','/war/wiki','/war/vengeance','/war/alliances','/tribes','/tribe/names','/kiva','/bonfire','/cosmetics','/trials','/referral','/relics/state','/relics/packs','/relics/events']);
+  const READ_PATHS = new Set(['/state','/health','/war','/war/chronicle','/war/leaderboard','/war/tactics','/war/hint','/war/wiki','/war/vengeance','/war/alliances','/tribes','/tribe/names','/kiva','/bonfire','/cosmetics','/trials','/referral','/relics/state','/relics/packs','/relics/events','/relics/fusion','/spies']);
   const pathOnly = path.split('?')[0];
   const method = opts.method
     || (body !== undefined ? 'POST' : (READ_PATHS.has(pathOnly) ? 'GET' : 'POST'));
@@ -1190,6 +1190,9 @@ function renderTribeScreen(box){
         '</div>' +
       '</div>' +
       '<div class="card"><h3>Kiva</h3><button class="btn btn-primary btn-shine btn-block" data-act="openKiva">Open the Kiva</button></div>' +
+      '<div class="card"><h3>Spy Network</h3>' +
+        '<p class="tiny">Send spies against rival tribes for intel or sabotage — and raise a counter-spy shield to catch theirs.</p>' +
+        '<button class="btn btn-stone btn-shine btn-block" data-act="openSpies">Open the Spy Network</button></div>' +
       '<div class="card"><h3>Stoke the Great Pyre</h3>' +
         '<button class="btn btn-primary btn-shine btn-block" data-act="openDonate">Donate Ember</button></div>' +
       '<button class="btn btn-danger btn-block" data-act="leave" style="margin-top:8px">Leave the Tribe</button>' +
@@ -1310,16 +1313,24 @@ function renderRelicsScreen(box){
 
 async function loadRelics(){
   const box = $('#relicBody'); if (!box) return;
-  let st, packs;
+  let st, packs, fusion;
   try {
     st = await api('/relics/state');
     packs = (await api('/relics/packs')).packs || [];
+    try { fusion = await api('/relics/fusion'); } catch(e){ fusion = null; }
   } catch(e){ box.innerHTML = '<p class="tiny">The vault is sealed right now. Try again shortly.</p>'; return; }
   S.relics = st;
 
   const cat = st.catalog || [];
   const equipped = cat.find(r => r.equipped);
   const shards = Number(st.cursed_shards || 0);
+
+  // Paused relic (personal cursed relic suspended during a war) + swap prompt.
+  let pausedRelic = null;
+  if (st.paused && st.paused.relic_id){
+    pausedRelic = cat.find(r => Number(r.id) === Number(st.paused.relic_id)) || null;
+  }
+  const ownedWarRelics = cat.filter(r => r.owned && (r.category || 'personal') === 'war' && !r.equipped);
 
   // Loadout header
   const loadout = '<div class="relic-loadout">' +
@@ -1328,11 +1339,23 @@ async function loadRelics(){
       ? '<div class="rl-equipped">' + relicArt(equipped) +
           '<div><b>' + esc(equipped.name) + '</b>' +
           '<span class="tiny"> · ' + esc(RELIC_RARITY_LABEL[equipped.rarity] || '') + '</span>' +
+          (equipped.cursed ? '<span class="relic-cursed-chip">☠ Cursed</span>' : '') +
           '<div class="tiny">' + esc(equipped.description || '') + '</div></div>' +
           '<button class="btn btn-stone btn-sm" data-act="relicUnequip">Unequip</button>' +
         '</div>'
       : '<p class="tiny">No relic equipped. Equip one below to carry its power. Only one relic can be worn at a time.</p>') +
-    (st.paused ? '<div class="relic-pause-chip">⏸ A personal relic is paused for the duration of the current war.</div>' : '') +
+    (st.paused
+      ? '<div class="relic-pause-chip">⏸ ' +
+          (pausedRelic ? '<b>' + esc(pausedRelic.name) + '</b> is' : 'A personal relic is') +
+          ' paused for the duration of the current war. It resumes automatically when the war ends.' +
+          (ownedWarRelics.length
+            ? '<div class="relic-swap-prompt"><span class="tiny">Swap to a War relic to fight now:</span>' +
+                ownedWarRelics.slice(0, 3).map(r =>
+                  '<button class="btn btn-primary btn-sm" data-act="relicEquip" data-val="' + r.id + '">' + esc(r.name) + '</button>'
+                ).join('') + '</div>'
+            : '') +
+        '</div>'
+      : '') +
   '</div>';
 
   // Cursed shards
@@ -1370,7 +1393,26 @@ async function loadRelics(){
       '<div class="relic-grid">' + items.map(relicCard).join('') + '</div></div>';
   }).join('');
 
-  box.innerHTML = loadout + shardBox + packHtml + groups;
+  // Fusion (Batch C): melt spare duplicate copies up into the next rarity.
+  let fusionHtml = '';
+  if (fusion && fusion.spare){
+    const NEXT = { common:'rare', rare:'epic', epic:'legendary' };
+    const rows = ['common','rare','epic'].map(rr => {
+      const spare = Number(fusion.spare[rr] || 0);
+      const to = NEXT[rr];
+      const can = !!(fusion.can && fusion.can[rr]);
+      return '<div class="relic-fuse-row">' +
+        '<span class="rf-lbl">' + esc(RELIC_RARITY_LABEL[rr]) + ' → ' + esc(RELIC_RARITY_LABEL[to]) + '</span>' +
+        '<span class="tiny rf-spare">' + fmt(spare) + ' spare</span>' +
+        '<button class="btn btn-primary btn-sm" data-act="relicFuse" data-val="' + rr + '"' + (can ? '' : ' disabled') + '>Fuse · ' + fmt(fusion.cost || 3) + '</button>' +
+      '</div>';
+    }).join('');
+    fusionHtml = '<div class="relic-fusion"><div class="rl-head">Relic Fusion</div>' +
+      '<p class="tiny">Melt ' + fmt(fusion.cost || 3) + ' spare duplicate relics of one rarity into a guaranteed relic of the next rarity up.</p>' +
+      rows + '</div>';
+  }
+
+  box.innerHTML = loadout + shardBox + fusionHtml + packHtml + groups;
   if (window.hydrateIcons) window.hydrateIcons();
 }
 
@@ -1390,10 +1432,43 @@ async function relicRedeem(tier){
     haptic('heavy'); toast('Redeemed ' + (r.relic ? r.relic.name : 'a relic'), 'good'); refresh(); loadRelics();
   } catch(e){ toast(e.message + (e.data && e.data.need ? ' (need ' + e.data.need + ')' : ''), 'bad'); }
 }
+// Preset unwrap animations for pack opens. Falls back to 'ember'.
+const PACK_ANIM = {
+  ember:    { glyph:'🔥', cls:'pa-ember',    label:'The embers gather…' },
+  cursed:   { glyph:'💀', cls:'pa-cursed',   label:'A cold wind stirs…' },
+  shards:   { glyph:'🔮', cls:'pa-shards',   label:'The shards align…' },
+  goldburst:{ glyph:'✨', cls:'pa-goldburst',label:'Something radiant…' },
+};
+
+// Play a short unwrap animation, resolving when it finishes (or immediately
+// if the user has reduced-motion turned on).
+function playPackAnim(preset){
+  return new Promise(resolve => {
+    const reduced = (getSettings && getSettings().reducedFx) || false;
+    const cfg = PACK_ANIM[preset] || PACK_ANIM.ember;
+    if (reduced){ resolve(); return; }
+    const overlay = el('div', 'pack-anim ' + cfg.cls);
+    overlay.innerHTML =
+      '<div class="pa-stage">' +
+        '<div class="pa-burst"></div>' +
+        '<div class="pa-glyph">' + cfg.glyph + '</div>' +
+        (cfg.cls === 'pa-shards'
+          ? '<span class="pa-p"></span><span class="pa-p"></span><span class="pa-p"></span><span class="pa-p"></span><span class="pa-p"></span><span class="pa-p"></span>'
+          : '') +
+      '</div>' +
+      '<div class="pa-label">' + cfg.label + '</div>';
+    document.body.appendChild(overlay);
+    let done = false;
+    const finish = () => { if (done) return; done = true; overlay.remove(); resolve(); };
+    setTimeout(finish, 1400);
+  });
+}
+
 async function relicPackOpen(slug){
   try {
     const r = await api('/relics/pack/open', { slug });
     haptic('heavy');
+    await playPackAnim(r.anim_preset || 'ember');
     sheet('<div class="pack-result">' +
       relicArt(r.relic) +
       '<div class="pr-rar" data-rarity="' + esc(r.rarity) + '">' + esc(RELIC_RARITY_LABEL[r.rarity] || r.rarity) + '</div>' +
@@ -1403,6 +1478,110 @@ async function relicPackOpen(slug){
     '</div>');
     refresh(); loadRelics();
   } catch(e){ toast(e.message + (e.data && e.data.need ? ' (need ' + e.data.need + ' ⭐)' : ''), 'bad'); }
+}
+
+/* ---------- Relic fusion (Batch C) ---------- */
+async function relicFuse(rarity){
+  try {
+    const r = await api('/relics/fuse', { rarity });
+    haptic('heavy');
+    sheet('<div class="pack-result">' +
+      relicArt(r.reward) +
+      '<div class="pr-rar" data-rarity="' + esc(r.to) + '">' + esc(RELIC_RARITY_LABEL[r.to] || r.to) + '</div>' +
+      '<h3>' + esc(r.reward.name) + '</h3>' +
+      '<p class="tiny">Forged from ' + fmt(r.consumed) + ' spare ' + esc(RELIC_RARITY_LABEL[r.from] || r.from) + ' relics.</p>' +
+      '<button class="btn btn-primary btn-block" data-act="closeSheet">Claim</button>' +
+    '</div>');
+    refresh(); loadRelics();
+  } catch(e){ toast(e.message, 'bad'); }
+}
+
+/* ---------- Spy network (Batch C) ---------- */
+function spyMissionLine(m){
+  const intel = m.intel || {};
+  let detail = '';
+  if (m.status === 'success'){
+    detail = '<div class="spy-intel tiny">Treasury ' + fmt(intel.treasury || 0) +
+      ' · ' + fmt(intel.members || 0) + ' kin' +
+      (intel.at_war ? ' · at war' : '') +
+      (intel.sabotaged ? ' · disrupted ' + fmt(intel.sabotaged) : '') + '</div>';
+  } else if (m.status === 'caught'){
+    detail = '<div class="spy-intel tiny bad">Your spy was caught.</div>';
+  } else {
+    detail = '<div class="spy-intel tiny">In the field…</div>';
+  }
+  return '<div class="spy-mission spy-' + esc(m.status) + '">' +
+    '<div class="sm-head"><b>' + esc(m.target_name || 'Rival tribe') + '</b>' +
+      '<span class="chip-mini">' + esc(m.kind) + '</span></div>' + detail + '</div>';
+}
+
+async function openSpies(){
+  if (!S.tribe){ toast('Join a tribe first', 'warn'); return; }
+  sheet('<div class="spy-panel"><h3>Spy Network</h3><div class="skeleton"></div><div class="skeleton"></div></div>');
+  let data, tribes;
+  try {
+    data = await api('/spies');
+    tribes = (await api('/tribes')).tribes || [];
+  } catch(e){ sheet('<div class="spy-panel"><h3>Spy Network</h3><p class="tiny">The shadows are quiet right now. Try again shortly.</p><button class="btn btn-stone btn-block" data-act="closeSheet">Close</button></div>'); return; }
+  S.spies = data;
+  const t = data.tuning || {};
+  const rivals = tribes.filter(x => Number(x.id) !== Number(data.tribe)).slice(0, 12);
+
+  const counterLbl = data.counter > 0
+    ? '<span class="chip-mini chip-jade">Counter-spy Lv ' + data.counter + '</span>'
+    : '<span class="chip-mini chip-muted">No shield</span>';
+
+  const targets = rivals.length
+    ? '<div class="spy-targets">' + rivals.map(x =>
+        '<div class="spy-target"><span class="st-name">' + esc(x.name) + '</span>' +
+          '<div class="st-btns">' +
+            '<button class="btn btn-stone btn-sm" data-act="spyLaunch" data-val="' + x.id + '" data-kind="recon">Recon</button>' +
+            '<button class="btn btn-danger btn-sm" data-act="spyLaunch" data-val="' + x.id + '" data-kind="sabotage">Sabotage</button>' +
+          '</div></div>'
+      ).join('') + '</div>'
+    : '<p class="tiny">No rival tribes to target yet.</p>';
+
+  const missions = (data.missions || []).length
+    ? (data.missions || []).map(spyMissionLine).join('')
+    : '<p class="tiny">No missions yet.</p>';
+
+  const incoming = (data.incoming || []).length
+    ? '<div class="section-head"><b>Caught intruders</b></div>' +
+      (data.incoming || []).map(m =>
+        '<div class="spy-mission spy-caught"><div class="sm-head"><b>' + esc(m.from_name || 'Unknown') + '</b>' +
+          '<span class="chip-mini">' + esc(m.kind) + '</span></div>' +
+          '<div class="spy-intel tiny">Your counter-spies caught their ' + esc(m.kind) + '.</div></div>'
+      ).join('')
+    : '';
+
+  sheet('<div class="spy-panel">' +
+    '<h3>Spy Network</h3>' +
+    '<div class="spy-shield">' + counterLbl +
+      '<button class="btn btn-primary btn-sm" data-act="spyCounter">Raise shield · ' + fmt(t.counterCost || 1500) + ' Ember</button>' +
+    '</div>' +
+    '<p class="tiny">Recon costs ' + fmt(t.cost || 2000) + ' Ember, sabotage costs double. Missions resolve in ~' + fmt(t.durationMin || 30) + ' min.</p>' +
+    '<div class="section-head"><b>Rival tribes</b></div>' + targets +
+    '<div class="section-head"><b>Your missions</b></div>' + missions +
+    incoming +
+    '<button class="btn btn-stone btn-block" data-act="closeSheet" style="margin-top:12px">Close</button>' +
+  '</div>');
+}
+
+async function spyLaunch(target, kind){
+  try {
+    const r = await api('/spies/launch', { target: Number(target), kind });
+    haptic('medium');
+    toast('Spy sent against ' + (r.target || 'the rival') + ' (' + r.kind + ')', 'good');
+    refresh(); openSpies();
+  } catch(e){ toast(e.message + (e.data && e.data.need ? ' (need ' + fmt(e.data.need) + ' Ember)' : ''), 'bad'); }
+}
+async function spyCounter(){
+  try {
+    const r = await api('/spies/counter', {});
+    haptic('medium');
+    toast('Counter-spy shield raised to Lv ' + r.level, 'good');
+    refresh(); openSpies();
+  } catch(e){ toast(e.message + (e.data && e.data.need ? ' (need ' + fmt(e.data.need) + ' Ember)' : ''), 'bad'); }
 }
 
 /* ---------- Profile ---------- */
@@ -1454,11 +1633,36 @@ function renderProfileScreen(box){
           '<button class="btn btn-stone btn-sm" data-act="copyRef">Copy</button>' +
         '</div>'
       ) : '') +
+      '<div class="section-head"><b>Relic Wall</b><span class="muted">Your collection</span></div>' +
+      '<div id="profileRelicWall"><div class="empty-mini">Loading relics…</div></div>' +
       '<div class="profile-actions">' +
         '<button class="btn btn-stone btn-block" data-act="openSettings">' + iconSpan('settings-gear','',16) + ' Settings</button>' +
         '<button class="btn btn-stone btn-block" data-act="share">' + iconSpan('share','',16) + ' Share your saga</button>' +
       '</div>' +
     '</div>';
+  loadProfileRelicWall();
+}
+
+async function loadProfileRelicWall(){
+  const wall = $('#profileRelicWall'); if (!wall) return;
+  let st;
+  try { st = S.relics || await api('/relics/state'); }
+  catch(e){ wall.innerHTML = '<div class="empty-mini">Could not load your relics.</div>'; return; }
+  const owned = (st.catalog || []).filter(r => r.owned);
+  if (!owned.length){
+    wall.innerHTML = '<div class="empty-mini">No relics yet. Open a pack or win them in war.</div>';
+    return;
+  }
+  const rank = { legendary:0, epic:1, rare:2, common:3 };
+  owned.sort((a, b) => (rank[a.rarity] ?? 9) - (rank[b.rarity] ?? 9));
+  wall.innerHTML = '<div class="relic-wall-grid">' + owned.map(r =>
+    '<div class="rw-tile' + (r.equipped ? ' on' : '') + (r.cursed ? ' cursed' : '') + '" data-rarity="' + esc(r.rarity) + '" title="' + esc(r.name) + '">' +
+      relicArt(r) +
+      '<div class="rw-name tiny">' + esc(r.name) + (r.count > 1 ? ' ×' + fmt(r.count) : '') + '</div>' +
+      (r.equipped ? '<span class="rw-eq">Equipped</span>' : '') +
+    '</div>'
+  ).join('') + '</div>';
+  if (window.hydrateIcons) window.hydrateIcons();
 }
 
 function statBox(icon, val, lbl){
@@ -1994,6 +2198,10 @@ const ACTS = {
   relicUnequip: () => relicUnequip(),
   relicRedeem:  (btn, tier) => relicRedeem(tier),
   relicPackOpen:(btn, slug) => relicPackOpen(slug),
+  relicFuse:    (btn, rarity) => relicFuse(rarity),
+  openSpies:    () => openSpies(),
+  spyLaunch:    (btn, target) => spyLaunch(target, btn.dataset.kind),
+  spyCounter:   () => spyCounter(),
   closeSheet:   () => closeSheet(),
   bgClose:      (btn, v, e) => {
     if (e && e.target && e.target.classList && e.target.classList.contains('sheet-bg')) closeSheet();

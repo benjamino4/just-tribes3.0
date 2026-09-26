@@ -1237,3 +1237,107 @@ b{font-weight:800}
     linear-gradient(160deg, rgba(50,32,20,.95), rgba(20,14,10,.95));
   border: 1px solid rgba(255,140,40,.4);
 }
+
+/* ===================================================================
+   Batch C/D FE: cursed chip, swap prompt, fusion, spy network,
+   profile relic wall, pack-open animations.
+=================================================================== */
+.relic-cursed-chip{
+  display:inline-block; margin-left:8px; padding:1px 8px; border-radius:999px;
+  font-size:11px; font-weight:700; color:#ffd9d0;
+  background:rgba(120,20,20,.5); border:1px solid rgba(255,80,60,.5);
+}
+.relic-swap-prompt{ margin-top:8px; display:flex; flex-wrap:wrap; gap:6px; align-items:center; }
+.relic-swap-prompt .tiny{ width:100%; opacity:.85; }
+
+.relic-fusion{ margin:14px 0; }
+.relic-fuse-row{
+  display:flex; align-items:center; gap:10px; padding:8px 10px; margin-top:6px;
+  border-radius:12px; background:rgba(40,26,16,.6); border:1px solid rgba(255,140,40,.25);
+}
+.relic-fuse-row .rf-lbl{ font-weight:700; flex:1; }
+.relic-fuse-row .rf-spare{ opacity:.75; }
+
+.relic-wall-grid{
+  display:grid; grid-template-columns:repeat(3,1fr); gap:10px; margin:8px 0 4px;
+}
+.rw-tile{
+  position:relative; padding:8px; border-radius:14px; text-align:center;
+  background:rgba(30,20,14,.6); border:1px solid rgba(255,140,40,.2);
+}
+.rw-tile.on{ border-color:#ff7a18; box-shadow:0 0 0 1px rgba(255,122,24,.5) inset; }
+.rw-tile.cursed{ border-color:rgba(255,80,60,.4); }
+.rw-tile[data-rarity="legendary"]{ border-color:rgba(255,196,60,.6); }
+.rw-tile[data-rarity="epic"]{ border-color:rgba(180,120,255,.5); }
+.rw-name{ margin-top:6px; line-height:1.2; }
+.rw-eq{
+  position:absolute; top:6px; right:6px; font-size:9px; font-weight:800;
+  color:#111; background:#ff7a18; padding:1px 6px; border-radius:999px;
+}
+
+.spy-panel h3{ margin:0 0 10px; }
+.spy-shield{ display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:8px; }
+.spy-targets{ display:flex; flex-direction:column; gap:6px; }
+.spy-target{
+  display:flex; align-items:center; justify-content:space-between; gap:8px;
+  padding:8px 10px; border-radius:12px; background:rgba(40,26,16,.55);
+  border:1px solid rgba(255,140,40,.2);
+}
+.spy-target .st-name{ font-weight:700; }
+.spy-target .st-btns{ display:flex; gap:6px; }
+.spy-mission{
+  padding:8px 10px; margin-top:6px; border-radius:12px;
+  background:rgba(30,20,14,.55); border:1px solid rgba(255,140,40,.2);
+}
+.spy-mission .sm-head{ display:flex; align-items:center; justify-content:space-between; gap:8px; }
+.spy-mission.spy-success{ border-color:rgba(120,220,150,.45); }
+.spy-mission.spy-caught{ border-color:rgba(255,80,60,.45); }
+.spy-intel.bad{ color:#ff9a8a; }
+
+/* Pack-open animations */
+.pack-anim{
+  position:fixed; inset:0; z-index:9000; display:flex; flex-direction:column;
+  align-items:center; justify-content:center; gap:18px;
+  background:radial-gradient(circle at 50% 45%, rgba(20,12,6,.86), rgba(6,4,2,.96));
+  animation:pa-fade .3s ease;
+}
+@keyframes pa-fade{ from{opacity:0;} to{opacity:1;} }
+.pack-anim .pa-stage{ position:relative; width:160px; height:160px; display:flex; align-items:center; justify-content:center; }
+.pack-anim .pa-glyph{ font-size:72px; animation:pa-pop 1.4s cubic-bezier(.2,.8,.2,1) both; }
+@keyframes pa-pop{
+  0%{ transform:scale(.2) rotate(-20deg); opacity:0; }
+  40%{ transform:scale(1.25) rotate(8deg); opacity:1; }
+  70%{ transform:scale(.95) rotate(-3deg); }
+  100%{ transform:scale(1.05); opacity:1; }
+}
+.pack-anim .pa-burst{
+  position:absolute; width:40px; height:40px; border-radius:50%;
+  animation:pa-burst 1.2s ease-out both;
+}
+@keyframes pa-burst{
+  0%{ transform:scale(.2); opacity:.9; }
+  100%{ transform:scale(6); opacity:0; }
+}
+.pack-anim .pa-label{ font-weight:700; letter-spacing:.4px; color:#ffd9b0; animation:pa-fade .6s ease .3s both; }
+/* preset tints */
+.pa-ember .pa-burst{ background:radial-gradient(circle, rgba(255,150,40,.9), rgba(255,90,10,0)); }
+.pa-cursed .pa-burst{ background:radial-gradient(circle, rgba(120,40,160,.9), rgba(60,10,80,0)); }
+.pa-cursed .pa-label{ color:#e0c0ff; }
+.pa-goldburst .pa-burst{ background:radial-gradient(circle, rgba(255,220,120,.95), rgba(255,180,40,0)); }
+.pa-goldburst .pa-label{ color:#ffe9a8; }
+.pa-shards .pa-burst{ background:radial-gradient(circle, rgba(120,200,255,.9), rgba(40,120,220,0)); }
+.pa-shards .pa-p{
+  position:absolute; top:50%; left:50%; width:8px; height:20px; border-radius:2px;
+  background:linear-gradient(#cfe9ff,#5aa0ff); transform-origin:center -40px;
+  animation:pa-shard 1.3s ease-out both;
+}
+.pa-shards .pa-p:nth-child(3){ animation-delay:.03s; transform:rotate(60deg); }
+.pa-shards .pa-p:nth-child(4){ animation-delay:.06s; transform:rotate(120deg); }
+.pa-shards .pa-p:nth-child(5){ animation-delay:.09s; transform:rotate(180deg); }
+.pa-shards .pa-p:nth-child(6){ animation-delay:.12s; transform:rotate(240deg); }
+.pa-shards .pa-p:nth-child(7){ animation-delay:.15s; transform:rotate(300deg); }
+@keyframes pa-shard{
+  0%{ opacity:0; transform:translate(-50%,-50%) rotate(var(--r,0)) translateY(0) scale(.4); }
+  40%{ opacity:1; }
+  100%{ opacity:0; transform:translate(-50%,-50%) rotate(var(--r,0)) translateY(-60px) scale(1); }
+}

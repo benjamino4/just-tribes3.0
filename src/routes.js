@@ -18,11 +18,12 @@ import { isAdmin } from './admin.js';
 import { listTrials, trialAvailable, completeTrial } from './trials.js';
 import { feedWrite } from './feed.js';
 import * as Kiva from './kiva.js';
+import * as Spies from './spies.js';
 import crypto from 'crypto';
 import { council } from './council.js';
 import {
   getRelicState, equipRelic, unequipRelic, getPacks, openPack,
-  redeemShards, relicEvents, pauseForWar,
+  redeemShards, relicEvents, pauseForWar, fusionState, fuseRelics,
 } from './relics.js';
 
 export const router = express.Router();
@@ -1355,5 +1356,28 @@ router.post('/relics/shards/redeem', rateLimit('relic_shard', 30), async (req, r
 router.get('/relics/events', rateLimit('relics', 60), async (req, res, next) => { try {
   res.json({ events: await relicEvents(req.user.id, Number(req.query?.limit) || 30) });
 } catch(e){ next(e); } });
+
+// Relic fusion (Batch C): melt duplicate copies up into a higher rarity.
+router.get('/relics/fusion', rateLimit('relics', 60), async (req, res, next) => { try {
+  res.json(await fusionState(req.user.id));
+} catch(e){ next(e); } });
+router.post('/relics/fuse', rateLimit('relic_fuse', 30), async (req, res, next) => { try {
+  const rarity = String(req.body?.rarity || '').toLowerCase();
+  if (!rarity) return res.status(400).json({ error:'rarity required' });
+  res.json(await fuseRelics(req.user, rarity));
+} catch(e){ res.status(400).json({ error: e.message }); } });
+
+/* ---------- Spy system (Batch C) ---------- */
+router.get('/spies', rateLimit('spies', 60), async (req, res, next) => { try {
+  res.json(await Spies.spyState(req.user));
+} catch(e){ next(e); } });
+
+router.post('/spies/launch', rateLimit('spy_launch', 20), async (req, res, next) => { try {
+  res.json(await Spies.launchSpy(req.user, req.body?.target, String(req.body?.kind || 'recon')));
+} catch(e){ res.status(400).json({ error: e.message, need: e.need }); } });
+
+router.post('/spies/counter', rateLimit('spy_counter', 20), async (req, res, next) => { try {
+  res.json(await Spies.raiseCounterSpy(req.user));
+} catch(e){ res.status(400).json({ error: e.message, need: e.need }); } });
 
 export { handleWebhook };

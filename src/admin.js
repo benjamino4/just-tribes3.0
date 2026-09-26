@@ -651,6 +651,40 @@ export async function seasonEndNow(adminId){
   return r;
 }
 
+/* ---------- season rewards (Batch C) ---------- */
+// Pay out the top players (by loyalty) and top tribes (by treasury) for a
+// season. Idempotent-ish: refuses to double-pay the same season_id.
+export async function seasonPayout(adminId, opts = {}){
+  const topN     = Math.max(1, Math.min(100, Math.floor(Number(opts.topN) || 10)));
+  const baseEmber= Math.max(0, Math.floor(Number(opts.baseEmber) || 10000));
+  const baseLoy  = Math.max(0, Math.floor(Number(opts.baseLoyalty) || 500));
+  const seasonId = (await q('SELECT COALESCE(MAX(n),0)::int AS n FROM seasons')).rows[0]?.n || 0;
+  const already  = (await q('SELECT 1 FROM season_rewards WHERE season_id=$1 LIMIT 1', [seasonId])).rowCount;
+  if (already) throw new Error(`season ${seasonId} was already paid out`);
+  const top = (await q(
+    `SELECT id, username, tribe_id, COALESCE(loyalty,0)::bigint AS loyalty
+       FROM users ORDER BY loyalty DESC NULLS LAST, id ASC LIMIT $1`, [topN]
+  )).rows;
+  const payouts = [];
+  for (let i = 0; i < top.length; i++){
+    const rank = i + 1;
+    // linear decay: #1 gets full, last gets ~10%
+    const factor = 1 - (i / Math.max(topN, 1)) * 0.9;
+    const ember = Math.floor(baseEmber * factor);
+    const loyalty = Math.floor(baseLoy * factor);
+    await q('UPDATE users SET ember = ember + $1, loyalty = loyalty + $2 WHERE id=$3',
+      [ember, loyalty, top[i].id]);
+    await q(
+      `INSERT INTO season_rewards (season_id, user_id, tribe_id, rank, ember, loyalty, note)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
+      [seasonId, top[i].id, top[i].tribe_id || null, rank, ember, loyalty, `season ${seasonId} top ${rank}`]
+    );
+    payouts.push({ rank, user_id: top[i].id, username: top[i].username, ember, loyalty });
+  }
+  await audit(adminId, 'seasonPayout', `season ${seasonId}: ${payouts.length} players`);
+  return { ok: true, season_id: seasonId, count: payouts.length, payouts };
+}
+
 /* ---------- X quests ---------- */
 export async function xQuestsList(){
   const quests = (await q(
@@ -1300,6 +1334,7 @@ A.post('/names/delete', wrap(req => nameDelete(who(req), req.body.id)));
 A.get('/seasons', wrap(() => seasonsList()));
 A.post('/seasons/start', wrap(() => seasonStartNew(who(req))));
 A.post('/seasons/end', wrap(() => seasonEndNow(who(req))));
+A.post('/seasons/payout', wrap(req => seasonPayout(who(req), req.body)));
 
 /* X quests */
 A.get('/x-quests', wrap(() => xQuestsList()));A.post('/x-quests', wrap(req => xQuestCreate(who(req), req.body)));
@@ -1507,3 +1542,83 @@ A.post('/relics/image', wrap(req => relicSetImage(who(req), req.body)));
 A.post('/relics/image/clear', wrap(req => relicClearImage(who(req), req.body.id)));
 A.post('/relics/toggle', wrap(req => relicToggle(who(req), req.body.id, req.body.active)));
 A.post('/relics/delete', wrap(req => relicDelete(who(req), req.body.id)));
+
+/* =====================================================================
+   PACK admin control plane (Batch B2/D) — create / modify relic packs,
+   validate drop rates, and assign one of 4 animation presets.
+===================================================================== */
+const ANIM_PRESETS = ['ember', 'cursed', 'shards', 'goldburst'];
+function normalizeOdds(raw){
+  const o = raw || {};
+  const out = {};
+  let sum = 0;
+  for (const t of ['common', 'rare', 'epic', 'legendary']){
+    const v = Math.max(0, Number(o[t]) || 0);
+    out[t] = v; sum += v;
+  }
+  if (sum <= 0) throw new Error('drop rates must add up to more than 0');
+  // Reject if wildly off 1.0; auto-normalize small drift.
+  if (Math.abs(sum - 1) > 0.02) throw new Error('drop rates must add up to 1.0 (currently ' + sum.toFixed(3) + ')');
+  for (const t of Object.keys(out)) out[t] = out[t] / sum; // exact-normalize
+  return out;
+}
+export async function packsListAdmin(){
+  return (await q(
+    `SELECT slug, name, description, price_stars, pool, odds_json, pity_epic_in,
+            anim_preset, anim_json, active
+       FROM relic_packs ORDER BY price_stars ASC, slug`
+  )).rows;
+}
+export async function packUpsert(adminId, body = {}){
+  const b = body || {};
+  const name = String(b.name || '').trim();
+  if (!name) throw new Error('pack name is required');
+  const slug = relicSlugify(b.slug || name, 'pack');
+  const pool = String(b.pool || 'cursed').toLowerCase();
+  if (!['cursed', 'rare', 'legendary'].includes(pool)) throw new Error('pool must be cursed | rare | legendary');
+  const odds = normalizeOdds(b.odds_json || b.odds);
+  const anim = ANIM_PRESETS.includes(String(b.anim_preset)) ? b.anim_preset : 'ember';
+  const price = Math.max(0, Math.floor(Number(b.price_stars) || 0));
+  const pity = Math.max(0, Math.floor(Number(b.pity_epic_in) || 0));
+  const animJson = (b.anim_json && typeof b.anim_json === 'object') ? b.anim_json : {};
+  const exists = (await q('SELECT slug FROM relic_packs WHERE slug=$1', [slug])).rows[0];
+  if (exists){
+    const r = await q(
+      `UPDATE relic_packs SET name=$2, description=$3, price_stars=$4, pool=$5,
+              odds_json=$6::jsonb, pity_epic_in=$7, anim_preset=$8, anim_json=$9::jsonb,
+              active=$10 WHERE slug=$1 RETURNING *`,
+      [slug, name, String(b.description || '').slice(0, 400), price, pool,
+       JSON.stringify(odds), pity, anim, JSON.stringify(animJson), b.active !== false]
+    );
+    await audit(adminId, 'packUpdate', slug);
+    return r.rows[0];
+  }
+  const r = await q(
+    `INSERT INTO relic_packs (slug, name, description, price_stars, pool, odds_json,
+                              pity_epic_in, anim_preset, anim_json, active)
+     VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7,$8,$9::jsonb,$10) RETURNING *`,
+    [slug, name, String(b.description || '').slice(0, 400), price, pool,
+     JSON.stringify(odds), pity, anim, JSON.stringify(animJson), b.active !== false]
+  );
+  await audit(adminId, 'packCreate', slug);
+  return r.rows[0];
+}
+export async function packToggle(adminId, slug, active){
+  const on = /^(on|1|true|yes)$/i.test(String(active));
+  const r = await q('UPDATE relic_packs SET active=$1 WHERE slug=$2 RETURNING slug, active', [on, slug]);
+  if (!r.rowCount) throw new Error('pack not found');
+  await audit(adminId, 'packToggle', slug + ' -> ' + on);
+  return r.rows[0];
+}
+export async function packDelete(adminId, slug){
+  const r = await q('DELETE FROM relic_packs WHERE slug=$1 RETURNING slug', [slug]);
+  if (!r.rowCount) throw new Error('pack not found');
+  await audit(adminId, 'packDelete', slug);
+  return r.rows[0];
+}
+
+/* ---- pack admin routes ---- */
+A.get('/packs', wrap(() => packsListAdmin()));
+A.post('/packs', wrap(req => packUpsert(who(req), req.body)));
+A.post('/packs/toggle', wrap(req => packToggle(who(req), req.body.slug, req.body.active)));
+A.post('/packs/delete', wrap(req => packDelete(who(req), req.body.slug)));

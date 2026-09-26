@@ -187,6 +187,7 @@ var SECTIONS = [
   { id: 'names',      label: 'Names Pool',    ico: 'admin-names' },
   { id: 'avatars',    label: 'Avatars',       ico: 'admin-names' },
   { id: 'relics',     label: 'Relics',        ico: 'admin-quests' },
+  { id: 'packs',      label: 'Relic Packs',   ico: 'admin-quests' },
   { id: 'control',    label: 'Control',       ico: 'admin-control' },
   { id: 'feed',       label: 'Feed',          ico: 'admin-feed' },
   { id: 'danger',     label: 'Danger Zone',   ico: 'admin-danger', danger: true },
@@ -957,6 +958,48 @@ PANELS.control = function(panel){
   });
   b.appendChild(ta); b.appendChild(send);
   panel.appendChild(b);
+
+  /* season lifecycle + rewards (Batch C) */
+  var s = h('div', { class: 'wgroup' });
+  s.innerHTML = '<h3>Seasons &amp; rewards</h3>' +
+    '<p class="wsub">Start / end the season, then pay out the top players (by loyalty). Ember + loyalty decay from #1 down. A season can only be paid out once.</p>' +
+    '<div id="seasonList"></div>';
+  var srow = h('div', { class: 'wrow' });
+  var startB = h('button', { class: 'btn tiny', text: 'Start season' });
+  var endB = h('button', { class: 'btn tiny ghost', text: 'End season' });
+  startB.addEventListener('click', function(){ act('/seasons/start', {}, 'Season started').then(loadSeasons).catch(function(e){ toast(e.message, true); }); });
+  endB.addEventListener('click', function(){ if (confirm('End the current season?')) act('/seasons/end', {}, 'Season ended').then(loadSeasons).catch(function(e){ toast(e.message, true); }); });
+  srow.appendChild(startB); srow.appendChild(endB);
+  s.appendChild(srow);
+  var prow = h('div', { class: 'wrow' });
+  prow.innerHTML =
+    '<input id="pyTop" class="winput" type="number" min="1" max="100" value="10" style="width:120px" placeholder="Top N"/>' +
+    '<input id="pyEmber" class="winput" type="number" min="0" value="10000" style="width:140px" placeholder="Base Ember"/>' +
+    '<input id="pyLoy" class="winput" type="number" min="0" value="500" style="width:140px" placeholder="Base Loyalty"/>';
+  var payB = h('button', { class: 'btn primary sm', style: 'width:auto', text: 'Pay out season' });
+  payB.addEventListener('click', function(){
+    if (!confirm('Pay out season rewards to the top players now?')) return;
+    act('/seasons/payout', {
+      topN: Number($('#pyTop').value) || 10,
+      baseEmber: Number($('#pyEmber').value) || 10000,
+      baseLoyalty: Number($('#pyLoy').value) || 500
+    }, 'Rewards paid').then(function(d){ toast('Paid ' + fmt(d.count) + ' players'); }).catch(function(e){ toast(e.message, true); });
+  });
+  prow.appendChild(payB);
+  s.appendChild(prow);
+  panel.appendChild(s);
+
+  function loadSeasons(){
+    api('/seasons').then(function(list){
+      var host = $('#seasonList'); if (!host) return;
+      if (!list.length){ host.innerHTML = '<p class="muted" style="padding:8px 0">No seasons yet.</p>'; return; }
+      host.innerHTML = list.slice(0, 6).map(function(se){
+        return '<div class="wrow"><div class="wlbl"><b>Season ' + esc(se.n) + '</b><span>' +
+          (se.ended_at ? 'ended' : 'active') + '</span></div></div>';
+      }).join('');
+    }).catch(function(){});
+  }
+  loadSeasons();
 };
 
 PANELS.feed = function(panel){
@@ -1149,10 +1192,127 @@ function relicText(label, value, ph){
   return wrap;
 }
 
+PANELS.packs = function(panel){
+  panel.innerHTML = '';
+  var ANIM = ['ember', 'cursed', 'shards', 'goldburst'];
+  var editing = { slug: null };
+
+  var ed = h('div', { class: 'wgroup' });
+  ed.innerHTML =
+    '<h3>Create / edit relic pack</h3>' +
+    '<p class="wsub">Drop rates must total 100%. Pick one of four open-pack animations.</p>' +
+    '<div class="wrow">' +
+      '<input id="pName" class="winput" placeholder="Name" maxlength="80"/>' +
+      '<input id="pSlug" class="winput" placeholder="slug (optional)" maxlength="40"/>' +
+      '<select id="pPool" class="winput"><option value="cursed">cursed</option><option value="rare">rare</option><option value="legendary">legendary</option></select>' +
+    '</div>' +
+    '<div class="wrow"><input id="pDesc" class="winput" style="flex:1;max-width:none" placeholder="Description" maxlength="400"/></div>' +
+    '<div class="wrow">' +
+      '<input id="pPrice" class="winput" type="number" min="0" placeholder="Price (Stars)"/>' +
+      '<input id="pPity" class="winput" type="number" min="0" placeholder="Pity: Epic by Nth (0=off)"/>' +
+      '<select id="pAnim" class="winput"><option value="ember">ember</option><option value="cursed">cursed</option><option value="shards">shards</option><option value="goldburst">goldburst</option></select>' +
+    '</div>' +
+    '<div class="wrow" style="gap:6px;flex-wrap:wrap">' +
+      '<label class="wsub">Common %<input id="oCommon" class="winput" type="number" min="0" max="100" step="0.1" style="width:80px"/></label>' +
+      '<label class="wsub">Rare %<input id="oRare" class="winput" type="number" min="0" max="100" step="0.1" style="width:80px"/></label>' +
+      '<label class="wsub">Epic %<input id="oEpic" class="winput" type="number" min="0" max="100" step="0.1" style="width:80px"/></label>' +
+      '<label class="wsub">Legendary %<input id="oLeg" class="winput" type="number" min="0" max="100" step="0.1" style="width:80px"/></label>' +
+      '<span id="oSum" class="wval">Σ 0%</span>' +
+    '</div>' +
+    '<div class="wrow">' +
+      '<button id="pSave" class="btn primary sm" style="width:auto">Save pack</button>' +
+      '<button id="pNew" class="btn ghost sm" style="width:auto">New / clear</button>' +
+    '</div>' +
+    '<div id="pList"></div>';
+  panel.appendChild(ed);
+
+  function sumOdds(){
+    var s = (Number($('#oCommon').value) || 0) + (Number($('#oRare').value) || 0) +
+            (Number($('#oEpic').value) || 0) + (Number($('#oLeg').value) || 0);
+    var el = $('#oSum');
+    el.textContent = 'Σ ' + s.toFixed(1) + '%';
+    el.style.color = Math.abs(s - 100) <= 2 ? 'var(--gold)' : '#ff6b6b';
+    return s;
+  }
+  ['oCommon', 'oRare', 'oEpic', 'oLeg'].forEach(function(id){
+    $('#' + id).addEventListener('input', sumOdds);
+  });
+
+  function clearForm(){
+    editing.slug = null;
+    $('#pName').value = ''; $('#pSlug').value = ''; $('#pDesc').value = '';
+    $('#pPool').value = 'cursed'; $('#pPrice').value = ''; $('#pPity').value = '';
+    $('#pAnim').value = 'ember';
+    $('#oCommon').value = 55; $('#oRare').value = 30; $('#oEpic').value = 12; $('#oLeg').value = 3;
+    $('#pSave').textContent = 'Save pack'; sumOdds();
+  }
+  function loadInto(p){
+    editing.slug = p.slug;
+    var o = p.odds_json || {};
+    $('#pName').value = p.name || ''; $('#pSlug').value = p.slug || '';
+    $('#pDesc').value = p.description || ''; $('#pPool').value = p.pool || 'cursed';
+    $('#pPrice').value = p.price_stars || 0; $('#pPity').value = p.pity_epic_in || 0;
+    $('#pAnim').value = ANIM.indexOf(p.anim_preset) >= 0 ? p.anim_preset : 'ember';
+    $('#oCommon').value = ((o.common || 0) * 100).toFixed(1);
+    $('#oRare').value = ((o.rare || 0) * 100).toFixed(1);
+    $('#oEpic').value = ((o.epic || 0) * 100).toFixed(1);
+    $('#oLeg').value = ((o.legendary || 0) * 100).toFixed(1);
+    $('#pSave').textContent = 'Save changes'; sumOdds();
+    ed.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  $('#pNew').addEventListener('click', clearForm);
+  $('#pSave').addEventListener('click', function(){
+    var s = sumOdds();
+    if (Math.abs(s - 100) > 2){ toast('Drop rates must total 100% (now ' + s.toFixed(1) + '%)', true); return; }
+    if (!$('#pName').value.trim()){ toast('Name required', true); return; }
+    var body = {
+      slug: editing.slug || $('#pSlug').value.trim(),
+      name: $('#pName').value.trim(),
+      description: $('#pDesc').value.trim(),
+      pool: $('#pPool').value,
+      price_stars: Number($('#pPrice').value) || 0,
+      pity_epic_in: Number($('#pPity').value) || 0,
+      anim_preset: $('#pAnim').value,
+      odds_json: {
+        common: (Number($('#oCommon').value) || 0) / 100,
+        rare: (Number($('#oRare').value) || 0) / 100,
+        epic: (Number($('#oEpic').value) || 0) / 100,
+        legendary: (Number($('#oLeg').value) || 0) / 100
+      }
+    };
+    act('/packs', body, editing.slug ? 'Pack updated' : 'Pack created').then(function(){ PANELS.packs(panel); });
+  });
+
+  clearForm();
+
+  api('/packs').then(function(list){
+    var host = $('#pList');
+    if (!list.length){ host.innerHTML = '<p class="muted" style="padding:12px 0">No packs yet.</p>'; return; }
+    host.innerHTML = '<h3>Packs (' + list.length + ')</h3>';
+    list.forEach(function(p){
+      var o = p.odds_json || {};
+      var r = h('div', { class: 'wlist-row' });
+      r.innerHTML = '<div class="wl-ico">' + iconSpan('admin-payments', '', 20) + '</div>' +
+        '<div class="wl-body"><b>' + esc(p.name) + ' <span style="color:var(--mut);font-weight:600">(' + esc(p.slug) + ')</span>' +
+        (p.active ? '' : ' · <span style="color:var(--mut)">hidden</span>') + '</b>' +
+        '<span>' + fmt(p.price_stars) + '⭐ · ' + esc(p.pool) + ' · anim ' + esc(p.anim_preset || 'ember') +
+        ' · ' + Math.round((o.common || 0) * 100) + '/' + Math.round((o.rare || 0) * 100) + '/' +
+        Math.round((o.epic || 0) * 100) + '/' + Math.round((o.legendary || 0) * 100) + '</span></div>';
+      var editB = h('button', { class: 'btn tiny', text: 'Edit' });
+      editB.addEventListener('click', function(){ loadInto(p); });
+      var tog = h('button', { class: 'btn tiny ghost', text: p.active ? 'Hide' : 'Show' });
+      tog.addEventListener('click', function(){ act('/packs/toggle', { slug: p.slug, active: p.active ? 'off' : 'on' }, p.active ? 'Hidden' : 'Shown').then(function(){ PANELS.packs(panel); }); });
+      var del = h('button', { class: 'btn tiny danger', text: 'Delete' });
+      del.addEventListener('click', function(){ if (confirm('Delete pack ' + p.slug + '?')) act('/packs/delete', { slug: p.slug }, 'Deleted').then(function(){ PANELS.packs(panel); }); });
+      r.appendChild(editB); r.appendChild(tog); r.appendChild(del);
+      host.appendChild(r);
+    });
+  }).catch(function(e){ var host = $('#pList'); if (host) host.innerHTML = '<p class="muted">' + esc(e.message) + '</p>'; });
+};
+
 PANELS.relics = function(panel){
   panel.innerHTML = '';
   var editing = { id: null, svg: null, image_url: null };
-
   var ed = h('div', { class: 'wgroup' });
   ed.appendChild(h('h3', { text: 'Forge / modify a relic' }));
   ed.appendChild(h('p', { class: 'wsub', text: 'Set the buff, domain and war effect, then attach card art (SVG or PNG). Scripts are stripped from SVGs automatically.' }));
