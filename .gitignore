@@ -1,6 +1,24 @@
+# deps
 node_modules/
-# server/public is a build artifact produced by `npm run build`
-server/public/
+**/node_modules/
+
+# env
 .env
-.DS_Store
+.env.*
+!.env.example
+
+# build
+server/public/
+web/dist/
+web/.vite/
 *.log
+
+# os
+.DS_Store
+Thumbs.db
+
+# editors
+.vscode/
+.idea/
+*.swp
+*.swo
