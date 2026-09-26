@@ -1,143 +1,138 @@
 /* =====================================================================
-   TRIBES — Dynamic Island notification helper.
-   Usage:
-     notify({ title, msg, icon, severity, action, duration, progress })
-   Options:
-     title      string
-     msg        string
-     icon       icon name (from sprite)
-     severity   'default' | 'success' | 'warn' | 'danger'
-     action     { label, onClick }   optional
-     duration   ms before auto-compact (default 4000). 0 = sticky.
-     onTap      callback for whole-notification tap (expands if compact)
-     progress   { total, interval }  shows a bar draining over time
-   Returns a handle: { el, close(), compact() }
+   TRIBES — Dynamic Island notification styles.
+   Paired with assets/notify.js (window.notify).
+   A top-centered pill that slides down, then compacts to a small pill.
 ===================================================================== */
-(function(){
-'use strict';
 
-function ensureRoot(){
-  let root = document.getElementById('notifyRoot');
-  if (!root){
-    root = document.createElement('div');
-    root.id = 'notifyRoot';
-    root.className = 'notify-root';
-    document.body.appendChild(root);
-  }
-  return root;
+.notify-root{
+  position: fixed;
+  top: max(10px, env(safe-area-inset-top));
+  left: 0; right: 0;
+  z-index: 4000;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  pointer-events: none;
+  padding: 0 12px;
 }
 
-function notify(opts){
-  opts = opts || {};
-  const {
-    title = '',
-    msg = '',
-    icon = 'bell',
-    severity = 'default',
-    action = null,
-    duration = 4000,
-    onTap = null,
-    progress = null,
-  } = opts;
+.notify{
+  pointer-events: auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: min(420px, 92vw);
+  padding: 11px 14px;
+  border-radius: 22px;
+  color: #f7ecd8;
+  background: linear-gradient(180deg, rgba(28,20,14,.96), rgba(14,10,8,.98));
+  border: 1px solid rgba(255,168,74,.22);
+  box-shadow:
+    0 18px 44px rgba(0,0,0,.55),
+    0 2px 0 rgba(255,255,255,.05) inset,
+    0 0 24px rgba(255,120,32,.10);
+  backdrop-filter: blur(14px) saturate(1.2);
+  -webkit-backdrop-filter: blur(14px) saturate(1.2);
+  transform: translateY(-140%) scale(.96);
+  opacity: 0;
+  transition:
+    transform .46s cubic-bezier(.22,1.14,.36,1),
+    opacity .34s ease,
+    width .42s cubic-bezier(.3,.9,.3,1),
+    padding .42s cubic-bezier(.3,.9,.3,1),
+    border-radius .42s ease;
+  will-change: transform, opacity, width;
+  overflow: hidden;
+}
+.notify.in{ transform: translateY(0) scale(1); opacity: 1; }
+.notify.out{ transform: translateY(-140%) scale(.94); opacity: 0; }
 
-  const root = ensureRoot();
-  const el = document.createElement('div');
-  el.className = 'notify sev-' + severity;
+.notify-ico{
+  flex: 0 0 auto;
+  width: 34px; height: 34px;
+  display: grid; place-items: center;
+  border-radius: 12px;
+  background: radial-gradient(120% 120% at 30% 20%, rgba(255,160,64,.28), rgba(255,90,20,.10));
+  border: 1px solid rgba(255,168,74,.28);
+  color: #ffd9a0;
+}
+.notify-ico [data-icon]{ width: 18px; height: 18px; display:block; }
 
-  const iconHtml = '<span data-icon="' + icon + '"></span>';
-  const actionHtml = action
-    ? '<button class="notify-action" type="button">' + escapeHtml(action.label || 'Open') + '</button>'
-    : '';
-  const progressHtml = progress
-    ? '<div class="notify-progress"><i style="width:100%"></i></div>'
-    : '';
-
-  el.innerHTML =
-    '<div class="notify-ico">' + iconHtml + '</div>' +
-    '<div class="notify-body">' +
-      '<div class="notify-title">' + escapeHtml(title) + '</div>' +
-      (msg ? '<div class="notify-msg">' + escapeHtml(msg) + '</div>' : '') +
-    '</div>' +
-    actionHtml +
-    progressHtml;
-
-  root.appendChild(el);
-
-  if (window.hydrateIcons) window.hydrateIcons();
-
-  // Action click
-  if (action && action.onClick){
-    const btn = el.querySelector('.notify-action');
-    if (btn) btn.addEventListener('click', e => {
-      e.stopPropagation();
-      try { action.onClick(handle); } catch(err){ console.warn(err); }
-      handle.close();
-    });
-  }
-
-  // Whole-notification tap
-  el.addEventListener('click', e => {
-    if (e.target.closest('.notify-action')) return;
-    if (onTap) onTap(handle);
-    else handle.compact();
-  });
-
-  // Progress bar
-  let progressTimer = null;
-  if (progress && progress.total > 0){
-    const bar = el.querySelector('.notify-progress > i');
-    const startedAt = Date.now();
-    progressTimer = setInterval(() => {
-      const elapsed = Date.now() - startedAt;
-      const pct = Math.max(0, 1 - elapsed / progress.total);
-      if (bar) bar.style.width = (pct * 100).toFixed(1) + '%';
-      if (pct <= 0) clearInterval(progressTimer);
-    }, progress.interval || 200);
-  }
-
-  // Auto-compact
-  let compactTimer = null;
-  if (duration > 0){
-    compactTimer = setTimeout(() => handle.compact(), duration);
-  }
-
-  const handle = {
-    el,
-    close(){
-      clearTimeout(compactTimer);
-      clearInterval(progressTimer);
-      el.classList.add('out');
-      setTimeout(() => el.remove(), 340);
-    },
-    compact(){
-      clearTimeout(compactTimer);
-      if (el.classList.contains('compact')) return;
-      el.classList.add('compact');
-      // auto-dismiss 3s after compact if it was transient
-      if (duration > 0){
-        compactTimer = setTimeout(() => handle.close(), 3000);
-      }
-    },
-    expand(){
-      el.classList.remove('compact');
-      clearTimeout(compactTimer);
-      if (duration > 0) compactTimer = setTimeout(() => handle.compact(), duration);
-    },
-  };
-
-  // Cap at 4 visible
-  const all = root.querySelectorAll('.notify');
-  if (all.length > 4) all[0].remove();
-
-  return handle;
+.notify-body{ min-width: 0; flex: 1 1 auto; }
+.notify-title{
+  font-weight: 800;
+  font-size: .9rem;
+  line-height: 1.15;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.notify-msg{
+  font-size: .78rem;
+  opacity: .82;
+  line-height: 1.25;
+  margin-top: 2px;
+  overflow: hidden;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
 }
 
-function escapeHtml(s){
-  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
-    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
-  }[c]));
+.notify-action{
+  flex: 0 0 auto;
+  border: 0;
+  cursor: pointer;
+  font-weight: 800;
+  font-size: .78rem;
+  color: #1a1008;
+  padding: 7px 12px;
+  border-radius: 12px;
+  background: linear-gradient(180deg, #ffc061, #ff8a2a);
+  box-shadow: 0 4px 12px rgba(255,120,32,.35);
+}
+.notify-action:active{ transform: translateY(1px); }
+
+.notify-progress{
+  position: absolute;
+  left: 0; right: 0; bottom: 0;
+  height: 3px;
+  background: rgba(255,255,255,.08);
+}
+.notify-progress > i{
+  display: block;
+  height: 100%;
+  width: 100%;
+  background: linear-gradient(90deg, #ffb347, #ff6a1a);
+  transition: width .2s linear;
 }
 
-window.notify = notify;
+/* ---------- severities ---------- */
+.notify.sev-success{ border-color: rgba(96,220,140,.34); box-shadow: 0 18px 44px rgba(0,0,0,.55), 0 0 26px rgba(60,200,120,.16); }
+.notify.sev-success .notify-ico{ background: radial-gradient(120% 120% at 30% 20%, rgba(96,220,140,.3), rgba(40,170,100,.12)); border-color: rgba(96,220,140,.4); color:#bff5cf; }
+.notify.sev-warn{ border-color: rgba(255,205,90,.4); }
+.notify.sev-warn .notify-ico{ background: radial-gradient(120% 120% at 30% 20%, rgba(255,205,90,.3), rgba(210,150,20,.12)); border-color: rgba(255,205,90,.44); color:#ffe6a6; }
+.notify.sev-danger{ border-color: rgba(255,110,96,.42); box-shadow: 0 18px 44px rgba(0,0,0,.55), 0 0 26px rgba(220,60,50,.18); }
+.notify.sev-danger .notify-ico{ background: radial-gradient(120% 120% at 30% 20%, rgba(255,110,96,.3), rgba(200,50,40,.12)); border-color: rgba(255,110,96,.44); color:#ffc4bd; }
 
-})();
+/* ---------- compact (island) state ---------- */
+.notify.compact{
+  width: auto;
+  max-width: 260px;
+  padding: 8px 12px;
+  border-radius: 999px;
+  gap: 8px;
+  cursor: pointer;
+}
+.notify.compact .notify-msg{ display: none; }
+.notify.compact .notify-action{ display: none; }
+.notify.compact .notify-progress{ display: none; }
+.notify.compact .notify-title{ font-size: .82rem; }
+.notify.compact .notify-ico{ width: 26px; height: 26px; border-radius: 9px; }
+.notify.compact .notify-ico [data-icon]{ width: 15px; height: 15px; }
+
+@media (prefers-reduced-motion: reduce){
+  .notify{ transition: opacity .2s ease; transform: none; }
+  .notify.in{ transform: none; }
+  .notify.out{ transform: none; }
+}

@@ -3,6 +3,7 @@
 ===================================================================== */
 import { q } from './db.js';
 import { CFG, cfgJSON } from './config.js';
+import { distributeSpoils } from './spoils.js';
 
 export const CHALLENGES = [
   { id:'loyalty_surge', name:'Loyalty Surge',   glyph:'🔥', metric:'loyalty_total',  min:800,  max:2500, days:3, stake:20, reward:6000,
@@ -341,6 +342,10 @@ export async function maybeResolve(war){
       if (share > 0)
         await q('UPDATE users SET ember = ember + $1 WHERE id=$2', [share, w.user_id]);
     }
+
+    // ---- post-war spoils: warband ember + relic drops to the victors ----
+    try { await distributeSpoils(war, winnerId); }
+    catch (e){ console.error('[war] distributeSpoils', e.message); }
   }
 
   const top_a = (await q(

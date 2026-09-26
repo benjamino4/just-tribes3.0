@@ -17,6 +17,7 @@ import { listTrials, trialAvailable, completeTrial } from './trials.js';
 import { feedWrite } from './feed.js';
 import * as Kiva from './kiva.js';
 import crypto from 'crypto';
+import { council } from './council.js';
 
 export const router = express.Router();
 
@@ -59,6 +60,9 @@ router.use(async (req, res, next) => {
     next();
   } catch(e){ next(e); }
 });
+
+/* ---------- War Council (roles, muster, idols, relics) ---------- */
+router.use('/council', council);
 
 /* ---------- helpers ---------- */
 async function tribeOf(u){
@@ -123,6 +127,11 @@ router.get('/state', rateLimit('state', 120), async (req, res, next) => { try {
     `SELECT id,name,hue,banner,palette,loyalty_total,members,wins,losses,treasury,level
        FROM tribes ORDER BY loyalty_total DESC LIMIT 20`
   )).rows;
+
+  // Currently selected avatar (if any + still active)
+  const avatar = fresh.avatar_id
+    ? (await q('SELECT id,slug,name,svg FROM avatars WHERE id=$1 AND active=true', [fresh.avatar_id])).rows[0] || null
+    : null;
 
   const trials = await listTrials(false);
   const state = fresh.trials_state || {};
@@ -219,6 +228,7 @@ router.get('/state', rateLimit('state', 120), async (req, res, next) => { try {
     bonfire,
     season: season ? { n: season.n, ends_at: season.ends_at } : null,
     raids,
+    avatar,
   });
 } catch(e){ next(e); } });
 
@@ -271,6 +281,7 @@ router.post('/trials/:slug', rateLimit('trial', 30), async (req, res, next) => {
       await q('UPDATE tribes SET quests_total = quests_total + 1 WHERE id=$1', [u.tribe_id]);
     // bump daily quest progress
     await bumpDailyQuest(u.id, 'trials', 1);
+    await bumpTribeQuest(u.tribe_id, 'trials', 1);
     return res.json({
       ok:true, hit:true, correct,
       reward_ember: reward.reward_ember,
@@ -282,6 +293,7 @@ router.post('/trials/:slug', rateLimit('trial', 30), async (req, res, next) => {
   if (u.tribe_id)
     await q('UPDATE tribes SET quests_total = quests_total + 1 WHERE id=$1', [u.tribe_id]);
   await bumpDailyQuest(u.id, 'trials', 1);
+  await bumpTribeQuest(u.tribe_id, 'trials', 1);
   res.json({ ok:true, reward_ember: reward.reward_ember, reward_loyalty: reward.reward_loyalty });
 } catch(e){ next(e); } });
 
@@ -302,6 +314,49 @@ async function bumpDailyQuest(userId, kind, amount){
            SET progress = daily_quest_log.progress + $4`,
         [userId, r.id, todayKey, amount]
       );
+    }
+  } catch(e){ /* ignore */ }
+}
+
+// Advance active tribe quests of a given goal_kind; pay members once on completion.
+async function bumpTribeQuest(tribeId, kind, amount){
+  if (!tribeId) return;
+  try {
+    const quests = (await q(
+      `SELECT * FROM tribe_quests
+        WHERE active=true AND goal_kind=$1
+          AND (starts_at IS NULL OR starts_at <= now())
+          AND (ends_at   IS NULL OR ends_at   >  now())`,
+      [kind]
+    )).rows;
+    for (const tq of quests){
+      const row = (await q(
+        `INSERT INTO tribe_quest_progress (quest_id, tribe_id, progress)
+         VALUES ($1,$2,$3)
+         ON CONFLICT (quest_id, tribe_id) DO UPDATE
+           SET progress = tribe_quest_progress.progress + $3
+         RETURNING progress, completed_at, paid_at`,
+        [tq.id, tribeId, amount]
+      )).rows[0];
+      if (row && !row.paid_at && Number(row.progress) >= Number(tq.goal_amount)){
+        // mark complete + pay every current member once
+        await q(
+          `UPDATE tribe_quest_progress SET completed_at=COALESCE(completed_at, now()), paid_at=now()
+            WHERE quest_id=$1 AND tribe_id=$2 AND paid_at IS NULL`,
+          [tq.id, tribeId]
+        );
+        if (Number(tq.reward_ember) > 0 || Number(tq.reward_loyalty) > 0){
+          await q(
+            `UPDATE users SET ember = ember + $1, loyalty = loyalty + $2 WHERE tribe_id=$3`,
+            [Number(tq.reward_ember) || 0, Number(tq.reward_loyalty) || 0, tribeId]
+          );
+        }
+        feedWrite({
+          type: 'tribe', icon: tq.icon || 'trials-scroll', severity: 'success',
+          text: `Tribe quest complete: ${tq.title}`,
+          detail: { questId: tq.id, tribeId }, actor: 0,
+        });
+      }
     }
   } catch(e){ /* ignore */ }
 }
@@ -360,6 +415,7 @@ router.post('/checkin', rateLimit('checkin', 10), async (req, res, next) => { tr
     await q('UPDATE tribes SET checkins_total=checkins_total+1 WHERE id=$1', [u.tribe_id]);
   await addLoyalty(u, CFG.loy_checkin);
   await bumpDailyQuest(u.id, 'checkin', 1);
+  await bumpTribeQuest(u.tribe_id, 'checkin', 1);
 
   res.json({ ok:true, reward, streak });
 } catch(e){ next(e); } });
@@ -664,6 +720,7 @@ router.post('/tribe/join', rateLimit('join', 20), async (req, res, next) => { tr
   await q('UPDATE users SET tribe_id=$1 WHERE id=$2', [id, u.id]);
   await Kiva.postMessage(id, u.id, `${u.first_name || u.username} joined the tribe.`, 'system');
 
+  await bumpTribeQuest(id, 'members', 1);
   res.json({ ok:true, tribe: t });
 } catch(e){ next(e); } });
 
@@ -687,6 +744,8 @@ router.post('/tribe/donate', rateLimit('donate', 30), async (req, res, next) => 
     [amt, u.tribe_id]);
   await addLoyalty(u, Math.floor(amt / CFG.loy_donateDiv));
   await bumpDailyQuest(u.id, 'donate', amt);
+  await bumpTribeQuest(u.tribe_id, 'donate', amt);
+  await bumpTribeQuest(u.tribe_id, 'loyalty', amt);
 
   res.json({ ok:true, donated: amt });
 } catch(e){ next(e); } });
@@ -870,6 +929,7 @@ router.post('/war/action', rateLimit('war_action', 60), async (req, res, next) =
 
   const result = await recordAction(war, u, tribe, side, frontIdx, kind);
   await bumpDailyQuest(u.id, 'war_action', 1);
+  await bumpTribeQuest(u.tribe_id, 'war_action', 1);
   res.json(result);
 } catch(e){ res.status(400).json({ error: e.message }); } });
 
@@ -1006,6 +1066,181 @@ router.post('/ton/link', rateLimit('link', 20), async (req, res, next) => { try 
   if (!addr) return res.status(400).json({ error:'no address' });
   await linkWallet(req.user.id, addr);
   res.json({ ok:true });
+} catch(e){ next(e); } });
+
+/* ================= X (TWITTER) QUESTS — user side ================= */
+router.get('/x/quests', rateLimit('xq', 60), async (req, res, next) => { try {
+  const u = req.user;
+  const rows = (await q(
+    `SELECT xq.id, xq.slug, xq.title, xq.description, xq.icon, xq.kind,
+            xq.target, xq.target_label, xq.reward_ember, xq.per_user_limit,
+            xq.max_completions, xq.ends_at,
+            (SELECT count(*)::int FROM x_claims c
+               WHERE c.quest_id=xq.id AND c.user_id=$1 AND c.status='approved') AS my_approved,
+            (SELECT count(*)::int FROM x_claims c
+               WHERE c.quest_id=xq.id AND c.user_id=$1 AND c.status='pending') AS my_pending,
+            (SELECT reject_reason FROM x_claims c
+               WHERE c.quest_id=xq.id AND c.user_id=$1 AND c.status='rejected'
+               ORDER BY c.created_at DESC LIMIT 1) AS last_reject,
+            (SELECT count(*)::int FROM x_claims c
+               WHERE c.quest_id=xq.id AND c.status='approved') AS total_approved
+       FROM x_quests xq
+      WHERE xq.active=true
+        AND (xq.starts_at IS NULL OR xq.starts_at <= now())
+        AND (xq.ends_at   IS NULL OR xq.ends_at   >  now())
+      ORDER BY xq.sort_order, xq.id`,
+    [u.id]
+  )).rows;
+  const quests = rows.map(r => {
+    const full = r.max_completions > 0 && r.total_approved >= r.max_completions;
+    const doneByUser = r.my_approved >= r.per_user_limit;
+    let status = 'open';
+    if (r.my_pending > 0) status = 'pending';
+    else if (doneByUser) status = 'done';
+    else if (full) status = 'full';
+    return {
+      id: r.id, slug: r.slug, title: r.title, description: r.description,
+      icon: r.icon, kind: r.kind, target: r.target, target_label: r.target_label,
+      reward_ember: Number(r.reward_ember) || 0, ends_at: r.ends_at,
+      status, last_reject: status === 'open' ? (r.last_reject || null) : null,
+    };
+  });
+  const handle = (await q(
+    `SELECT x_handle FROM x_handle_owners WHERE user_id=$1 LIMIT 1`, [u.id]
+  )).rows[0];
+  res.json({ quests, myHandle: handle ? handle.x_handle : null });
+} catch(e){ next(e); } });
+
+router.post('/x/claim', rateLimit('xclaim', 12), async (req, res, next) => { try {
+  const u = req.user;
+  const questId = Number(req.body?.quest_id || 0);
+  let handle = String(req.body?.x_handle || '').trim().replace(/^@/, '').toLowerCase();
+  const note = String(req.body?.note || '').slice(0, 200);
+  if (!/^[a-z0-9_]{1,15}$/.test(handle))
+    return res.status(400).json({ error:'Enter a valid X handle (letters, numbers, underscore).' });
+
+  const quest = (await q('SELECT * FROM x_quests WHERE id=$1', [questId])).rows[0];
+  if (!quest || !quest.active) return res.status(404).json({ error:'quest not found' });
+  if (quest.starts_at && new Date(quest.starts_at).getTime() > Date.now())
+    return res.status(400).json({ error:'quest not started yet' });
+  if (quest.ends_at && new Date(quest.ends_at).getTime() < Date.now())
+    return res.status(410).json({ error:'quest has ended' });
+
+  // handle must not belong to a different account
+  const owner = (await q('SELECT user_id FROM x_handle_owners WHERE x_handle=$1', [handle])).rows[0];
+  if (owner && Number(owner.user_id) !== Number(u.id))
+    return res.status(409).json({ error:'That X handle is already linked to another account.' });
+
+  const approved = (await q(
+    `SELECT count(*)::int AS n FROM x_claims WHERE quest_id=$1 AND user_id=$2 AND status='approved'`,
+    [questId, u.id]
+  )).rows[0].n;
+  if (approved >= quest.per_user_limit)
+    return res.status(409).json({ error:'You already completed this quest.' });
+
+  if (quest.max_completions > 0){
+    const total = (await q(
+      `SELECT count(*)::int AS n FROM x_claims WHERE quest_id=$1 AND status='approved'`, [questId]
+    )).rows[0].n;
+    if (total >= quest.max_completions)
+      return res.status(410).json({ error:'This quest is fully claimed.' });
+  }
+
+  try {
+    await q(
+      `INSERT INTO x_claims (user_id, quest_id, x_handle, note, status)
+       VALUES ($1,$2,$3,$4,'pending')`,
+      [u.id, questId, handle, note]
+    );
+  } catch(err){
+    if (String(err.code) === '23505')
+      return res.status(409).json({ error:'You already have a pending claim for this quest.' });
+    throw err;
+  }
+
+  feedWrite({
+    type: 'x', icon: 'brand-x', severity: 'info',
+    text: `@${handle} submitted "${quest.title}" for review`,
+    detail: { questId, userId: u.id, handle },
+    actor: u.id,
+  });
+  res.json({ ok:true, status:'pending' });
+} catch(e){ next(e); } });
+
+/* ================= RELICS & BADGES — user side ================= */
+router.get('/relics', rateLimit('relics', 60), async (req, res, next) => { try {
+  const u = req.user;
+  const relics = (await q(
+    `SELECT r.id, r.slug, r.name, r.description, r.icon_file, r.rarity,
+            r.domain, r.kind, r.war_effect, r.cooldown_min, r.counters,
+            r.buff_type, r.buff_value, r.price_stars, r.svg, r.image_url,
+            r.sort_order,
+            COALESCE(ur.count, 0) AS owned
+       FROM relics r
+       LEFT JOIN user_relics ur ON ur.relic_id=r.id AND ur.user_id=$1
+      WHERE r.active=true
+      ORDER BY CASE r.rarity WHEN 'legendary' THEN 0 WHEN 'epic' THEN 1
+                             WHEN 'rare' THEN 2 ELSE 3 END, r.sort_order, r.name`,
+    [u.id]
+  )).rows;
+  res.json({ relics });
+} catch(e){ next(e); } });
+
+router.get('/badges', rateLimit('badges', 60), async (req, res, next) => { try {
+  const u = req.user;
+  const badges = (await q(
+    `SELECT b.id, b.slug, b.name, b.description, b.icon_file, b.tier,
+            (ub.user_id IS NOT NULL) AS earned, ub.awarded_at
+       FROM badges b
+       LEFT JOIN user_badges ub ON ub.badge_id=b.id AND ub.user_id=$1
+      WHERE b.active=true
+      ORDER BY CASE b.tier WHEN 'legendary' THEN 0 WHEN 'gold' THEN 1
+                           WHEN 'silver' THEN 2 ELSE 3 END, b.name`,
+    [u.id]
+  )).rows;
+  // mark freshly-seen
+  await q(`UPDATE user_badges SET seen=true WHERE user_id=$1 AND seen=false`, [u.id]);
+  res.json({ badges });
+} catch(e){ next(e); } });
+
+/* ================= TRIBE QUESTS — user side ================= */
+router.get('/tribe/quests', rateLimit('tq', 60), async (req, res, next) => { try {
+  const u = req.user;
+  const quests = (await q(
+    `SELECT tq.id, tq.title, tq.description, tq.icon, tq.goal_kind, tq.goal_amount,
+            tq.reward_ember, tq.reward_loyalty, tq.ends_at,
+            COALESCE(p.progress, 0) AS progress,
+            p.completed_at, p.paid_at
+       FROM tribe_quests tq
+       LEFT JOIN tribe_quest_progress p
+              ON p.quest_id=tq.id AND p.tribe_id=$1
+      WHERE tq.active=true
+        AND (tq.starts_at IS NULL OR tq.starts_at <= now())
+        AND (tq.ends_at   IS NULL OR tq.ends_at   >  now())
+      ORDER BY tq.starts_at DESC`,
+    [u.tribe_id || 0]
+  )).rows;
+  res.json({ quests, hasTribe: !!u.tribe_id });
+} catch(e){ next(e); } });
+
+/* ================= AVATARS ================= */
+// List avatars available to players (active only), lightest ordering.
+router.get('/avatars', rateLimit('avatars', 60), async (req, res, next) => { try {
+  const rows = (await q(
+    `SELECT id, slug, name, svg FROM avatars
+      WHERE active=true ORDER BY sort_order ASC, id ASC`
+  )).rows;
+  res.json({ avatars: rows, selected: req.user.avatar_id || null });
+} catch(e){ next(e); } });
+
+// Select an avatar for the current user.
+router.post('/avatar/select', rateLimit('avatarpick', 40), async (req, res, next) => { try {
+  const id = Number(req.body?.id);
+  if (!Number.isFinite(id) || id <= 0) return res.status(400).json({ error:'bad avatar id' });
+  const a = (await q('SELECT id, slug, name, svg FROM avatars WHERE id=$1 AND active=true', [id])).rows[0];
+  if (!a) return res.status(404).json({ error:'avatar not found' });
+  await q('UPDATE users SET avatar_id=$1 WHERE id=$2', [id, req.user.id]);
+  res.json({ ok:true, avatar:a });
 } catch(e){ next(e); } });
 
 export { handleWebhook };

@@ -1102,6 +1102,66 @@ export async function setupAdminBot(baseUrl){
 }
 
 /* ---------- middleware ---------- */
+/* ---------- avatars ---------- */
+// Strip anything active/executable from uploaded SVG before we store or
+// ever render it (XSS defence). Hex escapes (\x3c = '<', \x3e = '>') keep
+// this source safe from tooling that mangles angle brackets.
+function sanitizeSvg(raw){
+  let s = String(raw || '').trim();
+  if (!/\x3csvg[\s\x3e]/i.test(s)) throw new Error('not a valid SVG');
+  // remove <script>...</script> blocks and any stray script tags
+  s = s.replace(/\x3cscript[\s\S]*?\x3c\/script\x3e/gi, '');
+  s = s.replace(/\x3cscript[^\x3e]*\/?\x3e/gi, '');
+  // foreignObject can smuggle HTML/JS — drop it entirely
+  s = s.replace(/\x3cforeignObject[\s\S]*?\x3c\/foreignObject\x3e/gi, '');
+  // inline event handlers  on...="..." / on...='...'
+  s = s.replace(/\son[a-z]+\s*=\s*"[^"]*"/gi, '');
+  s = s.replace(/\son[a-z]+\s*=\s*'[^']*'/gi, '');
+  // neutralise javascript: URIs
+  s = s.replace(/javascript:/gi, '');
+  s = s.trim();
+  if (!s) throw new Error('SVG empty after sanitising');
+  if (s.length > 200000) throw new Error('SVG too large (max ~200KB)');
+  return s;
+}
+
+export async function avatarsList(){
+  return (await q(
+    `SELECT id, slug, name, svg, active, sort_order
+       FROM avatars ORDER BY sort_order ASC, id ASC`
+  )).rows;
+}
+export async function avatarCreate(adminId, { slug, name, svg } = {}){
+  const clean = sanitizeSvg(svg);
+  let s = String(slug || '').trim().toLowerCase()
+    .replace(/[^a-z0-9\-]+/g, '-').replace(/^\-+/, '').replace(/\-+$/, '').slice(0, 48);
+  if (!s) s = 'avatar-' + Date.now().toString(36) + '-' + Math.floor(Math.random() * 1000);
+  const nm = (String(name || '').trim().slice(0, 48)) || s;
+  const r = await q(
+    `INSERT INTO avatars (slug, name, svg, active, sort_order)
+     VALUES ($1,$2,$3,true,100)
+     ON CONFLICT (slug) DO UPDATE SET name=EXCLUDED.name, svg=EXCLUDED.svg
+     RETURNING id, slug, name, active, sort_order`,
+    [s, nm, clean]
+  );
+  await audit(adminId, 'avatarCreate', s);
+  return r.rows[0];
+}
+export async function avatarToggle(adminId, id, active){
+  const on = /^(1|true|on|yes)$/i.test(String(active));
+  const r = await q('UPDATE avatars SET active=$1 WHERE id=$2 RETURNING id, active', [on, id]);
+  if (!r.rowCount) throw new Error('avatar not found');
+  await audit(adminId, 'avatarToggle', id + ' -> ' + on);
+  return r.rows[0];
+}
+export async function avatarDelete(adminId, id){
+  await q('UPDATE users SET avatar_id=NULL WHERE avatar_id=$1', [id]);
+  const r = await q('DELETE FROM avatars WHERE id=$1 RETURNING slug', [id]);
+  if (!r.rowCount) throw new Error('avatar not found');
+  await audit(adminId, 'avatarDelete', r.rows[0].slug);
+  return { id, deleted:true };
+}
+
 export function requireAdmin(req, res, next){
   const t = req.get('X-Admin-Token') || (req.get('Authorization') || '').replace(/^Bearer\s+/i, '');
   if (WEB_TOKEN && t === WEB_TOKEN){ req.adminId = 'web'; return next(); }
@@ -1218,6 +1278,12 @@ A.get('/feed', wrap(req => feedRecent({
 })));
 A.get('/feed/counts', wrap(() => feedCounts()));
 
+/* avatars */
+A.get('/avatars', wrap(() => avatarsList()));
+A.post('/avatars', wrap(req => avatarCreate(who(req), req.body)));
+A.post('/avatars/toggle', wrap(req => avatarToggle(who(req), req.body.id, req.body.active)));
+A.post('/avatars/delete', wrap(req => avatarDelete(who(req), req.body.id)));
+
 /* SSE */
 A.get('/stream', (req, res) => adminSse(req, res));
 
@@ -1237,3 +1303,151 @@ A.post('/reset/factory', wrap(async (req) => {
 }));
 
 A.get('/whoami', wrap(req => ({ adminId: who(req) })));
+/* =====================================================================
+   RELIC admin control plane (appended) — create / modify relics with
+   buffs + card art (inline SVG or data-URL image). Mirrors the avatar
+   CRUD pattern. All SVG art passes through sanitizeSvg (XSS defence).
+===================================================================== */
+
+function relicSlugify(v, fallback){
+  let s = String(v || '').trim().toLowerCase()
+    .replace(/[^a-z0-9\-]+/g, '-').replace(/^\-+/, '').replace(/\-+$/, '').slice(0, 48);
+  if (!s) s = (fallback || 'relic') + '-' + Date.now().toString(36);
+  return s;
+}
+
+// Accept only a safe data-URL image (png/webp/jpeg/gif) or an in-app asset path.
+function sanitizeRelicImageUrl(raw){
+  const s = String(raw || '').trim();
+  if (!s) return null;
+  if (/^\/assets\/[a-z0-9_\-\/\.]+$/i.test(s)) return s.slice(0, 300);
+  const m = /^data:image\/(png|webp|jpeg|jpg|gif);base64,([a-z0-9+\/=\s]+)$/i.exec(s);
+  if (!m) throw new Error('image must be a PNG/WEBP/JPEG data URL or an /assets path');
+  const b64 = m[2].replace(/\s+/g, '');
+  if (b64.length > 240000) throw new Error('image too large (max ~180KB)');
+  return 'data:image/' + m[1].toLowerCase() + ';base64,' + b64;
+}
+
+const RELIC_RARITIES = ['common', 'rare', 'epic', 'legendary'];
+const RELIC_DOMAINS  = ['fire', 'bone', 'sun', 'moon', 'ash'];
+const RELIC_KINDS    = ['passive', 'active'];
+
+export async function relicsListAdmin(){
+  return (await q(
+    `SELECT id, slug, name, description, rarity, domain, kind, counters,
+            buff_type, buff_value, war_effect, cooldown_min, price_stars,
+            icon_file, svg, image_url, sort_order, active, created_at
+       FROM relics
+      ORDER BY sort_order ASC, rarity ASC, id ASC`
+  )).rows;
+}
+
+export async function relicUpsert(adminId, body = {}){
+  const b = body || {};
+  const name = String(b.name || '').trim().slice(0, 64);
+  if (!name) throw new Error('name is required');
+  const rarity = RELIC_RARITIES.includes(String(b.rarity)) ? b.rarity : 'common';
+  const domain = RELIC_DOMAINS.includes(String(b.domain)) ? b.domain : 'fire';
+  const kind   = RELIC_KINDS.includes(String(b.kind)) ? b.kind : 'passive';
+  const counters = RELIC_DOMAINS.includes(String(b.counters)) ? b.counters : null;
+  const buffType = String(b.buff_type || 'none').trim().slice(0, 48) || 'none';
+  const buffValue = Number(b.buff_value) || 0;
+  const warEffect = b.war_effect ? String(b.war_effect).trim().slice(0, 24) : null;
+  const cooldown = Math.max(0, Math.floor(Number(b.cooldown_min) || 0));
+  const priceStars = Math.max(0, Math.floor(Number(b.price_stars) || 0));
+  const sortOrder = Number.isFinite(Number(b.sort_order)) ? Math.floor(Number(b.sort_order)) : 100;
+  const active = b.active == null ? true : /^(1|true|on|yes)$/i.test(String(b.active));
+  const iconFile = b.icon_file ? String(b.icon_file).trim().slice(0, 120) : null;
+
+  let svg = null, imageUrl = null;
+  if (b.svg != null && String(b.svg).trim()) svg = sanitizeSvg(b.svg);
+  if (b.image_url != null && String(b.image_url).trim()) imageUrl = sanitizeRelicImageUrl(b.image_url);
+
+  if (b.id){
+    const r = await q(
+      `UPDATE relics SET
+         name=$2, description=$3, rarity=$4, domain=$5, kind=$6, counters=$7,
+         buff_type=$8, buff_value=$9, war_effect=$10, cooldown_min=$11,
+         price_stars=$12, sort_order=$13, active=$14,
+         icon_file=COALESCE($15, icon_file),
+         svg=COALESCE($16, svg),
+         image_url=COALESCE($17, image_url)
+       WHERE id=$1
+       RETURNING id, slug`,
+      [b.id, name, b.description || null, rarity, domain, kind, counters,
+       buffType, buffValue, warEffect, cooldown, priceStars, sortOrder, active,
+       iconFile, svg, imageUrl]
+    );
+    if (!r.rowCount) throw new Error('relic not found');
+    await audit(adminId, 'relicUpdate', r.rows[0].slug);
+    return r.rows[0];
+  }
+
+  const slug = relicSlugify(b.slug || name, 'relic');
+  const r = await q(
+    `INSERT INTO relics
+       (slug, name, description, rarity, domain, kind, counters, buff_type,
+        buff_value, war_effect, cooldown_min, price_stars, sort_order, active,
+        icon_file, svg, image_url)
+     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17)
+     ON CONFLICT (slug) DO UPDATE SET
+       name=EXCLUDED.name, description=EXCLUDED.description, rarity=EXCLUDED.rarity,
+       domain=EXCLUDED.domain, kind=EXCLUDED.kind, counters=EXCLUDED.counters,
+       buff_type=EXCLUDED.buff_type, buff_value=EXCLUDED.buff_value,
+       war_effect=EXCLUDED.war_effect, cooldown_min=EXCLUDED.cooldown_min,
+       price_stars=EXCLUDED.price_stars, sort_order=EXCLUDED.sort_order,
+       active=EXCLUDED.active
+     RETURNING id, slug`,
+    [slug, name, b.description || null, rarity, domain, kind, counters, buffType,
+     buffValue, warEffect, cooldown, priceStars, sortOrder, active,
+     iconFile, svg, imageUrl]
+  );
+  await audit(adminId, 'relicCreate', slug);
+  return r.rows[0];
+}
+
+export async function relicSetImage(adminId, { id, svg, image_url } = {}){
+  if (!id) throw new Error('relic id required');
+  let cleanSvg = null, cleanUrl = null;
+  if (svg != null && String(svg).trim()) cleanSvg = sanitizeSvg(svg);
+  if (image_url != null && String(image_url).trim()) cleanUrl = sanitizeRelicImageUrl(image_url);
+  if (!cleanSvg && !cleanUrl) throw new Error('provide an SVG or an image URL');
+  const r = await q(
+    `UPDATE relics SET svg=COALESCE($2, svg), image_url=COALESCE($3, image_url)
+       WHERE id=$1 RETURNING id, slug`,
+    [id, cleanSvg, cleanUrl]
+  );
+  if (!r.rowCount) throw new Error('relic not found');
+  await audit(adminId, 'relicSetImage', r.rows[0].slug);
+  return r.rows[0];
+}
+
+export async function relicClearImage(adminId, id){
+  const r = await q('UPDATE relics SET svg=NULL, image_url=NULL WHERE id=$1 RETURNING slug', [id]);
+  if (!r.rowCount) throw new Error('relic not found');
+  await audit(adminId, 'relicClearImage', r.rows[0].slug);
+  return r.rows[0];
+}
+
+export async function relicToggle(adminId, id, active){
+  const on = /^(1|true|on|yes)$/i.test(String(active));
+  const r = await q('UPDATE relics SET active=$1 WHERE id=$2 RETURNING id, active', [on, id]);
+  if (!r.rowCount) throw new Error('relic not found');
+  await audit(adminId, 'relicToggle', id + ' -> ' + on);
+  return r.rows[0];
+}
+
+export async function relicDelete(adminId, id){
+  const r = await q('DELETE FROM relics WHERE id=$1 RETURNING slug', [id]);
+  if (!r.rowCount) throw new Error('relic not found');
+  await audit(adminId, 'relicDelete', r.rows[0].slug);
+  return r.rows[0];
+}
+
+/* ---- relic admin routes ---- */
+A.get('/relics', wrap(() => relicsListAdmin()));
+A.post('/relics', wrap(req => relicUpsert(who(req), req.body)));
+A.post('/relics/image', wrap(req => relicSetImage(who(req), req.body)));
+A.post('/relics/image/clear', wrap(req => relicClearImage(who(req), req.body.id)));
+A.post('/relics/toggle', wrap(req => relicToggle(who(req), req.body.id, req.body.active)));
+A.post('/relics/delete', wrap(req => relicDelete(who(req), req.body.id)));

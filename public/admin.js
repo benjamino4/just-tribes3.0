@@ -184,6 +184,8 @@ var SECTIONS = [
   { id: 'economy',    label: 'Economy',       ico: 'admin-economy' },
   { id: 'bonfires',   label: 'Bonfires',      ico: 'admin-bonfire' },
   { id: 'names',      label: 'Names Pool',    ico: 'admin-names' },
+  { id: 'avatars',    label: 'Avatars',       ico: 'admin-names' },
+  { id: 'relics',     label: 'Relics',        ico: 'admin-quests' },
   { id: 'control',    label: 'Control',       ico: 'admin-control' },
   { id: 'feed',       label: 'Feed',          ico: 'admin-feed' },
   { id: 'danger',     label: 'Danger Zone',   ico: 'admin-danger', danger: true },
@@ -616,6 +618,101 @@ PANELS.names = function(panel){
   }).catch(function(){});
 };
 
+PANELS.avatars = function(panel){
+  panel.innerHTML = '';
+
+  var up = h('div', { class: 'wgroup' });
+  up.appendChild(h('h3', { text: 'Add avatars' }));
+  up.appendChild(h('p', { class: 'wsub', text: 'Upload one or many .svg files. Each file becomes a selectable animated avatar. Scripts and event handlers are stripped automatically.' }));
+
+  var fileRow = h('div', { class: 'wlist-row' });
+  var file = h('input', { class: 'winput', type: 'file', accept: '.svg,image/svg+xml', multiple: true });
+  fileRow.appendChild(file);
+  up.appendChild(fileRow);
+
+  var nameRow = h('div', { class: 'wlist-row' });
+  var nameInp = h('input', { class: 'winput', placeholder: 'Optional name / prefix (defaults to file name)' });
+  nameRow.appendChild(nameInp);
+  up.appendChild(nameRow);
+
+  var status = h('p', { class: 'wsub', text: '' });
+  var upBtn = h('button', { class: 'btn primary', text: 'Upload' });
+  upBtn.addEventListener('click', function(){
+    var files = file.files ? Array.prototype.slice.call(file.files) : [];
+    if (!files.length) return toast('Choose one or more SVG files', true);
+    upBtn.disabled = true;
+    var prefix = nameInp.value.trim();
+    var done = 0, failed = 0;
+    function slugify(base){
+      var raw = prefix ? (prefix + '-' + base) : base;
+      return raw.toLowerCase().replace(/[^a-z0-9\-]+/g, '-').replace(/^\-+/, '').replace(/\-+$/, '');
+    }
+    function next(i){
+      if (i >= files.length){
+        upBtn.disabled = false;
+        status.textContent = '';
+        toast('Uploaded ' + done + (failed ? (' · ' + failed + ' failed') : ''), failed > 0);
+        PANELS.avatars(panel);
+        return;
+      }
+      var f = files[i];
+      status.textContent = 'Uploading ' + (i + 1) + ' / ' + files.length + '… (' + f.name + ')';
+      var reader = new FileReader();
+      reader.onload = function(){
+        var svg = String(reader.result || '');
+        var base = f.name.replace(/\.svg$/i, '');
+        var nm = (files.length > 1)
+          ? (prefix ? (prefix + ' ' + base) : base)
+          : (prefix || base);
+        api('/avatars', { method: 'POST', body: { slug: slugify(base), name: nm, svg: svg } })
+          .then(function(){ done++; })
+          .catch(function(){ failed++; })
+          .then(function(){ next(i + 1); });
+      };
+      reader.onerror = function(){ failed++; next(i + 1); };
+      reader.readAsText(f);
+    }
+    next(0);
+  });
+  up.appendChild(upBtn);
+  up.appendChild(status);
+  panel.appendChild(up);
+
+  api('/avatars').then(function(list){
+    var g = h('div', { class: 'wgroup' });
+    g.appendChild(h('h3', { text: 'Avatar library' }));
+    g.appendChild(h('p', { class: 'wsub', text: list.length + ' avatars (' + list.filter(function(a){ return a.active; }).length + ' active)' }));
+
+    var grid = h('div', { class: 'avatar-admin-grid' });
+    list.forEach(function(a){
+      var card = h('div', { class: 'avatar-admin-card' + (a.active ? '' : ' off') });
+      var prev = h('div', { class: 'avatar-admin-prev sv-animated' });
+      prev.innerHTML = a.svg || '';
+      var meta = h('div', { class: 'avatar-admin-meta' });
+      meta.appendChild(h('b', { text: a.name || a.slug }));
+      meta.appendChild(h('span', { text: a.slug + (a.active ? '' : ' · hidden') }));
+      var actions = h('div', { class: 'avatar-admin-actions' });
+      var tog = h('button', { class: 'btn tiny ghost', text: a.active ? 'Hide' : 'Show' });
+      tog.addEventListener('click', function(){
+        act('/avatars/toggle', { id: a.id, active: a.active ? 'off' : 'on' }, a.active ? 'Hidden' : 'Shown')
+          .then(function(){ PANELS.avatars(panel); });
+      });
+      var del = h('button', { class: 'btn tiny danger', text: 'Delete' });
+      del.addEventListener('click', function(){
+        if (confirm('Delete avatar "' + (a.name || a.slug) + '"? Players using it will lose it.'))
+          act('/avatars/delete', { id: a.id }, 'Deleted').then(function(){ PANELS.avatars(panel); });
+      });
+      actions.appendChild(tog); actions.appendChild(del);
+      card.appendChild(prev); card.appendChild(meta); card.appendChild(actions);
+      grid.appendChild(card);
+    });
+    if (!list.length) grid.appendChild(h('p', { class: 'muted', text: 'No avatars yet — upload some above.' }));
+    g.appendChild(grid);
+    panel.appendChild(g);
+    $('#panelSub').textContent = list.length + ' avatars';
+  }).catch(function(e){ panel.appendChild(h('p', { class: 'muted', text: e.message })); });
+};
+
 PANELS.control = function(panel){
   panel.innerHTML = '';
   var g = h('div', { class: 'wgroup' });
@@ -769,6 +866,218 @@ function configPanel(panel, groups){
   }).catch(function(e){ panel.innerHTML = '<div class="loading">' + esc(e.message) + '</div>'; });
 }
 
+/* ---------- relics (create / modify + card art) ---------- */
+var RELIC_RARITIES = ['common', 'rare', 'epic', 'legendary'];
+var RELIC_DOMAINS  = ['fire', 'bone', 'sun', 'moon', 'ash'];
+var RELIC_KINDS    = ['passive', 'active'];
+var RELIC_EFFECTS  = ['', 'combo', 'slow', 'ward', 'revive', 'reveal', 'siege'];
+var DOMAIN_GLYPH   = { fire:'\uD83D\uDD25', bone:'\uD83E\uDDB4', sun:'\u2600\uFE0F', moon:'\uD83C\uDF19', ash:'\u2604\uFE0F' };
+
+function relicArtHTML(r){
+  if (r.svg) return r.svg;
+  var src = r.image_url || (r.icon_file ? ('/assets/relics/' + r.icon_file) : '');
+  if (src) return '<img src="' + esc(src) + '" alt="" loading="lazy">';
+  return '<span class="relic-card-glyph">' + (DOMAIN_GLYPH[r.domain] || '\uD83C\uDFFA') + '</span>';
+}
+
+// Reusable relic card (player view + admin preview share this markup + CSS).
+function renderRelicCard(r){
+  var rarity = RELIC_RARITIES.indexOf(String(r.rarity)) >= 0 ? r.rarity : 'common';
+  var card = h('div', { class: 'relic-card rc-' + rarity + (r.active === false ? ' rc-off' : '') });
+  var art = h('div', { class: 'relic-card-art' });
+  art.innerHTML = relicArtHTML(r);
+  var body = h('div', { class: 'relic-card-body' });
+  var top = h('div', { class: 'relic-card-top' });
+  top.appendChild(h('span', { class: 'relic-card-name', text: r.name || r.slug || 'Unnamed relic' }));
+  top.appendChild(h('span', { class: 'relic-card-rar', text: rarity }));
+  body.appendChild(top);
+  var tags = h('div', { class: 'relic-card-tags' });
+  tags.appendChild(h('span', { class: 'relic-tag dom-' + (r.domain || 'fire'), text: (DOMAIN_GLYPH[r.domain] || '') + ' ' + (r.domain || 'fire') }));
+  tags.appendChild(h('span', { class: 'relic-tag', text: r.kind || 'passive' }));
+  if (r.war_effect) tags.appendChild(h('span', { class: 'relic-tag', text: r.war_effect }));
+  body.appendChild(tags);
+  if (r.description) body.appendChild(h('p', { class: 'relic-card-desc', text: r.description }));
+  var stat = h('div', { class: 'relic-card-stat' });
+  var bv = Number(r.buff_value) || 0;
+  stat.appendChild(h('span', { text: (r.buff_type || 'none') + (bv ? (' \u00b7 ' + bv) : '') }));
+  if (Number(r.cooldown_min) > 0) stat.appendChild(h('span', { text: 'CD ' + r.cooldown_min + 'm' }));
+  if (Number(r.price_stars) > 0) stat.appendChild(h('span', { text: '\u2b50 ' + r.price_stars }));
+  body.appendChild(stat);
+  card.appendChild(art);
+  card.appendChild(body);
+  return card;
+}
+
+function relicSelect(label, options, value){
+  var wrap = h('label', { class: 'relic-field' });
+  wrap.appendChild(h('span', { text: label }));
+  var sel = h('select', { class: 'winput' });
+  options.forEach(function(o){
+    var opt = h('option', { value: o, text: o === '' ? '(none)' : o });
+    if (String(o) === String(value)) opt.selected = true;
+    sel.appendChild(opt);
+  });
+  wrap.appendChild(sel);
+  wrap._input = sel;
+  return wrap;
+}
+function relicText(label, value, ph){
+  var wrap = h('label', { class: 'relic-field' });
+  wrap.appendChild(h('span', { text: label }));
+  var inp = h('input', { class: 'winput', placeholder: ph || '', value: value == null ? '' : value });
+  wrap.appendChild(inp);
+  wrap._input = inp;
+  return wrap;
+}
+
+PANELS.relics = function(panel){
+  panel.innerHTML = '';
+  var editing = { id: null, svg: null, image_url: null };
+
+  var ed = h('div', { class: 'wgroup' });
+  ed.appendChild(h('h3', { text: 'Forge / modify a relic' }));
+  ed.appendChild(h('p', { class: 'wsub', text: 'Set the buff, domain and war effect, then attach card art (SVG or PNG). Scripts are stripped from SVGs automatically.' }));
+
+  var grid = h('div', { class: 'relic-form-grid' });
+  var fName   = relicText('Name', '', 'Ashfang');
+  var fSlug   = relicText('Slug (optional)', '', 'auto from name');
+  var fRar    = relicSelect('Rarity', RELIC_RARITIES, 'common');
+  var fDom    = relicSelect('Domain', RELIC_DOMAINS, 'fire');
+  var fKind   = relicSelect('Kind', RELIC_KINDS, 'passive');
+  var fCtr    = relicSelect('Counters', [''].concat(RELIC_DOMAINS), '');
+  var fEff    = relicSelect('War effect', RELIC_EFFECTS, '');
+  var fBuffT  = relicText('Buff type', 'none', 'war_combo');
+  var fBuffV  = relicText('Buff value', '0', '0.25');
+  var fCd     = relicText('Cooldown (min)', '0', '30');
+  var fPrice  = relicText('Price (stars)', '0', '0');
+  var fSort   = relicText('Sort order', '100', '100');
+  [fName, fSlug, fRar, fDom, fKind, fCtr, fEff, fBuffT, fBuffV, fCd, fPrice, fSort]
+    .forEach(function(f){ grid.appendChild(f); });
+  ed.appendChild(grid);
+
+  var fDesc = h('textarea', { class: 'winput relic-desc', placeholder: 'Short flavour / effect description', rows: 2 });
+  ed.appendChild(fDesc);
+
+  var artRow = h('div', { class: 'wlist-row' });
+  var artFile = h('input', { class: 'winput', type: 'file', accept: '.svg,.png,.webp,.jpg,.jpeg,image/svg+xml,image/png,image/webp,image/jpeg' });
+  var clearArt = h('button', { class: 'btn tiny ghost', text: 'Clear art' });
+  artRow.appendChild(artFile); artRow.appendChild(clearArt);
+  ed.appendChild(h('p', { class: 'wsub', text: 'Card art \u2014 upload an .svg (inline, animatable) or a .png/.webp (\u2264180KB).' }));
+  ed.appendChild(artRow);
+
+  var preview = h('div', { class: 'relic-preview-wrap' });
+  ed.appendChild(preview);
+
+  function collect(){
+    return {
+      id: editing.id,
+      name: fName._input.value.trim(),
+      slug: fSlug._input.value.trim(),
+      rarity: fRar._input.value,
+      domain: fDom._input.value,
+      kind: fKind._input.value,
+      counters: fCtr._input.value,
+      war_effect: fEff._input.value,
+      buff_type: fBuffT._input.value.trim(),
+      buff_value: fBuffV._input.value.trim(),
+      cooldown_min: fCd._input.value.trim(),
+      price_stars: fPrice._input.value.trim(),
+      sort_order: fSort._input.value.trim(),
+      description: fDesc.value.trim(),
+      svg: editing.svg,
+      image_url: editing.image_url,
+      active: true
+    };
+  }
+  function refreshPreview(){
+    preview.innerHTML = '';
+    preview.appendChild(h('span', { class: 'wsub', text: 'Live preview' }));
+    preview.appendChild(renderRelicCard(collect()));
+  }
+  [fName, fRar, fDom, fKind, fEff, fBuffT, fBuffV, fCd, fPrice]
+    .forEach(function(f){ f._input.addEventListener('input', refreshPreview); f._input.addEventListener('change', refreshPreview); });
+  fDesc.addEventListener('input', refreshPreview);
+
+  artFile.addEventListener('change', function(){
+    var f = artFile.files && artFile.files[0];
+    if (!f) return;
+    var reader = new FileReader();
+    if (/svg/i.test(f.type) || /\.svg$/i.test(f.name)){
+      reader.onload = function(){ editing.svg = String(reader.result || ''); editing.image_url = null; refreshPreview(); };
+      reader.readAsText(f);
+    } else {
+      reader.onload = function(){ editing.image_url = String(reader.result || ''); editing.svg = null; refreshPreview(); };
+      reader.readAsDataURL(f);
+    }
+  });
+  clearArt.addEventListener('click', function(){ editing.svg = null; editing.image_url = null; artFile.value = ''; refreshPreview(); });
+
+  var saveRow = h('div', { class: 'wlist-row' });
+  var saveBtn = h('button', { class: 'btn primary', text: 'Save relic' });
+  var resetBtn = h('button', { class: 'btn ghost', text: 'New / clear' });
+  saveRow.appendChild(saveBtn); saveRow.appendChild(resetBtn);
+  ed.appendChild(saveRow);
+  panel.appendChild(ed);
+
+  function loadInto(r){
+    editing.id = r.id; editing.svg = r.svg || null; editing.image_url = r.image_url || null;
+    fName._input.value = r.name || ''; fSlug._input.value = r.slug || '';
+    fRar._input.value = r.rarity || 'common'; fDom._input.value = r.domain || 'fire';
+    fKind._input.value = r.kind || 'passive'; fCtr._input.value = r.counters || '';
+    fEff._input.value = r.war_effect || ''; fBuffT._input.value = r.buff_type || 'none';
+    fBuffV._input.value = r.buff_value || 0; fCd._input.value = r.cooldown_min || 0;
+    fPrice._input.value = r.price_stars || 0; fSort._input.value = r.sort_order == null ? 100 : r.sort_order;
+    fDesc.value = r.description || '';
+    saveBtn.textContent = 'Save changes'; refreshPreview();
+    ed.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }
+  function clearForm(){
+    editing = { id: null, svg: null, image_url: null };
+    [fName, fSlug, fBuffT, fBuffV, fCd, fPrice, fSort].forEach(function(f){ f._input.value = ''; });
+    fBuffT._input.value = 'none'; fBuffV._input.value = '0'; fCd._input.value = '0';
+    fPrice._input.value = '0'; fSort._input.value = '100';
+    fRar._input.value = 'common'; fDom._input.value = 'fire'; fKind._input.value = 'passive';
+    fCtr._input.value = ''; fEff._input.value = ''; fDesc.value = '';
+    artFile.value = ''; saveBtn.textContent = 'Save relic'; refreshPreview();
+  }
+  resetBtn.addEventListener('click', clearForm);
+
+  saveBtn.addEventListener('click', function(){
+    var body = collect();
+    if (!body.name){ toast('Name is required', true); return; }
+    saveBtn.disabled = true;
+    act('/relics', body, editing.id ? 'Relic updated' : 'Relic forged')
+      .then(function(){ saveBtn.disabled = false; PANELS.relics(panel); })
+      .catch(function(){ saveBtn.disabled = false; });
+  });
+
+  refreshPreview();
+
+  api('/relics').then(function(list){
+    var g = h('div', { class: 'wgroup' });
+    g.appendChild(h('h3', { text: 'Relic library' }));
+    g.appendChild(h('p', { class: 'wsub', text: list.length + ' relics (' + list.filter(function(r){ return r.active; }).length + ' active)' }));
+    var lib = h('div', { class: 'relic-lib-grid' });
+    list.forEach(function(r){
+      var cell = h('div', { class: 'relic-lib-cell' });
+      cell.appendChild(renderRelicCard(r));
+      var actions = h('div', { class: 'relic-lib-actions' });
+      var edit = h('button', { class: 'btn tiny', text: 'Edit' });
+      edit.addEventListener('click', function(){ loadInto(r); });
+      var tog = h('button', { class: 'btn tiny ghost', text: r.active ? 'Hide' : 'Show' });
+      tog.addEventListener('click', function(){ act('/relics/toggle', { id: r.id, active: r.active ? 'off' : 'on' }, r.active ? 'Hidden' : 'Shown').then(function(){ PANELS.relics(panel); }); });
+      var del = h('button', { class: 'btn tiny danger', text: 'Delete' });
+      del.addEventListener('click', function(){ if (confirm('Delete relic "' + (r.name || r.slug) + '"? Holders lose it.')) act('/relics/delete', { id: r.id }, 'Deleted').then(function(){ PANELS.relics(panel); }); });
+      actions.appendChild(edit); actions.appendChild(tog); actions.appendChild(del);
+      cell.appendChild(actions);
+      lib.appendChild(cell);
+    });
+    if (!list.length) lib.appendChild(h('p', { class: 'muted', text: 'No relics yet \u2014 forge one above.' }));
+    g.appendChild(lib);
+    panel.appendChild(g);
+    $('#panelSub').textContent = list.length + ' relics';
+  }).catch(function(e){ panel.appendChild(h('p', { class: 'muted', text: e.message })); });
+};
 /* ---------- boot ---------- */
 if (token){
   api('/stats').then(function(){ showConsole(); loadFeedInitial(); })

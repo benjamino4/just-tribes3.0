@@ -212,3 +212,65 @@ body{background:
 .ico{width:1em;height:1em;fill:none;stroke:currentColor;stroke-width:1.63;
   stroke-linecap:round;stroke-linejoin:round;vertical-align:-.1em;flex-shrink:0}
 .crest{display:block;margin:0 auto}
+/* ---------- avatars ---------- */
+@keyframes sv-pulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
+.sv-animated{animation:sv-pulse 2.4s ease-in-out infinite;transform-origin:center}
+.avatar-admin-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:14px;margin-top:6px}
+.avatar-admin-card{background:rgba(0,0,0,.28);border:1px solid var(--line2);border-radius:14px;
+  padding:12px;display:flex;flex-direction:column;align-items:center;gap:8px;transition:.2s}
+.avatar-admin-card.off{opacity:.5}
+.avatar-admin-prev{width:96px;height:96px;display:flex;align-items:center;justify-content:center;
+  border-radius:50%;overflow:hidden;background:radial-gradient(circle at 50% 40%,rgba(255,150,60,.18),rgba(0,0,0,.25))}
+.avatar-admin-prev svg{display:block;width:100%;height:100%}
+.avatar-admin-meta{text-align:center;display:flex;flex-direction:column;gap:2px;min-height:34px}
+.avatar-admin-meta b{font-size:13px;color:var(--ink)}
+.avatar-admin-meta span{font-size:11px;color:var(--mut)}
+.avatar-admin-actions{display:flex;gap:8px;width:100%}
+.avatar-admin-actions .btn{flex:1}
+
+/* ===================================================================
+   Relic card template (shared: player gallery + admin preview/library)
+   =================================================================== */
+.relic-card{position:relative;display:flex;flex-direction:column;gap:0;width:100%;border-radius:16px;overflow:hidden;background:linear-gradient(160deg,rgba(28,22,18,.96),rgba(14,11,9,.98));border:1px solid rgba(255,150,60,.28);box-shadow:0 10px 30px rgba(0,0,0,.45),inset 0 1px 0 rgba(255,255,255,.06);transition:transform .18s ease,box-shadow .18s ease}
+.relic-card:hover{transform:translateY(-3px);box-shadow:0 16px 40px rgba(0,0,0,.55)}
+.relic-card.rc-off{opacity:.5;filter:grayscale(.5)}
+.relic-card-art{position:relative;aspect-ratio:1/1;display:flex;align-items:center;justify-content:center;background:radial-gradient(circle at 50% 35%,rgba(255,160,70,.18),rgba(0,0,0,.35));overflow:hidden}
+.relic-card-art svg,.relic-card-art img{max-width:82%;max-height:82%;object-fit:contain;filter:drop-shadow(0 6px 14px rgba(0,0,0,.5))}
+.relic-card-glyph{font-size:3.2rem;line-height:1;filter:drop-shadow(0 4px 10px rgba(0,0,0,.5))}
+.relic-card-body{display:flex;flex-direction:column;gap:6px;padding:10px 12px 12px}
+.relic-card-top{display:flex;align-items:baseline;justify-content:space-between;gap:8px}
+.relic-card-name{font-weight:800;font-size:.98rem;color:#fff;letter-spacing:.2px;line-height:1.15}
+.relic-card-rar{font-size:.62rem;text-transform:uppercase;letter-spacing:.12em;font-weight:800;padding:2px 7px;border-radius:999px;white-space:nowrap}
+.relic-card-tags{display:flex;flex-wrap:wrap;gap:5px}
+.relic-tag{font-size:.64rem;font-weight:700;text-transform:capitalize;padding:2px 8px;border-radius:999px;background:rgba(255,255,255,.08);color:#ffd9b0;border:1px solid rgba(255,255,255,.08)}
+.relic-tag.dom-fire{background:rgba(255,90,40,.16);color:#ff9a6a}
+.relic-tag.dom-bone{background:rgba(220,220,210,.12);color:#e8e4d8}
+.relic-tag.dom-sun{background:rgba(255,205,70,.16);color:#ffde8a}
+.relic-tag.dom-moon{background:rgba(120,150,255,.16);color:#b9c8ff}
+.relic-tag.dom-ash{background:rgba(150,150,160,.16);color:#cfd0d8}
+.relic-card-desc{margin:2px 0 0;font-size:.74rem;line-height:1.35;color:rgba(255,240,225,.72)}
+.relic-card-stat{display:flex;flex-wrap:wrap;gap:6px;margin-top:2px}
+.relic-card-stat span{font-size:.66rem;font-weight:700;color:#ffcf9a;background:rgba(255,140,50,.1);padding:2px 7px;border-radius:8px}
+/* rarity frames */
+.relic-card.rc-common{border-color:rgba(180,180,180,.3)}
+.relic-card.rc-common .relic-card-rar{background:rgba(180,180,180,.2);color:#dcdcdc}
+.relic-card.rc-rare{border-color:rgba(80,150,255,.5)}
+.relic-card.rc-rare .relic-card-rar{background:rgba(80,150,255,.22);color:#a9c6ff}
+.relic-card.rc-rare .relic-card-art{background:radial-gradient(circle at 50% 35%,rgba(80,150,255,.22),rgba(0,0,0,.4))}
+.relic-card.rc-epic{border-color:rgba(190,110,255,.55)}
+.relic-card.rc-epic .relic-card-rar{background:rgba(190,110,255,.24);color:#e3befe}
+.relic-card.rc-epic .relic-card-art{background:radial-gradient(circle at 50% 35%,rgba(190,110,255,.26),rgba(0,0,0,.42))}
+.relic-card.rc-legendary{border-color:rgba(255,190,60,.7);box-shadow:0 10px 30px rgba(255,150,30,.25),inset 0 1px 0 rgba(255,255,255,.1)}
+.relic-card.rc-legendary .relic-card-rar{background:linear-gradient(90deg,#ffb03a,#ff7a18);color:#2a1600}
+.relic-card.rc-legendary .relic-card-art{background:radial-gradient(circle at 50% 30%,rgba(255,190,60,.35),rgba(0,0,0,.45))}
+.relic-card.rc-legendary::before{content:'';position:absolute;inset:0;border-radius:16px;padding:1px;background:linear-gradient(135deg,rgba(255,210,90,.9),rgba(255,120,20,.2),rgba(255,210,90,.9));-webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;mask-composite:exclude;pointer-events:none}
+/* admin forge form */
+.relic-form-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:6px 0}
+.relic-field{display:flex;flex-direction:column;gap:4px;font-size:.72rem;font-weight:700;color:rgba(255,235,215,.7)}
+.relic-field .winput{font-weight:600}
+textarea.relic-desc{width:100%;margin:6px 0;resize:vertical}
+.relic-preview-wrap{display:flex;flex-direction:column;gap:6px;align-items:flex-start;max-width:220px;margin:10px 0}
+.relic-preview-wrap .relic-card{width:200px}
+.relic-lib-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:14px;margin-top:8px}
+.relic-lib-cell{display:flex;flex-direction:column;gap:8px}
+.relic-lib-actions{display:flex;gap:6px;flex-wrap:wrap}

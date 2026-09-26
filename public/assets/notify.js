@@ -1,0 +1,147 @@
+/* =====================================================================
+   TRIBES — Dynamic Island notification helper.
+   Usage:
+     notify({ title, msg, icon, severity, action, duration, progress })
+   Options:
+     title      string
+     msg        string
+     icon       icon name (from sprite)
+     severity   'default' | 'success' | 'warn' | 'danger'
+     action     { label, onClick }   optional
+     duration   ms before auto-compact (default 4000). 0 = sticky.
+     onTap      callback for whole-notification tap (expands if compact)
+     progress   { total, interval }  shows a bar draining over time
+   Returns a handle: { el, close(), compact(), expand() }
+===================================================================== */
+(function(){
+'use strict';
+
+function ensureRoot(){
+  let root = document.getElementById('notifyRoot');
+  if (!root){
+    root = document.createElement('div');
+    root.id = 'notifyRoot';
+    root.className = 'notify-root';
+    document.body.appendChild(root);
+  }
+  return root;
+}
+
+function escapeHtml(s){
+  return String(s == null ? '' : s).replace(/[&<>"']/g, c => ({
+    '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'
+  }[c]));
+}
+
+function notify(opts){
+  opts = opts || {};
+  const {
+    title = '',
+    msg = '',
+    icon = 'bell',
+    severity = 'default',
+    action = null,
+    duration = 4000,
+    onTap = null,
+    progress = null,
+  } = opts;
+
+  const root = ensureRoot();
+  const el = document.createElement('div');
+  el.className = 'notify sev-' + severity;
+
+  const iconHtml = '<span data-icon="' + escapeHtml(icon) + '"></span>';
+  const actionHtml = action
+    ? '<button class="notify-action" type="button">' + escapeHtml(action.label || 'Open') + '</button>'
+    : '';
+  const progressHtml = progress
+    ? '<div class="notify-progress"><i style="width:100%"></i></div>'
+    : '';
+
+  el.innerHTML =
+    '<div class="notify-ico">' + iconHtml + '</div>' +
+    '<div class="notify-body">' +
+      '<div class="notify-title">' + escapeHtml(title) + '</div>' +
+      (msg ? '<div class="notify-msg">' + escapeHtml(msg) + '</div>' : '') +
+    '</div>' +
+    actionHtml +
+    progressHtml;
+
+  root.appendChild(el);
+
+  // Enter animation on next frame.
+  requestAnimationFrame(() => el.classList.add('in'));
+
+  if (window.hydrateIcons) window.hydrateIcons();
+
+  let progressTimer = null;
+  let compactTimer = null;
+
+  const handle = {
+    el,
+    close(){
+      clearTimeout(compactTimer);
+      clearInterval(progressTimer);
+      el.classList.add('out');
+      setTimeout(() => el.remove(), 340);
+    },
+    compact(){
+      clearTimeout(compactTimer);
+      if (el.classList.contains('compact')) return;
+      el.classList.add('compact');
+      if (duration > 0){
+        compactTimer = setTimeout(() => handle.close(), 3000);
+      }
+    },
+    expand(){
+      el.classList.remove('compact');
+      clearTimeout(compactTimer);
+      if (duration > 0) compactTimer = setTimeout(() => handle.compact(), duration);
+    },
+  };
+
+  // Action click.
+  if (action && action.onClick){
+    const btn = el.querySelector('.notify-action');
+    if (btn) btn.addEventListener('click', e => {
+      e.stopPropagation();
+      try { action.onClick(handle); } catch(err){ console.warn(err); }
+      handle.close();
+    });
+  }
+
+  // Whole-notification tap.
+  el.addEventListener('click', e => {
+    if (e.target.closest('.notify-action')) return;
+    if (onTap) onTap(handle);
+    else if (el.classList.contains('compact')) handle.expand();
+    else handle.compact();
+  });
+
+  // Progress bar (drains over `progress.total` ms).
+  if (progress && progress.total > 0){
+    const bar = el.querySelector('.notify-progress > i');
+    const startedAt = Date.now();
+    progressTimer = setInterval(() => {
+      const elapsed = Date.now() - startedAt;
+      const pct = Math.max(0, 1 - elapsed / progress.total);
+      if (bar) bar.style.width = (pct * 100).toFixed(1) + '%';
+      if (pct <= 0) clearInterval(progressTimer);
+    }, progress.interval || 200);
+  }
+
+  // Auto-compact.
+  if (duration > 0){
+    compactTimer = setTimeout(() => handle.compact(), duration);
+  }
+
+  // Cap at 4 visible — drop the oldest.
+  const all = root.querySelectorAll('.notify');
+  if (all.length > 4) all[0].remove();
+
+  return handle;
+}
+
+window.notify = notify;
+
+})();

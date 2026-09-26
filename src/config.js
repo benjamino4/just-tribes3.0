@@ -72,6 +72,10 @@ export const DEFAULTS = {
   war_spoils_chest_pct: 20,
   war_spoils_top_count: 5,
   war_spoils_curve: 'weighted',
+  war_spoils_warband_ember: 500,   // flat ember to every winning-side kin who fought
+  war_relic_drop_enabled: 1,       // 1 = drop relics to winners on resolve
+  war_relic_drop_count: 3,         // how many top winners can receive a relic
+  war_relic_drop_rarity_max: 'epic', // cap on which rarities can drop (common..legendary)
   war_rivalry_threshold: 3,
   war_rivalry_tribute_mult: 2.0,
   war_rivalry_banner: 1,
