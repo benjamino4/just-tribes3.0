@@ -181,8 +181,10 @@ var SECTIONS = [
   { id: 'wallets',    label: 'Wallets',       ico: 'admin-payments' },
   { id: 'codes',      label: 'Gift Codes',    ico: 'admin-codes' },
   { id: 'xquests',    label: 'X Quests',      ico: 'admin-quests' },
+  { id: 'spin',       label: 'Spin Wheel',    ico: 'admin-quests' },
   { id: 'trials',     label: 'Trials',        ico: 'admin-trials' },
   { id: 'economy',    label: 'Economy',       ico: 'admin-economy' },
+  { id: 'gameconfig', label: 'Config Studio', ico: 'admin-economy' },
   { id: 'bonfires',   label: 'Bonfires',      ico: 'admin-bonfire' },
   { id: 'names',      label: 'Names Pool',    ico: 'admin-names' },
   { id: 'avatars',    label: 'Avatars',       ico: 'admin-names' },
@@ -1457,6 +1459,266 @@ PANELS.relics = function(panel){
     $('#panelSub').textContent = list.length + ' relics';
   }).catch(function(e){ panel.appendChild(h('p', { class: 'muted', text: e.message })); });
 };
+/* =====================================================================
+   CONFIG STUDIO — full CRUD over every runtime config key.
+   Reads /econ (returns all live values + _defaults), auto-renders the
+   right editor per key (number / toggle / JSON / text), grouped and
+   searchable, with per-key reset and a global reset-all.
+===================================================================== */
+function cfgGroupOf(key){
+  if (/^war_spoils/.test(key) || /spoils|chest|warband/.test(key)) return 'War · Spoils & rewards';
+  if (/^war_defender/.test(key) || /fortify|ambush|rally/.test(key)) return 'War · Defender actions';
+  if (/vengeance|blood_alliance|terrain|hint|matchmaking|rivalry/.test(key)) return 'War · Tactics (Batch A)';
+  if (/^war_legendary|momentum|rout|cry|cries|stance/.test(key)) return 'War · Momentum & events';
+  if (/^war_/.test(key)) return 'War · Core';
+  if (/^season/.test(key)) return 'Seasons';
+  if (/^checkin/.test(key)) return 'Check-in';
+  if (/^ash/.test(key)) return 'Idle Ash';
+  if (/^loy_/.test(key)) return 'Loyalty rates';
+  if (/^tribe_level/.test(key)) return 'Tribe levels';
+  if (/^starter_bundle/.test(key)) return 'Starter bundle';
+  if (/^calendar/.test(key)) return 'Login calendar';
+  if (/^(allow|maintenance)/.test(key)) return 'Switches';
+  if (/^(bonfire|trials_reset|notify)/.test(key)) return 'Systems';
+  if (/rally_burst|momentum_lock|chronicle/.test(key)) return 'Premium boosts';
+  return 'General';
+}
+function cfgIsFlag(key, def){
+  return (def === 0 || def === 1) &&
+    /(allow|enabled|maintenance|auto|banner|mercy)/i.test(key);
+}
+function cfgIsJSON(def){
+  if (typeof def !== 'string') return false;
+  var s = def.trim();
+  return s.charAt(0) === '[' || s.charAt(0) === '{';
+}
+function prettyKey(key){
+  return key.replace(/_/g, ' ');
+}
+function cfgSave(key, value, statusEl){
+  if (statusEl){ statusEl.className = 'saved show'; statusEl.textContent = 'saving…'; }
+  return api('/econ', { method:'POST', body:{ key:key, value:value } }).then(function(){
+    if (statusEl){ statusEl.className = 'saved show'; statusEl.textContent = '✓ Saved'; }
+  }).catch(function(e){
+    if (statusEl){ statusEl.className = 'saved err'; statusEl.textContent = '✕ ' + (e.message||'Failed'); }
+    throw e;
+  });
+}
+PANELS.gameconfig = function(panel){
+  panel.innerHTML = '<div class="loading">Loading…</div>';
+  api('/econ').then(function(cfg){
+    var defaults = cfg._defaults || {};
+    var keys = Object.keys(defaults).sort();
+    panel.innerHTML = '';
+
+    var head = h('div', { class:'wgroup' });
+    head.innerHTML =
+      '<h3>Config Studio</h3>' +
+      '<p class="wsub">Every tunable value in the game. Numbers are typed live, switches toggle, and list/JSON values open a validated editor. Each row has a ↺ reset-to-default. Changes apply immediately on the live server.</p>';
+    var toolRow = h('div', { class:'wrow' });
+    var filter = h('input', { class:'winput', style:'flex:1;max-width:none', placeholder:'Filter keys (e.g. war, spoils, stars, season)…' });
+    var resetAll = h('button', { class:'btn tiny danger', text:'Reset ALL to defaults' });
+    resetAll.addEventListener('click', function(){
+      if (confirm('Reset EVERY config value back to its default? This cannot be undone.'))
+        act('/econ/reset', {}, 'All config reset').then(function(){ PANELS.gameconfig(panel); });
+    });
+    toolRow.appendChild(filter); toolRow.appendChild(resetAll);
+    head.appendChild(toolRow);
+    panel.appendChild(head);
+
+    // group keys
+    var groups = {};
+    keys.forEach(function(k){
+      var gname = cfgGroupOf(k);
+      (groups[gname] = groups[gname] || []).push(k);
+    });
+    var groupNames = Object.keys(groups).sort();
+
+    var groupEls = [];
+    groupNames.forEach(function(gname){
+      var g = h('div', { class:'wgroup', 'data-cfg-group':'1' });
+      g.appendChild(h('h3', { text: gname }));
+      groups[gname].forEach(function(key){
+        var def = defaults[key];
+        var cur = cfg[key];
+        var row = h('div', { class:'wrow', 'data-cfg-key': key });
+        var lbl = h('div', { class:'wlbl' });
+        lbl.innerHTML = '<b>' + esc(prettyKey(key)) + '</b><span>default: ' + esc(String(def)).slice(0,60) + '</span>';
+        row.appendChild(lbl);
+        var ctl = h('div', { class:'wctl' });
+        var status = h('span', { class:'saved' }, '');
+
+        if (cfgIsFlag(key, def)){
+          var tog = h('div', { class:'wtog' + (Number(cur) ? ' on' : '') });
+          tog.addEventListener('click', function(){
+            var on = !tog.classList.contains('on');
+            tog.classList.toggle('on', on);
+            cfgSave(key, on ? 1 : 0, status);
+          });
+          ctl.appendChild(tog);
+        } else if (cfgIsJSON(def)){
+          var ta = h('textarea', { class:'winput', rows:3,
+            style:'width:100%;min-width:280px;font-family:ui-monospace,Menlo,monospace;font-size:12px' });
+          var initVal = cur;
+          try { ta.value = JSON.stringify(JSON.parse(typeof cur === 'string' ? cur : JSON.stringify(cur)), null, 0); }
+          catch(e){ ta.value = (typeof cur === 'string') ? cur : JSON.stringify(cur); }
+          var saveJ = h('button', { class:'btn tiny', text:'Save JSON' });
+          saveJ.addEventListener('click', function(){
+            var raw = ta.value.trim();
+            try { JSON.parse(raw); } catch(e){ status.className='saved err'; status.textContent='✕ invalid JSON'; return; }
+            cfgSave(key, raw, status);
+          });
+          var jc = h('div', { style:'display:flex;flex-direction:column;gap:6px;flex:1' }, [ta]);
+          ctl.appendChild(jc);
+          ctl.appendChild(saveJ);
+        } else if (typeof def === 'number'){
+          var num = h('input', { type:'number', class:'wnum', step:'any', value: (cur == null ? def : cur) });
+          num.addEventListener('change', function(){
+            var v = num.value.trim();
+            cfgSave(key, v === '' ? '' : Number(v), status);
+          });
+          ctl.appendChild(num);
+        } else {
+          var txt = h('input', { class:'winput', style:'min-width:220px', value: (cur == null ? '' : String(cur)) });
+          txt.addEventListener('change', function(){ cfgSave(key, txt.value, status); });
+          ctl.appendChild(txt);
+        }
+
+        ctl.appendChild(status);
+        var reset = h('button', { class:'wreset', title:'Reset to default', text:'↺' });
+        reset.addEventListener('click', function(){
+          cfgSave(key, def, status).then(function(){ PANELS.gameconfig(panel); });
+        });
+        ctl.appendChild(reset);
+        row.appendChild(ctl);
+        g.appendChild(row);
+      });
+      groupEls.push(g);
+      panel.appendChild(g);
+    });
+
+    filter.addEventListener('input', function(){
+      var qv = filter.value.toLowerCase();
+      groupEls.forEach(function(g){
+        var anyVisible = false;
+        Array.prototype.slice.call(g.querySelectorAll('.wrow')).forEach(function(r){
+          var k = (r.getAttribute('data-cfg-key') || '').toLowerCase();
+          var show = !qv || k.indexOf(qv) !== -1;
+          r.style.display = show ? '' : 'none';
+          if (show) anyVisible = true;
+        });
+        g.style.display = anyVisible ? '' : 'none';
+      });
+    });
+
+    $('#panelSub').textContent = keys.length + ' config keys';
+  }).catch(function(e){ panel.innerHTML = '<div class="loading">' + esc(e.message) + '</div>'; });
+};
+
+/* =====================================================================
+   SPIN WHEEL — configure the free/paid spin and full CRUD of the reward
+   table (weighted). Wired to /spin, /spin/config, /spin/rewards.
+===================================================================== */
+PANELS.spin = function(panel){
+  panel.innerHTML = '<div class="loading">Loading…</div>';
+  api('/spin').then(function(res){
+    res = res || {};
+    var cfg = res.config || {};
+    var rewards = (res.rewards || []).slice();
+    panel.innerHTML = '';
+
+    /* ---- spin config ---- */
+    var g = h('div', { class:'wgroup' });
+    g.appendChild(h('h3', { text:'Spin settings' }));
+    g.appendChild(h('p', { class:'wsub', text:'Cooldown, free/paid daily limits, and the star price of a paid spin. Rewards below are weighted — the wheel picks each slot in proportion to its weight.' }));
+    var cRow = h('div', { class:'wrow', style:'flex-wrap:wrap;gap:12px' });
+    cRow.innerHTML =
+      '<label class="wsub">Cooldown (hours)<input id="spCd" class="winput" type="number" min="1" step="1" style="width:120px" value="' +
+        esc(String(cfg.cooldown_hours != null ? cfg.cooldown_hours : 24)) + '"/></label>' +
+      '<label class="wsub">Free spins / day<input id="spFree" class="winput" type="number" min="0" step="1" style="width:120px" value="' +
+        esc(String(cfg.free_spins_per_day != null ? cfg.free_spins_per_day : 1)) + '"/></label>' +
+      '<label class="wsub">Max paid / day<input id="spPaid" class="winput" type="number" min="0" step="1" style="width:120px" value="' +
+        esc(String(cfg.max_paid_per_day != null ? cfg.max_paid_per_day : 3)) + '"/></label>' +
+      '<label class="wsub">Stars per paid spin<input id="spStars" class="winput" type="number" min="1" step="1" style="width:140px" value="' +
+        esc(String(cfg.stars_per_spin != null ? cfg.stars_per_spin : 25)) + '"/></label>';
+    g.appendChild(cRow);
+    var saveCfgBtn = h('button', { class:'btn primary sm', style:'width:auto', text:'Save spin settings' });
+    saveCfgBtn.addEventListener('click', function(){
+      act('/spin/config', {
+        cooldown_hours: Number($('#spCd').value) || 24,
+        free_spins_per_day: Number($('#spFree').value) || 0,
+        max_paid_per_day: Number($('#spPaid').value) || 0,
+        stars_per_spin: Number($('#spStars').value) || 1
+      }, 'Spin settings saved').then(function(){ PANELS.spin(panel); });
+    });
+    g.appendChild(saveCfgBtn);
+    panel.appendChild(g);
+
+    /* ---- reward editor ---- */
+    var re = h('div', { class:'wgroup' });
+    re.appendChild(h('h3', { text:'Reward table' }));
+    re.appendChild(h('p', { class:'wsub', text:'Add, edit or remove wheel slots. Kind: ember / loyalty / relic / nothing. Weight sets relative odds; label + icon are shown on the wheel. Saving replaces the whole table (order = slot order).' }));
+    var tableWrap = h('div', { id:'spRewardRows' });
+    re.appendChild(tableWrap);
+    var addRow = h('button', { class:'btn tiny', text:'+ Add slot' });
+    var saveRewards = h('button', { class:'btn primary sm', style:'width:auto;margin-left:8px', text:'Save reward table' });
+    var totalW = h('span', { class:'wval', style:'margin-left:10px' }, '');
+    var barRow = h('div', { class:'wrow' }, [addRow, saveRewards, totalW]);
+    re.appendChild(barRow);
+    panel.appendChild(re);
+
+    var KINDS = ['ember','loyalty','relic','nothing'];
+    function draw(){
+      tableWrap.innerHTML = '';
+      var sum = 0;
+      rewards.forEach(function(rw){ sum += Number(rw.weight) || 0; });
+      rewards.forEach(function(rw, i){
+        var row = h('div', { class:'wlist-row', style:'flex-wrap:wrap;gap:6px' });
+        var kindSel = h('select', { class:'winput', style:'width:120px' });
+        KINDS.forEach(function(k){
+          var o = h('option', { value:k, text:k }); if ((rw.kind||'ember')===k) o.selected = true; kindSel.appendChild(o);
+        });
+        var label = h('input', { class:'winput', style:'width:140px', placeholder:'Label', value: rw.label || '' });
+        var amount = h('input', { class:'winput', type:'number', step:'1', min:'0', style:'width:110px', placeholder:'Amount', value: rw.amount != null ? rw.amount : '' });
+        var icon = h('input', { class:'winput', style:'width:110px', placeholder:'icon', value: rw.icon || '' });
+        var weight = h('input', { class:'winput', type:'number', min:'1', step:'1', style:'width:90px', placeholder:'Weight', value: rw.weight != null ? rw.weight : 100 });
+        var actLbl = h('label', { class:'wsub', style:'display:flex;align-items:center;gap:4px' });
+        var actChk = h('input', { type:'checkbox' }); actChk.checked = rw.active !== false;
+        actLbl.appendChild(actChk); actLbl.appendChild(document.createTextNode('active'));
+        var pct = h('span', { class:'wsub', style:'min-width:52px', text: sum > 0 ? ((Number(rw.weight)||0)/sum*100).toFixed(1) + '%' : '—' });
+        var del = h('button', { class:'btn tiny danger', text:'✕' });
+        function sync(){
+          rw.kind = kindSel.value; rw.label = label.value; rw.icon = icon.value.trim();
+          rw.amount = amount.value === '' ? 0 : Number(amount.value);
+          rw.weight = Number(weight.value) || 1;
+          rw.active = actChk.checked;
+        }
+        [kindSel,label,amount,icon,weight].forEach(function(el){ el.addEventListener('change', function(){ sync(); draw(); }); });
+        actChk.addEventListener('change', sync);
+        del.addEventListener('click', function(){ rewards.splice(i,1); draw(); });
+        row.appendChild(kindSel); row.appendChild(label); row.appendChild(amount);
+        row.appendChild(icon); row.appendChild(weight); row.appendChild(actLbl); row.appendChild(pct); row.appendChild(del);
+        tableWrap.appendChild(row);
+      });
+      if (!rewards.length) tableWrap.innerHTML = '<p class="muted" style="padding:8px 0">No slots yet — add one.</p>';
+      totalW.textContent = 'Σ weight ' + sum;
+    }
+    addRow.addEventListener('click', function(){ rewards.push({ kind:'ember', label:'', amount:0, icon:'', weight:100, active:true }); draw(); });
+    saveRewards.addEventListener('click', function(){
+      var clean = rewards.map(function(rw){
+        return { kind: rw.kind||'ember', label: rw.label||'', icon: rw.icon||'',
+                 amount: Math.max(0, Math.floor(Number(rw.amount)||0)),
+                 weight: Math.max(1, Math.floor(Number(rw.weight)||1)),
+                 active: rw.active !== false };
+      });
+      if (!clean.length){ toast('Add at least one slot', true); return; }
+      act('/spin/rewards', { rewards: clean }, 'Reward table saved').then(function(){ PANELS.spin(panel); });
+    });
+    draw();
+    $('#panelSub').textContent = rewards.length + ' reward slots';
+  }).catch(function(e){ panel.innerHTML = '<div class="loading">' + esc(e.message) + '</div>'; });
+};
+
 /* ---------- boot ---------- */
 if (token){
   api('/stats').then(function(){ showConsole(); loadFeedInitial(); })

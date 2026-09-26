@@ -736,7 +736,7 @@ function patchHomeCards(){
       tr.innerHTML =
         '<div class="dash-card-head">' + iconSpan('tribe-shield', 'ico-rust', 16) + '<span>TRIBE</span></div>' +
         '<div class="dash-card-body"><div class="dash-card-big">—</div>' +
-        '<div class="dash-card-sub">Found or join a tribe</div></div>';
+        '<div class="dash-card-sub">Create or join a tribe</div></div>';
     } else {
       const lvl = (t.level || 1);
       const cap = (S.config.levelTable.caps[lvl-1] || 5);
@@ -1152,8 +1152,8 @@ function renderTribeScreen(box){
       '<div class="screen-body">' +
         '<div class="screen-title">Tribe</div>' +
         '<div class="empty"><h2>You wander alone</h2>' +
-        '<p class="tiny">Found your own tribe or join an existing fire.</p></div>' +
-        '<button class="btn btn-primary btn-shine btn-block" data-act="openCreate">Found a Tribe · ' + fmt(S.config.foundEmber) + ' Ember</button>' +
+        '<p class="tiny">Create your own tribe or join an existing fire.</p></div>' +
+        '<button class="btn btn-primary btn-shine btn-block" data-act="openCreate">Create a Tribe · ' + fmt(S.config.foundEmber) + ' Ember</button>' +
         '<div id="joinList" style="margin-top:20px"></div>' +
       '</div>';
     api('/tribes').then(d => {
@@ -1978,12 +1978,12 @@ async function actShare(btn){
 ===================================================================== */
 async function openCreate(){
   sheet(
-    '<h3>Found a Tribe</h3>' +
+    '<h3>Create a Tribe</h3>' +
     '<div class="sub">Costs ' + fmt(S.config.foundEmber) + ' Ember · you become Chief</div>' +
     '<div class="field"><input id="tMotto" maxlength="80" placeholder="Battle motto (optional)"/></div>' +
     '<div class="tiny" style="margin:6px 0 8px">Pick a name</div>' +
-    '<div id="nameGrid" class="grid2" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px"><div class="skeleton" style="height:36px"></div><div class="skeleton" style="height:36px"></div></div>' +
-    '<button class="btn btn-primary btn-shine btn-block" data-act="doCreate">Light the First Fire</button>' +
+    '<div id="nameGrid" class="grid2" style="grid-template-columns:1fr 1fr;gap:8px;margin-bottom:14px;max-height:38vh;overflow-y:auto;-webkit-overflow-scrolling:touch;overscroll-behavior:contain;padding-right:2px"><div class="skeleton" style="height:36px"></div><div class="skeleton" style="height:36px"></div></div>' +
+    '<button id="createBtn" class="btn btn-primary btn-shine btn-block" data-act="doCreate">Light the First Fire</button>' +
     '<button class="btn btn-ghost btn-block" data-act="closeSheet" style="margin-top:8px">Cancel</button>'
   );
   try {
@@ -2001,6 +2001,14 @@ async function openCreate(){
         grid.querySelectorAll('.btn').forEach(x => x.style.borderColor = 'var(--line)');
         b.style.borderColor = 'var(--gold)';
         pickedId = Number(b.dataset.val);
+        haptic('light');
+        // Auto-advance: bring the create button into view so the user
+        // doesn't have to hunt for it below the long name list.
+        const createBtn = $('#createBtn');
+        if (createBtn){
+          createBtn.scrollIntoView({ behavior:'smooth', block:'center' });
+          createBtn.classList.add('btn-pulse');
+        }
       });
     });
     window.__doCreate = async (btn) => {
