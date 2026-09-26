@@ -161,7 +161,7 @@ async function api(path, body, opts){
   if (TG && TG.initData) headers['X-Init-Data'] = TG.initData;
   headers['X-Guest-Id'] = GUEST;
 
-  const READ_PATHS = new Set(['/state','/health','/war','/war/chronicle','/war/leaderboard','/war/tactics','/war/hint','/war/wiki','/war/vengeance','/war/alliances','/tribes','/tribe/names','/kiva','/bonfire','/cosmetics','/trials','/referral']);
+  const READ_PATHS = new Set(['/state','/health','/war','/war/chronicle','/war/leaderboard','/war/tactics','/war/hint','/war/wiki','/war/vengeance','/war/alliances','/tribes','/tribe/names','/kiva','/bonfire','/cosmetics','/trials','/referral','/relics/state','/relics/packs','/relics/events']);
   const pathOnly = path.split('?')[0];
   const method = opts.method
     || (body !== undefined ? 'POST' : (READ_PATHS.has(pathOnly) ? 'GET' : 'POST'));
@@ -209,7 +209,7 @@ const NAV_POOL = [
 const TAB_TO_SCREEN = {
   fire:'home', home:'home', war:'war', trials:'trials',
   ranks:'ranks', tribe:'tribe', kiva:'kiva',
-  store:'store', profile:'profile', settings:'settings',
+  store:'store', profile:'profile', settings:'settings', relics:'relics',
 };
 
 /* =====================================================================
@@ -578,6 +578,7 @@ function renderDashboard(){
       '<section class="screen" id="sc-tribe"></section>' +
       '<section class="screen" id="sc-kiva"></section>' +
       '<section class="screen" id="sc-store"></section>' +
+      '<section class="screen" id="sc-relics"></section>' +
       '<section class="screen" id="sc-profile"></section>' +
       '<section class="screen" id="sc-settings"></section>';
     buildHomeGrid();
@@ -593,6 +594,7 @@ function renderDashboard(){
   if (TAB === 'tribe')   renderTribeScreen($('#sc-tribe'));
   if (TAB === 'kiva')    renderKivaScreen($('#sc-kiva'));
   if (TAB === 'store')   renderStoreScreen($('#sc-store'));
+  if (TAB === 'relics')  renderRelicsScreen($('#sc-relics'));
   if (TAB === 'profile') renderProfileScreen($('#sc-profile'));
   if (TAB === 'settings')renderSettingsScreen($('#sc-settings'));
 
@@ -1234,6 +1236,10 @@ function renderStoreScreen(box){
     if (sections[s]) sections[s].push([k, it]);
   }
   box.innerHTML = '<div class="screen-body"><div class="screen-title">Trading Post</div>' +
+    '<button class="btn btn-primary btn-shine btn-block" data-act="goRelics" style="margin-bottom:12px">' +
+      iconSpan('sparkles','',16) + ' Relic Vault — packs, shards &amp; loadout</button>' +
+    '<button class="btn btn-primary btn-shine btn-block" data-act="goRelics" style="margin-bottom:12px">' +
+      iconSpan('sparkles','',16) + ' Relic Vault — packs, shards &amp; loadout</button>' +
     (featured ? '<div class="featured"><span class="ft-badge">ONE-TIME</span>' +
       '<h3>' + esc(featured.title) + '</h3><p>' + esc(featured.desc) + '</p>' +
       '<button class="b" data-act="buyStars" data-val="starter_bundle">' +
@@ -1256,6 +1262,147 @@ function renderStoreScreen(box){
       '</div>'
     ).join('') +
   '</div>';
+}
+
+/* ---------- Relics (Batch B1: foundation, art added by admin later) ---------- */
+const RELIC_RARITY_LABEL = { common:'Common', rare:'Rare', epic:'Epic', legendary:'Legendary' };
+const RELIC_CAT_LABEL = { war:'War Relics', tribe:'Tribe Relics', personal:'Personal Relics' };
+
+// Art placeholder box. Admin fills image_url or svg later; until then we show a
+// rarity-tinted glyph so the layout is complete without generating any art.
+function relicArt(r){
+  if (r.image_url) return '<div class="relic-art"><img src="' + esc(r.image_url) + '" alt="" loading="lazy"></div>';
+  if (r.svg) return '<div class="relic-art relic-art-svg">' + r.svg + '</div>';
+  const glyph = r.cursed ? '\u2620\uFE0F' : (r.category === 'war' ? '\u2694\uFE0F' : r.category === 'tribe' ? '\uD83D\uDEE1\uFE0F' : '\u2728');
+  return '<div class="relic-art relic-art-ph" data-rarity="' + esc(r.rarity || 'common') + '">' +
+    '<span class="relic-glyph">' + glyph + '</span></div>';
+}
+
+function relicCard(r){
+  const rar = esc(r.rarity || 'common');
+  const owned = !!r.owned;
+  const equipped = !!r.equipped;
+  const badges =
+    '<span class="relic-rar" data-rarity="' + rar + '">' + esc(RELIC_RARITY_LABEL[r.rarity] || r.rarity || '') + '</span>' +
+    (r.cursed ? '<span class="relic-cursed">Cursed</span>' : '') +
+    (r.pause_in_war ? '<span class="relic-pause">Pauses in war</span>' : '');
+  let action;
+  if (!owned) action = '<span class="relic-locked tiny">' + esc(r.earn_hint || 'Not yet owned') + '</span>';
+  else if (equipped) action = '<button class="btn btn-stone btn-sm btn-block" data-act="relicUnequip">Equipped — Unequip</button>';
+  else action = '<button class="btn btn-primary btn-sm btn-block" data-act="relicEquip" data-val="' + r.id + '">Equip</button>';
+  return '<div class="relic-card' + (equipped ? ' on' : '') + (r.cursed ? ' cursed' : '') + '">' +
+    relicArt(r) +
+    '<div class="relic-body">' +
+      '<div class="relic-name">' + esc(r.name) + (owned && r.count > 1 ? ' <span class="tiny">×' + fmt(r.count) + '</span>' : '') + '</div>' +
+      '<div class="relic-badges">' + badges + '</div>' +
+      '<p class="relic-desc tiny">' + esc(r.description || '') + '</p>' +
+      action +
+    '</div>' +
+  '</div>';
+}
+
+function renderRelicsScreen(box){
+  if (!box) return;
+  box.innerHTML = '<div class="screen-body"><div class="screen-title">Relic Vault</div>' +
+    '<div id="relicBody"><div class="skeleton"></div><div class="skeleton"></div></div></div>';
+  loadRelics();
+}
+
+async function loadRelics(){
+  const box = $('#relicBody'); if (!box) return;
+  let st, packs;
+  try {
+    st = await api('/relics/state');
+    packs = (await api('/relics/packs')).packs || [];
+  } catch(e){ box.innerHTML = '<p class="tiny">The vault is sealed right now. Try again shortly.</p>'; return; }
+  S.relics = st;
+
+  const cat = st.catalog || [];
+  const equipped = cat.find(r => r.equipped);
+  const shards = Number(st.cursed_shards || 0);
+
+  // Loadout header
+  const loadout = '<div class="relic-loadout">' +
+    '<div class="rl-head">Your Loadout</div>' +
+    (equipped
+      ? '<div class="rl-equipped">' + relicArt(equipped) +
+          '<div><b>' + esc(equipped.name) + '</b>' +
+          '<span class="tiny"> · ' + esc(RELIC_RARITY_LABEL[equipped.rarity] || '') + '</span>' +
+          '<div class="tiny">' + esc(equipped.description || '') + '</div></div>' +
+          '<button class="btn btn-stone btn-sm" data-act="relicUnequip">Unequip</button>' +
+        '</div>'
+      : '<p class="tiny">No relic equipped. Equip one below to carry its power. Only one relic can be worn at a time.</p>') +
+    (st.paused ? '<div class="relic-pause-chip">⏸ A personal relic is paused for the duration of the current war.</div>' : '') +
+  '</div>';
+
+  // Cursed shards
+  const shardBox = '<div class="relic-shards">' +
+    '<div class="rl-head">Cursed Shards · <b>' + fmt(shards) + '</b></div>' +
+    '<p class="tiny">Bad-luck safety net. Redeem shards for a guaranteed cursed relic.</p>' +
+    '<div class="relic-shard-btns">' +
+      '<button class="btn btn-stone btn-sm" data-act="relicRedeem" data-val="rare"' + (shards < 5 ? ' disabled' : '') + '>5 → Rare</button>' +
+      '<button class="btn btn-stone btn-sm" data-act="relicRedeem" data-val="legendary"' + (shards < 20 ? ' disabled' : '') + '>20 → Legendary</button>' +
+    '</div></div>';
+
+  // Packs (art-free): show odds and an Open button. Debits Stars balance.
+  const packHtml = packs.length ? '<div class="relic-packs"><div class="rl-head">Relic Packs</div>' +
+    packs.map(p => {
+      const odds = p.odds_json || {};
+      const oddsStr = ['legendary','epic','rare','common']
+        .filter(k => odds[k]).map(k => (RELIC_RARITY_LABEL[k] || k) + ' ' + Math.round(odds[k] * 100) + '%').join(' · ');
+      return '<div class="relic-pack-card">' +
+        '<div class="rp-art relic-art-ph"><span class="relic-glyph">🎁</span></div>' +
+        '<div class="rp-body"><b>' + esc(p.name) + '</b>' +
+          '<p class="tiny">' + esc(p.description || '') + '</p>' +
+          '<p class="tiny relic-odds">' + esc(oddsStr) + (p.pity_epic_in ? ' · Epic+ guaranteed within ' + fmt(p.pity_epic_in) : '') + '</p>' +
+          '<button class="btn btn-primary btn-sm" data-act="relicPackOpen" data-val="' + esc(p.slug) + '">Open · ' + iconSpan('res-stars','',12) + ' ' + fmt(p.price_stars) + '</button>' +
+        '</div></div>';
+    }).join('') +
+    '<p class="tiny relic-note">Packs spend your Stars balance (like the spin), not a new Telegram invoice.</p>' +
+  '</div>' : '';
+
+  // Catalog grouped by category, non-cursed then cursed within each
+  const order = ['war','tribe','personal'];
+  const groups = order.map(c => {
+    const items = cat.filter(r => (r.category || 'personal') === c);
+    if (!items.length) return '';
+    return '<div class="relic-group"><div class="rl-head">' + esc(RELIC_CAT_LABEL[c] || c) + '</div>' +
+      '<div class="relic-grid">' + items.map(relicCard).join('') + '</div></div>';
+  }).join('');
+
+  box.innerHTML = loadout + shardBox + packHtml + groups;
+  if (window.hydrateIcons) window.hydrateIcons();
+}
+
+async function relicEquip(id){
+  try { const r = await api('/relics/equip', { relicId: Number(id) });
+    haptic('medium');
+    toast(r.warning || 'Relic equipped', r.warning ? 'warn' : 'good');
+    loadRelics();
+  } catch(e){ toast(e.message, 'bad'); }
+}
+async function relicUnequip(){
+  try { await api('/relics/unequip', {}); toast('Relic unequipped', 'good'); loadRelics(); }
+  catch(e){ toast(e.message, 'bad'); }
+}
+async function relicRedeem(tier){
+  try { const r = await api('/relics/shards/redeem', { tier });
+    haptic('heavy'); toast('Redeemed ' + (r.relic ? r.relic.name : 'a relic'), 'good'); refresh(); loadRelics();
+  } catch(e){ toast(e.message + (e.data && e.data.need ? ' (need ' + e.data.need + ')' : ''), 'bad'); }
+}
+async function relicPackOpen(slug){
+  try {
+    const r = await api('/relics/pack/open', { slug });
+    haptic('heavy');
+    sheet('<div class="pack-result">' +
+      relicArt(r.relic) +
+      '<div class="pr-rar" data-rarity="' + esc(r.rarity) + '">' + esc(RELIC_RARITY_LABEL[r.rarity] || r.rarity) + '</div>' +
+      '<h3>' + esc(r.relic.name) + '</h3>' +
+      '<p class="tiny">' + esc(r.relic.description || '') + '</p>' +
+      '<button class="btn btn-primary btn-block" data-act="closeSheet">Claim</button>' +
+    '</div>');
+    refresh(); loadRelics();
+  } catch(e){ toast(e.message + (e.data && e.data.need ? ' (need ' + e.data.need + ' ⭐)' : ''), 'bad'); }
 }
 
 /* ---------- Profile ---------- */
@@ -1842,6 +1989,11 @@ const ACTS = {
   warHint:      actWarHint,
   warWiki:      actWarWiki,
   shopTab:      (btn, key) => shopTab(btn, key),
+  goRelics:     () => setTab('relics'),
+  relicEquip:   (btn, id) => relicEquip(id),
+  relicUnequip: () => relicUnequip(),
+  relicRedeem:  (btn, tier) => relicRedeem(tier),
+  relicPackOpen:(btn, slug) => relicPackOpen(slug),
   closeSheet:   () => closeSheet(),
   bgClose:      (btn, v, e) => {
     if (e && e.target && e.target.classList && e.target.classList.contains('sheet-bg')) closeSheet();

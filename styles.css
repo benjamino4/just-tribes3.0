@@ -506,3 +506,44 @@ button{font-family:inherit;cursor:pointer;border:0;background:none;color:inherit
 
 
 
+
+/* ===== Relic Vault (Batch B1) ===== */
+.relic-loadout,.relic-shards,.relic-packs,.relic-group{margin:0 0 16px}
+.rl-head{font-weight:700;font-size:.9rem;letter-spacing:.02em;margin:0 0 8px;color:var(--ink,#f4ede2)}
+.rl-equipped{display:flex;align-items:center;gap:12px;background:rgba(255,122,24,.08);border:1px solid rgba(255,122,24,.35);border-radius:14px;padding:12px}
+.rl-equipped>div{flex:1;min-width:0}
+.relic-pause-chip{margin-top:8px;font-size:.78rem;padding:6px 10px;border-radius:10px;background:rgba(120,120,140,.16);color:#c9c2b6}
+.relic-shard-btns{display:flex;gap:8px;margin-top:8px}
+.relic-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px}
+.relic-card{display:flex;flex-direction:column;background:rgba(20,18,16,.55);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:10px;gap:8px}
+.relic-card.on{border-color:rgba(255,122,24,.6);box-shadow:0 0 0 1px rgba(255,122,24,.35) inset}
+.relic-card.cursed{border-color:rgba(150,60,180,.45)}
+.relic-art,.rp-art{width:100%;aspect-ratio:1/1;border-radius:12px;overflow:hidden;display:flex;align-items:center;justify-content:center;background:linear-gradient(135deg,rgba(255,255,255,.05),rgba(255,255,255,.01))}
+.rl-equipped .relic-art{width:56px;height:56px;aspect-ratio:auto;flex:0 0 56px}
+.relic-art img{width:100%;height:100%;object-fit:cover}
+.relic-art-ph .relic-glyph{font-size:2rem;opacity:.85}
+.relic-art-ph[data-rarity="legendary"]{background:radial-gradient(circle,rgba(255,190,60,.25),transparent)}
+.relic-art-ph[data-rarity="epic"]{background:radial-gradient(circle,rgba(180,90,220,.22),transparent)}
+.relic-art-ph[data-rarity="rare"]{background:radial-gradient(circle,rgba(80,150,255,.2),transparent)}
+.relic-body{display:flex;flex-direction:column;gap:6px;flex:1}
+.relic-name{font-weight:700;font-size:.86rem}
+.relic-badges{display:flex;flex-wrap:wrap;gap:4px}
+.relic-rar,.relic-cursed,.relic-pause{font-size:.64rem;padding:2px 6px;border-radius:6px;background:rgba(255,255,255,.08);text-transform:uppercase;letter-spacing:.03em}
+.relic-rar[data-rarity="legendary"]{background:rgba(255,190,60,.2);color:#ffce7a}
+.relic-rar[data-rarity="epic"]{background:rgba(180,90,220,.2);color:#d9a6ff}
+.relic-rar[data-rarity="rare"]{background:rgba(80,150,255,.2);color:#9cc4ff}
+.relic-cursed{background:rgba(150,60,180,.25);color:#e3b0ff}
+.relic-pause{background:rgba(120,120,140,.2);color:#cfc9bd}
+.relic-desc{opacity:.78;margin:0;flex:1}
+.relic-locked{opacity:.6;display:block;text-align:center;padding:6px 0}
+.relic-pack-card{display:flex;gap:12px;background:rgba(20,18,16,.55);border:1px solid rgba(255,255,255,.08);border-radius:14px;padding:12px;margin-bottom:10px}
+.rp-art{width:64px;height:64px;flex:0 0 64px}
+.rp-body{flex:1;min-width:0}
+.relic-odds{opacity:.8}
+.relic-note{opacity:.6;margin-top:4px}
+.pack-result{text-align:center;padding:8px}
+.pack-result .relic-art{width:120px;height:120px;margin:0 auto 12px}
+.pr-rar{display:inline-block;font-size:.72rem;padding:3px 10px;border-radius:8px;margin-bottom:6px;background:rgba(255,255,255,.1);text-transform:uppercase}
+.pr-rar[data-rarity="legendary"]{background:rgba(255,190,60,.2);color:#ffce7a}
+.pr-rar[data-rarity="epic"]{background:rgba(180,90,220,.2);color:#d9a6ff}
+.pr-rar[data-rarity="rare"]{background:rgba(80,150,255,.2);color:#9cc4ff}

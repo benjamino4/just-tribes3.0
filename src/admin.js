@@ -551,15 +551,29 @@ export async function codeCreate(adminId, code, kind, amount, maxUses, note, exp
 }
 export async function codeUpdate(adminId, code, patch){
   code = String(code || '').toUpperCase();
-  const allowed = ['amount','max_uses','note','expires_at'];
+  patch = patch || {};
+  const allowed = ['amount','max_uses','note','kind'];
   const sets = [];
   const params = [code];
   let i = 2;
+  // validate kind if present
+  if ('kind' in patch && !['ember','loyalty'].includes(patch.kind))
+    throw new Error('kind must be ember or loyalty');
+  if ('amount' in patch){
+    patch.amount = Math.floor(n(patch.amount));
+    if (patch.amount <= 0) throw new Error('amount must be positive');
+  }
+  if ('max_uses' in patch) patch.max_uses = Math.max(0, Math.floor(n(patch.max_uses)));
   for (const k of allowed){
     if (k in patch){
       sets.push(`${k} = $${i++}`);
       params.push(patch[k]);
     }
+  }
+  // relative expiry: expiresDays > 0 sets a new expiry, === 0 clears it, absent leaves it
+  if ('expiresDays' in patch){
+    const d = Math.floor(n(patch.expiresDays));
+    sets.push(d > 0 ? `expires_at = now() + interval '${d} days'` : 'expires_at = NULL');
   }
   if (!sets.length) throw new Error('nothing to update');
   const r = await q(

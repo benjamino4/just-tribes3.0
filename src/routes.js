@@ -20,6 +20,10 @@ import { feedWrite } from './feed.js';
 import * as Kiva from './kiva.js';
 import crypto from 'crypto';
 import { council } from './council.js';
+import {
+  getRelicState, equipRelic, unequipRelic, getPacks, openPack,
+  redeemShards, relicEvents, pauseForWar,
+} from './relics.js';
 
 export const router = express.Router();
 
@@ -897,6 +901,9 @@ router.post('/war/declare', rateLimit('war', 6), async (req, res, next) => { try
 
   await createFronts(war.id);
   await scheduleLegendary(war, null);
+  // BATCH B1: pause personal (non-war) relics for both tribes during the war
+  pauseForWar(u.tribe_id).catch(() => {});
+  pauseForWar(foe.id).catch(() => {});
 
   const foeName = (await q('SELECT name FROM tribes WHERE id=$1', [foe.id])).rows[0]?.name || 'a rival';
   await Kiva.postMessage(u.tribe_id, u.id, `War declared against ${foeName} · stance: ${stance.name || stanceId}.`, 'war');
@@ -1310,6 +1317,43 @@ router.post('/avatar/select', rateLimit('avatarpick', 40), async (req, res, next
   if (!a) return res.status(404).json({ error:'avatar not found' });
   await q('UPDATE users SET avatar_id=$1 WHERE id=$2', [id, req.user.id]);
   res.json({ ok:true, avatar:a });
+} catch(e){ next(e); } });
+
+/* ---------- RELICS FOUNDATION (Batch B1) ---------- */
+// Full relic state: catalog + owned + equipped + shards + pause snapshot.
+router.get('/relics/state', rateLimit('relics', 60), async (req, res, next) => { try {
+  res.json(await getRelicState(req.user.id));
+} catch(e){ next(e); } });
+
+router.post('/relics/equip', rateLimit('relic_equip', 40), async (req, res, next) => { try {
+  const relicId = Number(req.body?.relicId || req.body?.relic_id || 0);
+  if (!relicId) return res.status(400).json({ error:'relicId required' });
+  res.json(await equipRelic(req.user.id, relicId));
+} catch(e){ res.status(400).json({ error: e.message }); } });
+
+router.post('/relics/unequip', rateLimit('relic_equip', 40), async (req, res, next) => { try {
+  res.json(await unequipRelic(req.user.id));
+} catch(e){ next(e); } });
+
+router.get('/relics/packs', rateLimit('relics', 60), async (req, res, next) => { try {
+  res.json({ packs: await getPacks() });
+} catch(e){ next(e); } });
+
+// Open a pack. NOTE: debits the user's Stars BALANCE (same as spin), not a
+// fresh Telegram invoice.
+router.post('/relics/pack/open', rateLimit('relic_pack', 30), async (req, res, next) => { try {
+  const slug = String(req.body?.slug || req.body?.pack || '');
+  if (!slug) return res.status(400).json({ error:'slug required' });
+  res.json(await openPack(req.user, slug));
+} catch(e){ res.status(400).json({ error: e.message, need: e.need }); } });
+
+router.post('/relics/shards/redeem', rateLimit('relic_shard', 30), async (req, res, next) => { try {
+  const tier = String(req.body?.tier || 'rare');
+  res.json(await redeemShards(req.user, tier));
+} catch(e){ res.status(400).json({ error: e.message, need: e.need }); } });
+
+router.get('/relics/events', rateLimit('relics', 60), async (req, res, next) => { try {
+  res.json({ events: await relicEvents(req.user.id, Number(req.query?.limit) || 30) });
 } catch(e){ next(e); } });
 
 export { handleWebhook };

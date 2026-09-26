@@ -4,6 +4,7 @@
 import { q } from './db.js';
 import { CFG, cfgJSON } from './config.js';
 import { distributeSpoils } from './spoils.js';
+import { warRelicMult, maybeShatter, resumeAfterWar, shatterTribeOnWarEnd, pauseForWar } from './relics.js';
 
 export const CHALLENGES = [
   { id:'loyalty_surge', name:'Loyalty Surge',   glyph:'🔥', metric:'loyalty_total',  min:800,  max:2500, days:3, stake:20, reward:6000,
@@ -217,6 +218,10 @@ export async function recordAction(war, user, tribe, side, frontIdx, kind){
     const gTok = grudge ? Number(grudge.tok) : 0;
     if (gTok > 0) mult *= (1 + gTok * (Number(CFG.war_vengeance_bonus_pct) || 0) / 100);
 
+    // BATCH B1: equipped relic war effect (personal cursed relics are paused)
+    const relRes = await warRelicMult(client, user.id, { side, war, front, tribe });
+    if (relRes && relRes.mult && relRes.mult !== 1) mult *= relRes.mult;
+
     const points = Math.round(base * mult);
 
     await client.query(
@@ -234,6 +239,8 @@ export async function recordAction(war, user, tribe, side, frontIdx, kind){
     );
 
     await client.query('COMMIT');
+    // BATCH B1: fire cursed-relic shatter triggers after the contribution commits
+    maybeShatter(user.id, 'first_war_contribution').catch(() => {});
     return { ok:true, points, multiplier:mult, front: front.name, terrain: front.terrain, side, kind };
   } catch (e){
     await client.query('ROLLBACK').catch(() => {});
@@ -400,6 +407,12 @@ export async function maybeResolve(war){
     [winnerId, war.id]
   );
   if (!flip.rowCount) return { ...war, status:'resolved' };
+
+  // BATCH B1: resume paused personal relics and shatter war-cursed relics on both sides
+  resumeAfterWar(war.attacker_id).catch(() => {});
+  resumeAfterWar(war.defender_id).catch(() => {});
+  shatterTribeOnWarEnd(war.attacker_id).catch(() => {});
+  shatterTribeOnWarEnd(war.defender_id).catch(() => {});
 
   const pyrePct = Number(CFG.war_spoils_pyre_pct)/100;
   const contribPct = Number(CFG.war_spoils_contrib_pct)/100;

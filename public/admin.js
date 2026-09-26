@@ -458,13 +458,51 @@ PANELS.codes = function(panel){
       copyBtn.addEventListener('click', function(){
         navigator.clipboard.writeText(c.code).then(function(){ toast('Copied'); });
       });
+      var editBtn = h('button', { class: 'btn tiny', text: 'Edit' });
       var del = h('button', { class: 'btn tiny danger', text: 'Delete' });
       del.addEventListener('click', function(){
         if (confirm('Delete code ' + c.code + '?')) act('/codes/delete', { code: c.code }, 'Deleted').then(function(){ PANELS.codes(panel); });
       });
       r.appendChild(copyBtn);
+      r.appendChild(editBtn);
       r.appendChild(del);
       host.appendChild(r);
+
+      // inline editor (hidden until Edit is pressed)
+      var editRow = h('div', { class: 'wrow' });
+      editRow.style.display = 'none';
+      editRow.style.margin = '4px 0 12px';
+      editRow.innerHTML =
+        '<select class="winput eKind"><option value="ember">Ember</option><option value="loyalty">Loyalty</option></select>' +
+        '<input class="winput eAmount" type="number" min="1" placeholder="Amount"/>' +
+        '<input class="winput eMax" type="number" min="0" placeholder="Max uses (0=∞)"/>' +
+        '<input class="winput eDays" type="number" min="0" placeholder="Expires (days, blank=keep)"/>' +
+        '<button class="btn primary sm eSave" style="width:auto">Save</button>' +
+        '<button class="btn sm eCancel" style="width:auto">Cancel</button>';
+      host.appendChild(editRow);
+
+      editBtn.addEventListener('click', function(){
+        var open = editRow.style.display !== 'none';
+        if (open){ editRow.style.display = 'none'; return; }
+        editRow.style.display = 'flex';
+        editRow.querySelector('.eKind').value = c.kind;
+        editRow.querySelector('.eAmount').value = c.amount;
+        editRow.querySelector('.eMax').value = c.max_uses || 0;
+        editRow.querySelector('.eDays').value = '';
+      });
+      editRow.querySelector('.eCancel').addEventListener('click', function(){ editRow.style.display = 'none'; });
+      editRow.querySelector('.eSave').addEventListener('click', function(){
+        var patch = {
+          kind: editRow.querySelector('.eKind').value,
+          amount: Number(editRow.querySelector('.eAmount').value) || 0,
+          max_uses: Number(editRow.querySelector('.eMax').value) || 0,
+        };
+        if (patch.amount < 1){ toast('Amount must be at least 1', true); return; }
+        var days = editRow.querySelector('.eDays').value;
+        if (days !== '' && days !== null) patch.expiresDays = Number(days) || 0;
+        act('/codes/update', { code: c.code, patch: patch }, 'Code updated')
+          .then(function(){ PANELS.codes(panel); });
+      });
     });
   }).catch(function(e){ toast(e.message, true); });
 };
