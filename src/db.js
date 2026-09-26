@@ -96,6 +96,10 @@ CREATE TABLE IF NOT EXISTS users (
   avatar_glow  TEXT,
   trials_state JSONB DEFAULT '{}'::jsonb,
   is_guest     BOOLEAN DEFAULT false,
+  banned       BOOLEAN DEFAULT false,
+  ban_reason   TEXT,
+  wallet_verified_at TIMESTAMPTZ,
+  allocation   BIGINT DEFAULT 0,
   created_at   TIMESTAMPTZ DEFAULT now()
 );
 

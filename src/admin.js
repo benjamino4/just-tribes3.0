@@ -204,6 +204,45 @@ export async function unban(adminId, id){
   await audit(adminId, 'unban', `user ${id}`);
   return { id, banned:false };
 }
+
+/* ---------- wallets / allocation ---------- */
+// Verified wallets = users who connected a TON wallet (connect-wallet acts as
+// the verification step for token allocation eligibility).
+export async function walletsList({ q: query = '', limit = 200 } = {}){
+  const params = [];
+  let where = `ton_address IS NOT NULL AND ton_address <> ''`;
+  if (query){
+    params.push('%' + String(query).toLowerCase() + '%');
+    where += ` AND (lower(coalesce(username,'')) LIKE $${params.length}
+                    OR lower(ton_address) LIKE $${params.length}
+                    OR cast(id as text) LIKE $${params.length})`;
+  }
+  params.push(Math.min(500, Math.max(1, Number(limit) || 200)));
+  const rows = (await q(
+    `SELECT id, username, ton_address, wallet_verified_at,
+            coalesce(allocation,0)::bigint AS allocation,
+            coalesce(ember,0)::bigint AS ember,
+            (wallet_verified_at IS NOT NULL) AS verified
+       FROM users
+      WHERE ${where}
+      ORDER BY wallet_verified_at DESC NULLS LAST, id DESC
+      LIMIT $${params.length}`,
+    params
+  )).rows;
+  const summary = (await q(
+    `SELECT count(*) filter (where ton_address IS NOT NULL AND ton_address <> '')::int linked,
+            count(*) filter (where wallet_verified_at IS NOT NULL)::int verified,
+            coalesce(sum(allocation),0)::bigint AS allocated FROM users`
+  )).rows[0];
+  return { rows, summary };
+}
+export async function setAllocation(adminId, id, value){
+  const v = Math.max(0, Math.floor(Number(value) || 0));
+  const r = await q('UPDATE users SET allocation=$2 WHERE id=$1 RETURNING id, allocation', [id, v]);
+  if (!r.rowCount) throw new Error('no such player');
+  await audit(adminId, 'setAllocation', `user ${id} \u2192 ${v}`);
+  return r.rows[0];
+}
 export async function delUser(adminId, id){
   const u = (await q('SELECT tribe_id FROM users WHERE id=$1', [id])).rows[0];
   if (!u) throw new Error('no such player');
@@ -1263,11 +1302,14 @@ A.post('/seasons/start', wrap(() => seasonStartNew(who(req))));
 A.post('/seasons/end', wrap(() => seasonEndNow(who(req))));
 
 /* X quests */
-A.get('/x-quests', wrap(() => xQuestsList()));
-A.post('/x-quests', wrap(req => xQuestCreate(who(req), req.body)));
+A.get('/x-quests', wrap(() => xQuestsList()));A.post('/x-quests', wrap(req => xQuestCreate(who(req), req.body)));
 A.post('/x-quests/update', wrap(req => xQuestUpdate(who(req), req.body.id, req.body)));
 A.post('/x-quests/delete', wrap(req => xQuestDelete(who(req), req.body.id)));
 A.post('/x-quests/toggle', wrap(req => xQuestToggle(who(req), req.body.id, req.body.active)));
+
+/* wallets / allocation */
+A.get('/wallets', wrap(req => walletsList({ q: req.query.q || '', limit: req.query.limit })));
+A.post('/allocation', wrap(req => setAllocation(who(req), req.body.id, req.body.value)));
 
 A.get('/x-claims', wrap(req => xClaimsList({
   status: req.query.status || 'pending',

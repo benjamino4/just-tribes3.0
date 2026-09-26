@@ -72,5 +72,10 @@ export async function verifyPayment(userId, nonce){
 }
 
 export async function linkWallet(userId, address){
-  await q('UPDATE users SET ton_address=$1 WHERE id=$2', [address, userId]);
+  // Connecting a wallet doubles as verification for token allocation:
+  // stamp wallet_verified_at so allocation snapshots can trust this user.
+  await q(
+    'UPDATE users SET ton_address=$1, wallet_verified_at=COALESCE(wallet_verified_at, now()) WHERE id=$2',
+    [address, userId]
+  );
 }

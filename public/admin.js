@@ -178,6 +178,7 @@ var SECTIONS = [
   { id: 'tribes',     label: 'Tribes',        ico: 'admin-tribes' },
   { id: 'wars',       label: 'Wars',          ico: 'admin-wars' },
   { id: 'payments',   label: 'Payments',      ico: 'admin-payments' },
+  { id: 'wallets',    label: 'Wallets',       ico: 'admin-payments' },
   { id: 'codes',      label: 'Gift Codes',    ico: 'admin-codes' },
   { id: 'xquests',    label: 'X Quests',      ico: 'admin-quests' },
   { id: 'trials',     label: 'Trials',        ico: 'admin-trials' },
@@ -247,11 +248,24 @@ function widget(label, hint, control, key, opts){
   return row;
 }
 function slider(label, hint, key, value, min, max, step, opts){
-  var inp = h('input', { type: 'range', min: min, max: max, step: step || 1, value: value });
-  var val = h('span', { class: 'wval' }, String(value));
-  inp.addEventListener('input', function(){ val.textContent = inp.value; });
-  inp.addEventListener('change', function(){ saveCfg(key, inp.value); });
-  var ctl = h('div', { class: 'wslider' }, inp);
+  var stp = step || 1;
+  var inp = h('input', { type: 'range', min: min, max: max, step: stp, value: value });
+  // Editable typed number so admins can enter exact values (incl. beyond the
+  // slider's max) instead of only dragging.
+  var num = h('input', { type: 'number', class: 'wnum', min: min, step: stp, value: value });
+  function commit(v){
+    var n = Number(v);
+    if (!isFinite(n)) return;
+    if (n < min) n = min;
+    // keep the range thumb in bounds but allow the number to exceed max
+    inp.value = Math.min(Number(max), n);
+    num.value = n;
+    saveCfg(key, n);
+  }
+  inp.addEventListener('input', function(){ num.value = inp.value; });
+  inp.addEventListener('change', function(){ commit(inp.value); });
+  num.addEventListener('change', function(){ commit(num.value); });
+  var ctl = h('div', { class: 'wslider' }, [inp, num]);
   return widget(label, hint, ctl, key, Object.assign({}, opts, { default: value }));
 }
 function toggle(label, hint, key, value){
@@ -418,10 +432,56 @@ PANELS.payments = function(panel){
   }).catch(function(e){ panel.innerHTML = '<div class="loading">' + esc(e.message) + '</div>'; });
 };
 
+PANELS.wallets = function(panel){
+  panel.innerHTML = '';
+  var g = h('div', { class: 'wgroup' });
+  g.innerHTML =
+    '<h3>Wallets &amp; Allocation</h3>' +
+    '<p class="wsub">Connecting a TON wallet verifies a player for token allocation. Search and set each player\u2019s allocation.</p>' +
+    '<div class="wrow"><input id="wSearch" class="winput" style="flex:1;max-width:none" placeholder="Search username / wallet / id"/></div>' +
+    '<div id="wSummary" class="wrow"></div>' +
+    '<div id="wList"></div>';
+  panel.appendChild(g);
+
+  function load(){
+    var qv = ($('#wSearch') && $('#wSearch').value.trim()) || '';
+    api('/wallets' + (qv ? '?q=' + encodeURIComponent(qv) : '')).then(function(res){
+      var sum = res.summary || {};
+      var sEl = $('#wSummary');
+      if (sEl) sEl.innerHTML =
+        '<span class="wval">Linked ' + fmt(sum.linked || 0) + ' · Verified ' + fmt(sum.verified || 0) +
+        ' · Allocated ' + fmt(sum.allocated || 0) + '</span>';
+      var host = $('#wList');
+      var rows = res.rows || [];
+      if (!rows.length){ host.innerHTML = '<p class="muted" style="padding:12px 0">No connected wallets.</p>'; return; }
+      host.innerHTML = '<h3>Connected wallets (' + rows.length + ')</h3>';
+      rows.forEach(function(u){
+        var addr = u.ton_address || '';
+        var shortAddr = addr.length > 14 ? addr.slice(0, 6) + '…' + addr.slice(-6) : addr;
+        var r = h('div', { class: 'wlist-row' });
+        r.innerHTML = '<div class="wl-ico">' + iconSpan('admin-payments', '', 20) + '</div>' +
+          '<div class="wl-body"><b>' + esc(u.username || ('#' + u.id)) +
+          (u.verified ? ' <span style="color:var(--gold);font-weight:700">✓ verified</span>' : ' <span style="color:var(--mut)">unverified</span>') + '</b>' +
+          '<span>' + esc(shortAddr) + ' · ' + fmt(u.ember) + 'E</span></div>';
+        var alloc = h('input', { class: 'winput', type: 'number', min: '0', value: String(u.allocation || 0), style: 'width:120px' });
+        var save = h('button', { class: 'btn tiny', text: 'Set' });
+        save.addEventListener('click', function(){
+          act('/allocation', { id: u.id, value: Number(alloc.value) || 0 }, 'Allocation set').then(load);
+        });
+        r.appendChild(alloc);
+        r.appendChild(save);
+        host.appendChild(r);
+      });
+    }).catch(function(e){ var host = $('#wList'); if (host) host.innerHTML = '<p class="muted">' + esc(e.message) + '</p>'; });
+  }
+  var si;
+  $('#wSearch').addEventListener('input', function(){ clearTimeout(si); si = setTimeout(load, 250); });
+  load();
+};
+
 PANELS.codes = function(panel){
   panel.innerHTML = '';
-  var createWrap = h('div', { class: 'wgroup' });
-  createWrap.innerHTML =
+  var createWrap = h('div', { class: 'wgroup' });  createWrap.innerHTML =
     '<h3>Create gift code</h3>' +
     '<div class="wrow"><input id="cCode" class="winput" style="flex:1;max-width:none" placeholder="CODE" maxlength="32"/></div>' +
     '<div class="wrow">' +
@@ -530,6 +590,127 @@ PANELS.xquests = function(panel){
   queuePanel.innerHTML = '<h3>Pending claims</h3><div id="xqQueue"></div>';
   panel.appendChild(queuePanel);
 
+  /* ----- create quest form ----- */
+  var createWrap = h('div', { class: 'wgroup' });
+  createWrap.innerHTML =
+    '<h3>Create X quest</h3>' +
+    '<div class="wrow">' +
+      '<input id="xqSlug" class="winput" placeholder="slug (a-z0-9_)" maxlength="40"/>' +
+      '<input id="xqTitle" class="winput" style="flex:1;max-width:none" placeholder="Title" maxlength="80"/>' +
+    '</div>' +
+    '<div class="wrow"><input id="xqDesc" class="winput" style="flex:1;max-width:none" placeholder="Description" maxlength="240"/></div>' +
+    '<div class="wrow">' +
+      '<select id="xqKind" class="winput">' +
+        '<option value="follow">follow</option><option value="retweet">retweet</option>' +
+        '<option value="like">like</option><option value="tweet">tweet</option>' +
+        '<option value="hashtag">hashtag</option><option value="quote">quote</option>' +
+      '</select>' +
+      '<input id="xqTarget" class="winput" style="flex:1;max-width:none" placeholder="Target (URL / @handle / #tag)" maxlength="120"/>' +
+    '</div>' +
+    '<div class="wrow">' +
+      '<input id="xqTargetLabel" class="winput" placeholder="Button label" maxlength="80"/>' +
+      '<input id="xqReward" class="winput" type="number" min="0" placeholder="Reward Ember"/>' +
+      '<input id="xqPerUser" class="winput" type="number" min="1" placeholder="Per-user limit" value="1"/>' +
+      '<input id="xqMax" class="winput" type="number" min="0" placeholder="Max completions (0=∞)"/>' +
+      '<input id="xqSort" class="winput" type="number" placeholder="Sort" value="100"/>' +
+      '<button id="xqAdd" class="btn primary sm" style="width:auto">Create</button>' +
+    '</div>' +
+    '<div id="xqList"></div>';
+  panel.appendChild(createWrap);
+
+  $('#xqAdd').addEventListener('click', function(){
+    var data = {
+      slug: $('#xqSlug').value.trim(),
+      title: $('#xqTitle').value.trim(),
+      description: $('#xqDesc').value.trim(),
+      kind: $('#xqKind').value,
+      target: $('#xqTarget').value.trim(),
+      target_label: $('#xqTargetLabel').value.trim(),
+      reward_ember: Number($('#xqReward').value) || 0,
+      per_user_limit: Number($('#xqPerUser').value) || 1,
+      max_completions: Number($('#xqMax').value) || 0,
+      sort_order: Number($('#xqSort').value) || 100
+    };
+    if (data.slug.length < 2){ toast('Enter a slug (2+ chars)', true); return; }
+    act('/x-quests', data, 'Quest created').then(function(){ PANELS.xquests(panel); });
+  });
+
+  loadQuests();
+
+  function loadQuests(){
+    api('/x-quests').then(function(list){
+      var host = $('#xqList');
+      if (!list.length){ host.innerHTML = '<p class="muted" style="padding:12px 0">No quests yet.</p>'; return; }
+      host.innerHTML = '<h3>All quests (' + list.length + ')</h3>';
+      list.forEach(function(qz){
+        var r = h('div', { class: 'wlist-row' });
+        r.innerHTML = '<div class="wl-ico">' + iconSpan('brand-x', '', 20) + '</div>' +
+          '<div class="wl-body"><b>' + esc(qz.title) + ' <span style="color:var(--mut);font-weight:600">(' + esc(qz.slug) + ')</span>' +
+          (qz.active ? '' : ' · <span style="color:var(--mut)">hidden</span>') + '</b>' +
+          '<span>' + esc(qz.kind) + ' · +' + fmt(qz.reward_ember) + 'E · limit ' + esc(qz.per_user_limit) +
+          (qz.max_completions ? ' · cap ' + fmt(qz.max_completions) : '') +
+          ' · pending ' + fmt(qz.pending || 0) + ' · approved ' + fmt(qz.approved || 0) + '</span></div>';
+        var tog = h('button', { class: 'btn tiny', text: qz.active ? 'Hide' : 'Show' });
+        tog.addEventListener('click', function(){
+          act('/x-quests/toggle', { id: qz.id, active: qz.active ? false : true }, qz.active ? 'Hidden' : 'Shown')
+            .then(loadQuests);
+        });
+        var editBtn = h('button', { class: 'btn tiny', text: 'Edit' });
+        var del = h('button', { class: 'btn tiny danger', text: 'Delete' });
+        del.addEventListener('click', function(){
+          if (confirm('Delete quest "' + (qz.title || qz.slug) + '"? Claims are removed too.'))
+            act('/x-quests/delete', { id: qz.id }, 'Deleted').then(loadQuests);
+        });
+        r.appendChild(tog);
+        r.appendChild(editBtn);
+        r.appendChild(del);
+        host.appendChild(r);
+
+        var editRow = h('div', { class: 'wrow' });
+        editRow.style.display = 'none';
+        editRow.style.margin = '4px 0 12px';
+        editRow.style.flexWrap = 'wrap';
+        editRow.innerHTML =
+          '<input class="winput eTitle" placeholder="Title"/>' +
+          '<input class="winput eTarget" placeholder="Target"/>' +
+          '<input class="winput eLabel" placeholder="Button label"/>' +
+          '<input class="winput eReward" type="number" min="0" placeholder="Reward Ember"/>' +
+          '<input class="winput eLimit" type="number" min="1" placeholder="Per-user limit"/>' +
+          '<input class="winput eCap" type="number" min="0" placeholder="Max completions"/>' +
+          '<input class="winput eSort" type="number" placeholder="Sort"/>' +
+          '<button class="btn primary sm eSave" style="width:auto">Save</button>' +
+          '<button class="btn sm eCancel" style="width:auto">Cancel</button>';
+        host.appendChild(editRow);
+
+        editBtn.addEventListener('click', function(){
+          var open = editRow.style.display !== 'none';
+          if (open){ editRow.style.display = 'none'; return; }
+          editRow.style.display = 'flex';
+          editRow.querySelector('.eTitle').value = qz.title || '';
+          editRow.querySelector('.eTarget').value = qz.target || '';
+          editRow.querySelector('.eLabel').value = qz.target_label || '';
+          editRow.querySelector('.eReward').value = qz.reward_ember || 0;
+          editRow.querySelector('.eLimit').value = qz.per_user_limit || 1;
+          editRow.querySelector('.eCap').value = qz.max_completions || 0;
+          editRow.querySelector('.eSort').value = qz.sort_order || 100;
+        });
+        editRow.querySelector('.eCancel').addEventListener('click', function(){ editRow.style.display = 'none'; });
+        editRow.querySelector('.eSave').addEventListener('click', function(){
+          var patch = {
+            id: qz.id,
+            title: editRow.querySelector('.eTitle').value.trim(),
+            target: editRow.querySelector('.eTarget').value.trim(),
+            target_label: editRow.querySelector('.eLabel').value.trim(),
+            reward_ember: Number(editRow.querySelector('.eReward').value) || 0,
+            per_user_limit: Number(editRow.querySelector('.eLimit').value) || 1,
+            max_completions: Number(editRow.querySelector('.eCap').value) || 0,
+            sort_order: Number(editRow.querySelector('.eSort').value) || 100
+          };
+          act('/x-quests/update', patch, 'Saved').then(function(){ PANELS.xquests(panel); });
+        });
+      });
+    }).catch(function(e){ var host = $('#xqList'); if (host) host.innerHTML = '<p class="muted">' + esc(e.message) + '</p>'; });
+  }
   function loadQueue(){
     api('/x-claims?status=pending').then(function(list){
       var host = $('#xqQueue');

@@ -129,7 +129,7 @@ body{background:
 .wrow .wval{font-variant-numeric:tabular-nums;font-weight:800;color:var(--gold);font-size:14px;white-space:nowrap}
 .wrow .wctl{display:flex;align-items:center;gap:6px}
 
-.wslider{position:relative;width:100%;max-width:200px;height:22px;display:flex;align-items:center}
+.wslider{position:relative;width:100%;max-width:260px;height:22px;display:flex;align-items:center;gap:8px}
 .wslider input[type=range]{-webkit-appearance:none;appearance:none;width:100%;height:4px;border-radius:3px;
   background:linear-gradient(90deg,var(--fire),var(--gold));outline:none;cursor:pointer}
 .wslider input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;width:18px;height:18px;
@@ -137,6 +137,10 @@ body{background:
   box-shadow:0 0 10px rgba(255,120,30,.6);border:0;cursor:pointer}
 .wslider input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
   background:radial-gradient(circle at 40% 35%,#fff2cf,#ff7a18);box-shadow:0 0 10px rgba(255,120,30,.6);border:0;cursor:pointer}
+.wslider .wnum{width:78px;flex:0 0 auto;padding:5px 7px;border-radius:8px;text-align:right;
+  background:rgba(255,255,255,.05);border:1px solid var(--line2);color:var(--gold);
+  font-weight:800;font-variant-numeric:tabular-nums;font-size:13px}
+.wslider .wnum:focus{outline:none;border-color:rgba(255,183,90,.5)}
 
 .wstep{display:inline-flex;align-items:center;gap:8px;font-weight:800;color:var(--gold);font-variant-numeric:tabular-nums}
 .wstep button{width:28px;height:28px;border-radius:8px;background:rgba(255,255,255,.05);
