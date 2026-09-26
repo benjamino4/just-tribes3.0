@@ -1,0 +1,89 @@
+/* =====================================================================
+   TRIBES 3.0 - unique notification flavours (Dynamic Island)
+   Paired with assets/notify-router.js
+===================================================================== */
+
+/* bespoke animated icons inside the island */
+.notify-ico .nfx{
+  width:20px; height:20px; display:block;
+  fill:none; stroke:currentColor; stroke-width:1.7;
+  stroke-linecap:round; stroke-linejoin:round; overflow:visible;
+  transform-box:fill-box;
+}
+
+/* =============== CLAIM =============== (gold, celebratory) */
+.notify.flav-claim{
+  border-color:rgba(255,196,86,.5);
+  box-shadow:0 18px 44px rgba(0,0,0,.55), 0 0 30px rgba(255,168,50,.28);
+}
+.notify.flav-claim .notify-ico{
+  background:radial-gradient(120% 120% at 30% 20%, rgba(255,196,86,.4), rgba(255,120,20,.14));
+  border-color:rgba(255,196,86,.55); color:#ffe6a6;
+}
+.notify.flav-claim.in{ animation:nfx-pop-gold .6s cubic-bezier(.2,1.3,.35,1) both; }
+.flav-claim .c-flame{ transform-origin:50% 90%; animation:nfx-flick 1.3s ease-in-out infinite; }
+.flav-claim .c-sp{ fill:currentColor; stroke:none; transform-origin:center; animation:nfx-twinkle 1.4s ease-in-out infinite; }
+.flav-claim .c-sp2{ animation-delay:.25s; } .flav-claim .c-sp3{ animation-delay:.5s; }
+@keyframes nfx-pop-gold{ 0%{ transform:translateY(-140%) scale(.9); } 60%{ transform:translateY(6%) scale(1.03); } 100%{ transform:translateY(0) scale(1); } }
+@keyframes nfx-flick{ 0%,100%{ transform:scaleY(1) skewX(0); } 30%{ transform:scaleY(1.09) skewX(-2.5deg); } 60%{ transform:scaleY(.95) skewX(2deg); } }
+@keyframes nfx-twinkle{ 0%,100%{ opacity:.2; transform:scale(.5); } 50%{ opacity:1; transform:scale(1.3); } }
+
+/* gold spark burst on claim */
+.nfx-sparks{ position:absolute; left:24px; top:50%; width:0; height:0; pointer-events:none; z-index:2; }
+.nfx-sparks i{
+  position:absolute; left:0; top:0; width:5px; height:5px; border-radius:50%;
+  background:radial-gradient(circle, #ffe9b0, #ff9a2a);
+  transform:rotate(var(--a)) translateX(0); opacity:0;
+  animation:nfx-burst .95s ease-out forwards; animation-delay:var(--t);
+}
+@keyframes nfx-burst{ 0%{ opacity:0; transform:rotate(var(--a)) translateX(0) scale(.4); } 20%{ opacity:1; } 100%{ opacity:0; transform:rotate(var(--a)) translateX(var(--d)) scale(.9); } }
+
+/* =============== WAR =============== (crimson, aggressive) */
+.notify.flav-war{
+  border-color:rgba(255,96,72,.55);
+  box-shadow:0 18px 44px rgba(0,0,0,.6), 0 0 32px rgba(220,50,40,.32);
+}
+.notify.flav-war .notify-ico{
+  background:radial-gradient(120% 120% at 30% 20%, rgba(255,96,72,.4), rgba(180,30,20,.16));
+  border-color:rgba(255,96,72,.6); color:#ffc4bd;
+}
+.notify.flav-war.in{ animation:nfx-shake .6s cubic-bezier(.36,.07,.19,.97) both; }
+.notify.flav-war::before{
+  content:""; position:absolute; inset:0; border-radius:inherit; pointer-events:none;
+  background:radial-gradient(120% 80% at 50% 0%, rgba(255,80,50,.35), transparent 60%);
+  animation:nfx-flash .7s ease-out both;
+}
+.flav-war .w-a{ transform-origin:12px 12px; animation:nfx-wa 1.3s ease-in-out infinite; }
+.flav-war .w-b{ transform-origin:12px 12px; animation:nfx-wb 1.3s ease-in-out infinite; }
+.flav-war .w-clash{ fill:currentColor; stroke:none; transform-origin:12px 12px; animation:nfx-clash 1.3s ease-in-out infinite; }
+@keyframes nfx-shake{ 0%,100%{ transform:translateY(0) rotate(0); } 15%{ transform:translateX(-5px) rotate(-1deg); } 30%{ transform:translateX(5px) rotate(1deg); } 45%{ transform:translateX(-4px); } 60%{ transform:translateX(4px); } 75%{ transform:translateX(-2px); } }
+@keyframes nfx-flash{ 0%{ opacity:0; } 25%{ opacity:1; } 100%{ opacity:0; } }
+@keyframes nfx-wa{ 0%,100%{ transform:rotate(-6deg); } 48%,56%{ transform:rotate(2deg); } }
+@keyframes nfx-wb{ 0%,100%{ transform:rotate(6deg); } 48%,56%{ transform:rotate(-2deg); } }
+@keyframes nfx-clash{ 0%,44%,62%,100%{ opacity:0; transform:scale(.3); } 52%{ opacity:1; transform:scale(1.7); } }
+
+/* =============== KIVA =============== (amber message) */
+.notify.flav-kiva .notify-ico{
+  background:radial-gradient(120% 120% at 30% 20%, rgba(255,150,70,.32), rgba(200,90,20,.12));
+  border-color:rgba(255,168,74,.5); color:#ffd9a0;
+}
+.notify.flav-kiva.in{ animation:nfx-slide .55s cubic-bezier(.22,1.14,.36,1) both; }
+.flav-kiva .k-bubble{ transform-origin:12px 11px; animation:nfx-breathe 2.2s ease-in-out infinite; }
+.flav-kiva .k-flame{ fill:currentColor; stroke:none; transform-origin:50% 90%; animation:nfx-flick 1.4s ease-in-out infinite; }
+@keyframes nfx-slide{ 0%{ transform:translateY(-140%); } 70%{ transform:translateY(5%); } 100%{ transform:translateY(0); } }
+@keyframes nfx-breathe{ 0%,100%{ transform:scale(1); } 50%{ transform:scale(1.07); } }
+
+/* =============== generic flavours (still distinct entrances) === */
+.notify.flav-good.in{ animation:nfx-pop-gold .5s cubic-bezier(.2,1.25,.35,1) both; }
+.notify.flav-warn.in{ animation:nfx-wobble .6s ease both; }
+.notify.flav-bad.in{ animation:nfx-shake .55s cubic-bezier(.36,.07,.19,.97) both; }
+.notify.flav-info.in{ animation:nfx-slide .5s cubic-bezier(.22,1.14,.36,1) both; }
+@keyframes nfx-wobble{ 0%{ transform:translateY(-140%); } 60%{ transform:translateY(0) rotate(-1.5deg); } 75%{ transform:rotate(1.5deg); } 90%{ transform:rotate(-.6deg); } 100%{ transform:rotate(0); } }
+
+@media (prefers-reduced-motion: reduce){
+  .notify.flav-claim.in,.notify.flav-war.in,.notify.flav-kiva.in,
+  .notify.flav-good.in,.notify.flav-warn.in,.notify.flav-bad.in,.notify.flav-info.in{ animation:none; }
+  .notify-ico .nfx *{ animation:none !important; }
+  .notify.flav-war::before{ animation:none; opacity:0; }
+  .nfx-sparks{ display:none; }
+}
