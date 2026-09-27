@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useApp } from '../lib/store.js';
+import { useApp } from '../lib/store.jsx';
 import { useMotionConfig, V, staggerParent, SECTION_MOTION } from '../lib/motion.js';
 import Campfire from '../components/Campfire.jsx';
 import Icon from '../components/Icon.jsx';
