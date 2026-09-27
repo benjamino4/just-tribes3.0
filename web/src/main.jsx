@@ -1,30 +1,40 @@
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import './styles/global.css';
-import './styles/components.css';
 import App from './App.jsx';
-import { initTelegram } from './lib/telegram.js';
+import { AppProvider } from './lib/store.js';
+import { MotionProvider } from './lib/motion.js';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/components.css';
 
-initTelegram();
-
-// Apply reduced-effects on low-end devices for buttery performance.
+/* ---------- Telegram SDK ---------- */
 try {
-  const lowMem = navigator.deviceMemory && navigator.deviceMemory <= 4;
-  const lowCore = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4;
-  if (lowMem && lowCore) document.documentElement.setAttribute('data-fx', 'reduced');
-} catch (e) {}
+  const tg = window.Telegram?.WebApp;
+  if (tg) {
+    tg.ready();
+    tg.expand();
+    tg.setHeaderColor?.('#0a0908');
+    tg.setBackgroundColor?.('#07060a');
+    tg.enableClosingConfirmation?.();
+  }
+} catch {}
 
-const root = createRoot(document.getElementById('root'));
-root.render(
+/* ---------- reduced-effects tier (low-end phones) ---------- */
+try {
+  const mem = navigator.deviceMemory && navigator.deviceMemory <= 4;
+  const cpu = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4;
+  if (mem && cpu) document.documentElement.setAttribute('data-fx', 'reduced');
+} catch {}
+
+createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <div className="world" aria-hidden="true">
-      <div className="aurora" />
-      <div className="heat" />
-      <div className="vig" />
-    </div>
     <BrowserRouter>
-      <App />
+      <AppProvider>
+        <MotionProvider>
+          <App />
+        </MotionProvider>
+      </AppProvider>
     </BrowserRouter>
   </React.StrictMode>
 );
