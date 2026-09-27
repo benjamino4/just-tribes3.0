@@ -1,0 +1,26 @@
+/* TRIBES-FILE: web/src/styles/animations.css
+   PHASE: 4 — Relics
+   Freeze SVG SMIL animations in the reduced tier. */
+
+:root[data-fx="reduced"] .emoji-static,
+:root[data-fx="reduced"] svg * {
+  animation-play-state: paused !important;
+}
+
+/* Relic card hover bloom */
+.relic-card.rc-legendary:hover {
+  box-shadow: 0 16px 44px rgba(255,150,30,.4), inset 0 1px 0 rgba(255,255,255,.15);
+}
+.relic-card.rc-cursed:hover {
+  box-shadow: 0 16px 44px rgba(139,92,246,.4), inset 0 1px 0 rgba(255,255,255,.1);
+}
+
+/* Card breathing for cursed relics */
+@keyframes cursedPulse {
+  0%, 100% { opacity: .35; }
+  50%      { opacity: .65; }
+}
+:root[data-fx="reduced"] .relic-cursed-overlay {
+  animation: none !important;
+  opacity: .5 !important;
+}

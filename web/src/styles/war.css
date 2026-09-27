@@ -1,0 +1,217 @@
+/* TRIBES-FILE: web/src/styles/war.css
+   PHASE: 6 — War
+   Front-line visualization, terrain textures, tactic wheel, particle FX. */
+
+/* ---------- war stage ---------- */
+.war-stage {
+  position: relative;
+  border-radius: var(--r-lg);
+  overflow: hidden;
+  padding: 14px;
+  background: linear-gradient(180deg,
+    rgba(60,10,4,.32) 0%,
+    rgba(30,6,2,.55) 100%),
+    var(--glass-bg);
+  border: 1px solid rgba(255,90,60,.28);
+}
+
+.war-foe {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+}
+
+.war-banner {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.war-banner .crest {
+  width: 46px; height: 46px;
+  border-radius: 12px;
+  display: grid;
+  place-items: center;
+  background: radial-gradient(circle at 30% 25%, var(--ember-400), var(--ember-700));
+  box-shadow: 0 8px 22px rgba(0,0,0,.5);
+}
+
+.war-banner.foe .crest {
+  background: radial-gradient(circle at 30% 25%, #6b4a4a, #2a1a1a);
+}
+
+.war-vs {
+  font-family: var(--font-display);
+  font-size: 15px;
+  color: var(--ember-300);
+  animation: warPulse 1.4s var(--ease-soft) infinite;
+}
+@keyframes warPulse {
+  0%, 100% { transform: scale(1); }
+  50%      { transform: scale(1.12); }
+}
+
+/* ---------- fronts ---------- */
+.war-fronts {
+  display: grid;
+  grid-template-columns: repeat(var(--count, 3), 1fr);
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.war-front {
+  position: relative;
+  aspect-ratio: 3 / 5;
+  border-radius: 12px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  padding: 10px 8px;
+  border: 1px solid var(--glass-brd);
+  background: rgba(0,0,0,.35);
+  cursor: pointer;
+}
+
+.war-front.selected {
+  border-color: var(--ember-400);
+  box-shadow: 0 0 0 2px rgba(255,122,24,.35), inset 0 0 40px rgba(255,122,24,.15);
+}
+
+.war-front.terrain-plains   { background: linear-gradient(180deg, #3a3a24, #1c1c10); }
+.war-front.terrain-forest   { background: linear-gradient(180deg, #1e3a24, #0e1a10); }
+.war-front.terrain-hills    { background: linear-gradient(180deg, #3a2e24, #1a140e); }
+.war-front.terrain-swamp    { background: linear-gradient(180deg, #1a2418, #0a0e08); }
+.war-front.terrain-ruins    { background: linear-gradient(180deg, #2c2430, #14101a); }
+.war-front.terrain-ashlands { background: linear-gradient(180deg, #3a1a10, #1a0a04); }
+
+.war-front-glyph {
+  position: absolute;
+  top: 8px; left: 50%;
+  transform: translateX(-50%);
+  font-size: 22px;
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,.6));
+}
+
+.war-front-name {
+  font-size: 10px;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: rgba(255,255,255,.6);
+  text-align: center;
+  margin-bottom: 6px;
+}
+
+.war-front-bars {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.war-front-bars > i {
+  display: block;
+  height: 6px;
+  border-radius: 3px;
+  background: linear-gradient(90deg, var(--ember-500), var(--ember-400));
+  transition: width var(--dur-2) var(--ease-ember);
+  box-shadow: 0 0 8px rgba(255,122,24,.5);
+}
+.war-front-bars > i.foe {
+  background: linear-gradient(90deg, #6b4a8b, #8b5cf6);
+  box-shadow: 0 0 8px rgba(139,92,246,.5);
+}
+
+.war-front-fortified::after {
+  content: '🛡️';
+  position: absolute;
+  top: 8px; right: 8px;
+  font-size: 12px;
+}
+
+/* ---------- tactic wheel ---------- */
+.tactic-wheel {
+  position: relative;
+  width: 220px;
+  height: 220px;
+  margin: 0 auto;
+}
+
+.tactic-slot {
+  position: absolute;
+  width: 60px;
+  height: 60px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--glass-bg-strong);
+  border: 1px solid var(--glass-brd);
+  cursor: pointer;
+  transition: transform var(--dur-1) var(--ease-spring), border-color var(--dur-1);
+}
+.tactic-slot:active { transform: scale(.92); }
+.tactic-slot.favored {
+  border-color: var(--gold);
+  box-shadow: 0 0 0 2px rgba(255,210,122,.3), 0 0 20px rgba(255,210,122,.3);
+}
+.tactic-slot.resisted {
+  opacity: .55;
+}
+.tactic-slot.center {
+  width: 76px; height: 76px;
+  background: radial-gradient(circle at 30% 25%, var(--ember-400), var(--ember-700));
+  border: none;
+}
+
+/* ---------- action particles ---------- */
+@keyframes emberFly {
+  0%   { transform: translate(0, 0) scale(1); opacity: 1; }
+  100% { transform: translate(var(--dx), var(--dy)) scale(.2); opacity: 0; }
+}
+.war-particle {
+  position: absolute;
+  width: 6px; height: 6px;
+  border-radius: 50%;
+  background: radial-gradient(circle, #ffd27a, #ff7a18);
+  box-shadow: 0 0 8px #ff8c28;
+  pointer-events: none;
+  animation: emberFly 700ms var(--ease-ember) forwards;
+}
+
+/* ---------- momentum rings ---------- */
+@keyframes ringPulse {
+  0%   { transform: scale(1); opacity: .8; }
+  100% { transform: scale(1.8); opacity: 0; }
+}
+.momentum-ring {
+  position: absolute;
+  border-radius: 50%;
+  border: 2px solid currentColor;
+  pointer-events: none;
+  animation: ringPulse 1.6s var(--ease-soft) infinite;
+}
+
+/* ---------- legendary banner ---------- */
+.war-legendary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 12px;
+  border-radius: 12px;
+  background: linear-gradient(90deg, rgba(255,210,122,.18), rgba(255,90,60,.12));
+  border: 1px solid rgba(255,210,122,.5);
+  color: var(--gold);
+  font-weight: 700;
+  animation: legendaryPulse 1.8s var(--ease-soft) infinite;
+}
+@keyframes legendaryPulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(255,210,122,.4); }
+  50%      { box-shadow: 0 0 0 8px rgba(255,210,122,0); }
+}
+
+/* ---------- curses overlay ---------- */
+:root[data-fx="reduced"] .war-particle { display: none; }
+:root[data-fx="reduced"] .momentum-ring { animation: none; }
+:root[data-fx="reduced"] .war-legendary { animation: none; }
+:root[data-fx="reduced"] .war-vs { animation: none; }
