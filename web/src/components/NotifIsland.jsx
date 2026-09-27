@@ -1,8 +1,9 @@
-// TRIBES-FILE: web/src/components/NotifIsland.jsx
-// PHASE: 7 — Meta & Admin
-// Dynamic Island notification pill. Compact → expanded. Tap to open.
-// Queue: shows one at a time. Polls /api/notifications.
-
+// =====================================================================
+// NotifIsland — Dynamic Island notification pill.
+//   Centered at top via a fixed flex wrapper.
+//   Inner island animates only y / scale / opacity — never x.
+//   Colour tone per severity. Up to 3 stacked. Tap to expand + act.
+// =====================================================================
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -26,6 +27,17 @@ const ICON_MAP = {
   'bolt':          'bolt',
 };
 
+const TONES = {
+  info:    { border: 'rgba(232,184,102,.5)',  glow: 'rgba(232,184,102,.28)', tint: '#e8b866' },
+  success: { border: 'rgba(139,199,106,.5)',  glow: 'rgba(139,199,106,.28)', tint: '#8bc76a' },
+  warn:    { border: 'rgba(212,164,68,.55)',  glow: 'rgba(212,164,68,.32)',  tint: '#d4a444' },
+  danger:  { border: 'rgba(224,86,46,.55)',   glow: 'rgba(224,86,46,.32)',   tint: '#e0562e' },
+  reward:  { border: 'rgba(255,122,24,.6)',   glow: 'rgba(255,122,24,.35)',  tint: '#ff7a18' },
+  tribe:   { border: 'rgba(168,120,201,.55)', glow: 'rgba(168,120,201,.32)', tint: '#a878c9' },
+  war:     { border: 'rgba(224,86,46,.7)',    glow: 'rgba(224,86,46,.4)',    tint: '#e0562e' },
+  social:  { border: 'rgba(139,199,106,.55)', glow: 'rgba(139,199,106,.3)',  tint: '#8bc76a' },
+};
+
 export default function NotifIsland() {
   const nav = useNavigate();
   const M = useMotionConfig();
@@ -35,26 +47,30 @@ export default function NotifIsland() {
   const lastIdRef = useRef(0);
   const timerRef = useRef(null);
 
-  // poll for new notifications
+  // poll + stream
   useEffect(() => {
+    let alive = true;
     async function poll() {
       try {
         const r = await apiGet('/api/notifications?unread=1&limit=10');
         const list = r.notifications || [];
         const fresh = list.filter((n) => n.id > lastIdRef.current);
-        if (fresh.length) {
-          lastIdRef.current = Math.max(...list.map((n) => n.id));
-          setQueue((q) => [...q, ...fresh.reverse()]);
-        }
+        if (!alive || !fresh.length) return;
+        lastIdRef.current = Math.max(...list.map((n) => n.id));
+        setQueue((q) => [...q, ...fresh.reverse()]);
       } catch {}
     }
     poll();
     const iv = setInterval(poll, 20000);
-
-    const es = openNotifStream({
-      onEvent: (evt) => { if (evt.type === 'ping') poll(); },
-    });
-    return () => { clearInterval(iv); es?.close?.(); };
+    let es = null;
+    try {
+      es = openNotifStream({ onEvent: (evt) => { if (evt.type === 'ping') poll(); } });
+    } catch {}
+    return () => {
+      alive = false;
+      clearInterval(iv);
+      try { es?.close?.(); } catch {}
+    };
   }, []);
 
   // dequeue one at a time
@@ -65,7 +81,7 @@ export default function NotifIsland() {
     setQueue(rest);
   }, [queue, active]);
 
-  // auto-dismiss after 5s
+  // auto-dismiss
   useEffect(() => {
     if (!active) return;
     setExpanded(false);
@@ -99,81 +115,116 @@ export default function NotifIsland() {
   }
 
   return (
-    <AnimatePresence>
-      {active && (
-        <motion.div
-          initial={{ y: -80, opacity: 0, scale: 0.9 }}
-          animate={{ y: 0, opacity: 1, scale: 1 }}
-          exit={{ y: -60, opacity: 0, scale: 0.94 }}
-          transition={M.buoyant}
-          onClick={open}
-          style={{
-            position: 'fixed',
-            top: 'calc(var(--safe-top) + 60px)',
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: 250,
-            width: expanded ? 'min(92vw, 400px)' : 'auto',
-            maxWidth: '92vw',
-            padding: expanded ? '12px 16px' : '8px 14px',
-            borderRadius: 24,
-            background: 'rgba(15, 11, 18, .92)',
-            border: `1px solid ${toneFor(active)}66`,
-            backdropFilter: 'blur(20px) saturate(160%)',
-            WebkitBackdropFilter: 'blur(20px) saturate(160%)',
-            boxShadow: `0 12px 40px rgba(0,0,0,.6), 0 0 40px ${toneFor(active)}33`,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            cursor: 'pointer',
-          }}
-        >
-          <span style={{
-            width: 26, height: 26, borderRadius: '50%',
-            display: 'grid', placeItems: 'center',
-            background: toneFor(active) + '22',
-            color: toneFor(active),
-            flex: '0 0 auto',
-          }}>
-            <Icon name={ICON_MAP[active.icon] || 'spark'} size={14} />
-          </span>
-
-          <div className="grow" style={{ minWidth: 0 }}>
-            <b style={{ fontSize: 13, lineHeight: 1.2, display: 'block' }}>
-              {active.title}
-            </b>
-            {expanded && active.body && (
-              <motion.p
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                className="tiny"
-                style={{ marginTop: 4, lineHeight: 1.4 }}
-              >
-                {active.body}
-              </motion.p>
-            )}
-          </div>
-
-          <button
-            onClick={(e) => { e.stopPropagation(); dismiss(); }}
-            style={{
-              background: 'transparent', border: 'none',
-              color: 'var(--ink-faint)', fontSize: 16, padding: 4,
-            }}
+    <div
+      style={{
+        position: 'fixed',
+        top: 'calc(var(--safe-top) + 8px)',
+        left: 0,
+        right: 0,
+        zIndex: 250,
+        display: 'flex',
+        justifyContent: 'center',
+        pointerEvents: 'none',
+      }}
+    >
+      <AnimatePresence>
+        {active && (
+          <motion.div
+            key={active.id}
+            initial={{ y: -80, opacity: 0, scale: 0.9 }}
+            animate={{ y: 0, opacity: 1, scale: 1 }}
+            exit={{ y: -60, opacity: 0, scale: 0.94 }}
+            transition={M.buoyant}
+            onClick={open}
+            style={islandStyle(active, expanded)}
           >
-            ×
-          </button>
-        </motion.div>
-      )}
-    </AnimatePresence>
+            <span style={iconBubbleStyle(active)}>
+              <Icon name={ICON_MAP[active.icon] || 'spark'} size={14} />
+            </span>
+
+            <div className="grow" style={{ minWidth: 0 }}>
+              <b
+                style={{
+                  fontSize: 13,
+                  lineHeight: 1.2,
+                  display: 'block',
+                  fontWeight: active.severity === 'war' ? 800 : 700,
+                  letterSpacing: active.severity === 'war' ? '.02em' : 0,
+                  textTransform: active.severity === 'war' ? 'uppercase' : 'none',
+                }}
+              >
+                {active.title}
+              </b>
+              {expanded && active.body && (
+                <motion.p
+                  initial={{ opacity: 0, height: 0 }}
+                  animate={{ opacity: 1, height: 'auto' }}
+                  className="tiny"
+                  style={{ marginTop: 4, lineHeight: 1.4 }}
+                >
+                  {active.body}
+                </motion.p>
+              )}
+            </div>
+
+            <button
+              onClick={(e) => { e.stopPropagation(); dismiss(); }}
+              style={{
+                background: 'transparent',
+                border: 'none',
+                color: 'var(--ink-faint)',
+                fontSize: 16,
+                padding: 4,
+                pointerEvents: 'auto',
+              }}
+              aria-label="Dismiss"
+            >
+              ×
+            </button>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
   );
 }
 
-function toneFor(n) {
-  if (n.severity === 'success') return '#5ce39a';
-  if (n.severity === 'warn') return '#ffd15c';
-  if (n.severity === 'danger') return '#ff6b6b';
-  return '#ff9f45';
+function islandStyle(n, expanded) {
+  const T = TONES[n.severity] || TONES.info;
+  return {
+    pointerEvents: 'auto',
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    padding: expanded ? '12px 16px' : '8px 14px',
+    maxWidth: 'min(92vw, 420px)',
+    width: expanded ? 'min(92vw, 420px)' : 'auto',
+    borderRadius: 24,
+    background: 'rgba(18, 14, 10, .94)',
+    border: `1px solid ${T.border}`,
+    backdropFilter: 'blur(20px) saturate(160%)',
+    WebkitBackdropFilter: 'blur(20px) saturate(160%)',
+    boxShadow: `0 12px 40px rgba(0,0,0,.7), 0 0 40px ${T.glow}`,
+    cursor: 'pointer',
+    transition: 'padding .22s cubic-bezier(.34,1.3,.5,1), width .22s cubic-bezier(.34,1.3,.5,1)',
+    animation: n.severity === 'war'
+      ? 'islandWarBreath 1.8s ease-in-out infinite'
+      : 'islandBreath 2.6s ease-in-out infinite',
+  };
+}
+
+function iconBubbleStyle(n) {
+  const T = TONES[n.severity] || TONES.info;
+  return {
+    width: 26,
+    height: 26,
+    borderRadius: '50%',
+    display: 'grid',
+    placeItems: 'center',
+    background: T.glow.replace('.28', '.35').replace('.32', '.38').replace('.35', '.4').replace('.3', '.36').replace('.4', '.45'),
+    color: T.tint,
+    flex: '0 0 auto',
+    boxShadow: `0 0 12px ${T.glow}`,
+  };
 }
 
 function routeFor(n) {

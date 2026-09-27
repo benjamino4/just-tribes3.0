@@ -24,3 +24,13 @@
   animation: none !important;
   opacity: .5 !important;
 }
+/* ---------- dynamic island breathing ---------- */
+@keyframes islandBreath {
+  0%, 100% { box-shadow: 0 12px 40px rgba(0,0,0,.7), 0 0 30px var(--glow); }
+  50%      { box-shadow: 0 12px 40px rgba(0,0,0,.7), 0 0 50px var(--glow); }
+}
+@keyframes islandWarBreath {
+  0%, 100% { box-shadow: 0 12px 40px rgba(0,0,0,.7), 0 0 30px rgba(224,86,46,.35); }
+  50%      { box-shadow: 0 12px 40px rgba(0,0,0,.7), 0 0 60px rgba(224,86,46,.55); }
+}
+:root[data-fx="reduced"] .glass.strong { animation: none !important; }

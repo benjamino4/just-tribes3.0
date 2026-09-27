@@ -1,9 +1,8 @@
-// TRIBES-FILE: web/src/screens/Longhouse.jsx
-// PHASE: 2 — Identity & shell
-// The tribe hall. Shows tribe summary + roster. Full breakdown in
-// Phase 5 (Kiva, Pyre, Moot). This screen proves the shell works.
-
+// =====================================================================
+// Longhouse — the tribe hall. Summary + sections rail.
+// =====================================================================
 import { useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
 import { useMotionConfig, V } from '../lib/motion.js';
@@ -15,7 +14,17 @@ import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
 
+const SECTIONS = [
+  { to: '/kiva',       name: 'The Kiva',    icon: 'fire',  sub: 'Tribe chat',        tone: '#ff9745' },
+  { to: '/moot',       name: 'Council',     icon: 'crown', sub: 'Elections & roles', tone: '#e8b866' },
+  { to: '/pyre',       name: 'The Pyre',    icon: 'fire',  sub: 'Shared treasury',   tone: '#e0562e' },
+  { to: '/war',        name: 'War Room',    icon: 'bolt',  sub: 'Raids & rivals',    tone: '#ff5a3c' },
+  { to: '/watchtower', name: 'Watchtower',  icon: 'spark', sub: 'Spies & pacts',     tone: '#7aa8c4' },
+  { to: '/chronicle',  name: 'Chronicle',   icon: 'ranks', sub: 'War history',       tone: '#a878c9' },
+];
+
 export default function Longhouse() {
+  const nav = useNavigate();
   const { data, reload, act } = useApp();
   const M = useMotionConfig();
   const tribe = data?.tribe;
@@ -51,9 +60,7 @@ export default function Longhouse() {
                 setTribes(r.tribes || []);
                 setBrowse(true);
                 haptic('light');
-              } catch (e) {
-                toast(e.message || 'Could not load tribes', 'bad');
-              }
+              } catch (e) { toast(e.message || 'Could not load tribes', 'bad'); }
             }}
           >
             Find a Tribe
@@ -62,17 +69,13 @@ export default function Longhouse() {
 
         {browse && (
           <div className="glass card">
-            <b style={{ fontSize: 13, color: 'var(--ink-dim)', textTransform: 'uppercase' }}>
-              Tribes
-            </b>
+            <b style={{ fontSize: 13, color: 'var(--ink-dim)', textTransform: 'uppercase' }}>Tribes</b>
             <div className="col" style={{ gap: 8, marginTop: 10 }}>
               {(tribes || []).map((t) => (
                 <div key={t.id} className="row between" style={{ padding: '8px 0' }}>
                   <div className="col">
                     <b>{t.name}</b>
-                    <span className="tiny">
-                      {t.members} members · {fmt(t.renown_total)} renown
-                    </span>
+                    <span className="tiny">{t.members} members · {fmt(t.renown_total)} renown</span>
                   </div>
                   <Button
                     onClick={async () => {
@@ -80,9 +83,7 @@ export default function Longhouse() {
                         await act(() => Endpoints.tribeJoin(t.id));
                         toast('Welcome to ' + t.name, 'good');
                         reload();
-                      } catch (e) {
-                        toast(e.message || 'Could not join', 'bad');
-                      }
+                      } catch (e) { toast(e.message || 'Could not join', 'bad'); }
                     }}
                   >
                     Join
@@ -157,14 +158,58 @@ export default function Longhouse() {
                   tribe: { ...tribe, treasury: tribe.treasury + 500 },
                 });
                 toast('+500 stoked into the Pyre', 'good');
-              } catch (e) {
-                toast(e.message || 'Could not donate', 'bad');
-              }
+              } catch (e) { toast(e.message || 'Could not donate', 'bad'); }
             }}
           >
             Stoke +500
           </Button>
         </div>
+      </div>
+
+      {/* ---------- Sections rail ---------- */}
+      <div className="sec-h">
+        <h3>The Longhouse</h3>
+        <span className="line" />
+      </div>
+
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: '1fr 1fr',
+          gap: 12,
+          marginTop: 4,
+        }}
+      >
+        {SECTIONS.map((s, i) => (
+          <motion.button
+            key={s.to}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...M.buoyant, delay: i * 0.04 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => { haptic('medium'); nav(s.to); }}
+            className="glass"
+            style={{
+              padding: 16,
+              textAlign: 'left',
+              borderRadius: 'var(--r-lg)',
+              minHeight: 110,
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'space-between',
+              overflow: 'hidden',
+            }}
+          >
+            <Icon name={s.icon} size={30} style={{ color: s.tone }} />
+            <div className="row between" style={{ width: '100%' }}>
+              <div className="col" style={{ gap: 0, textAlign: 'left' }}>
+                <b style={{ fontSize: 14 }}>{s.name}</b>
+                <span className="tiny">{s.sub}</span>
+              </div>
+              <Icon name="chevron" size={16} style={{ color: 'var(--ink-dim)' }} />
+            </div>
+          </motion.button>
+        ))}
       </div>
     </motion.div>
   );

@@ -1,7 +1,6 @@
-// TRIBES-FILE: web/src/App.jsx
-// PHASE: 8 — Payments + Polish
-// Final route table.
-
+// =====================================================================
+// App — route table.
+// =====================================================================
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import World from './components/World.jsx';
@@ -22,7 +21,6 @@ import Pyre from './screens/Pyre.jsx';
 import War from './screens/War.jsx';
 import Watchtower from './screens/Watchtower.jsx';
 import Chronicle from './screens/Chronicle.jsx';
-import Admin from './screens/Admin.jsx';
 import Inbox from './screens/Inbox.jsx';
 import TradingPost from './screens/TradingPost.jsx';
 import Settlement from './screens/Settlement.jsx';
@@ -49,7 +47,14 @@ function Shell() {
       <NotifIsland />
       <div className="scroller">
         <AnimatePresence mode="wait">
-          <motion.div key={location.pathname} variants={V.page} initial="initial" animate="animate" exit="exit" transition={M.buoyant}>
+          <motion.div
+            key={location.pathname}
+            variants={V.page}
+            initial="initial"
+            animate="animate"
+            exit="exit"
+            transition={M.buoyant}
+          >
             <Routes location={location}>
               <Route path="/"            element={<Hearth />} />
               <Route path="/longhouse"   element={<Longhouse />} />
@@ -67,7 +72,6 @@ function Shell() {
               <Route path="/war"         element={<War />} />
               <Route path="/watchtower"  element={<Watchtower />} />
               <Route path="/chronicle"   element={<Chronicle />} />
-              <Route path="/admin"       element={<Admin />} />
               <Route path="/inbox"       element={<Inbox />} />
               <Route path="*"            element={<NotFound />} />
             </Routes>

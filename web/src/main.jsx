@@ -1,11 +1,12 @@
-// TRIBES-FILE: web/src/main.jsx
-// PHASE: 8 — Payments + Polish
-
+// =====================================================================
+// web/src/main.jsx — entry
+// =====================================================================
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { AppProvider } from './lib/store.jsx';
+import { HintProvider } from './components/Hint.jsx';
 import { initTelegram } from './lib/telegram.js';
 import './styles/tokens.css';
 import './styles/base.css';
@@ -36,7 +37,9 @@ createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <AppProvider>
-        <App />
+        <HintProvider>
+          <App />
+        </HintProvider>
       </AppProvider>
     </BrowserRouter>
   </React.StrictMode>

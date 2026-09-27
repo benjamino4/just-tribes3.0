@@ -124,10 +124,13 @@
 }
 
 .war-front-fortified::after {
-  content: '🛡️';
+  content: '';
   position: absolute;
   top: 8px; right: 8px;
-  font-size: 12px;
+  width: 14px; height: 14px;
+  background: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%23e8b866' stroke-width='2' stroke-linejoin='round'><path d='M12 2 4 5v7c0 6 4 9 8 10 4-1 8-4 8-10V5z'/></svg>") center/contain no-repeat;
+  filter: drop-shadow(0 0 4px rgba(232,184,102,.6));
+  pointer-events: none;
 }
 
 /* ---------- tactic wheel ---------- */

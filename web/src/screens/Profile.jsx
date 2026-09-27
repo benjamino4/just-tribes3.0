@@ -1,8 +1,6 @@
-// TRIBES-FILE: web/src/screens/Profile.jsx
-// PHASE: 2 — Identity & shell
-// Real working toggles: animations, haptics, sound, data saver.
-// Settings persist to localStorage and take effect immediately.
-
+// =====================================================================
+// Profile — identity, settings, Warden notice.
+// =====================================================================
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -15,19 +13,11 @@ import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 
 const SETTINGS_KEY = 'tribes.settings';
-const DEFAULTS = {
-  animations: true,
-  haptics: true,
-  sound: false,
-  reducedData: false,
-};
+const DEFAULTS = { animations: true, haptics: true, sound: false, reducedData: false };
 
 function load() {
-  try {
-    return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') };
-  } catch {
-    return { ...DEFAULTS };
-  }
+  try { return { ...DEFAULTS, ...JSON.parse(localStorage.getItem(SETTINGS_KEY) || '{}') }; }
+  catch { return { ...DEFAULTS }; }
 }
 
 function apply(s) {
@@ -63,7 +53,6 @@ export default function Profile() {
       exit="exit"
       transition={M.buoyant}
     >
-      {/* ---------- header row ---------- */}
       <div className="row between" style={{ margin: '2px 2px 12px' }}>
         <div className="row" style={{ gap: 10 }}>
           <button
@@ -77,7 +66,6 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* ---------- profile card ---------- */}
       <div className="glass strong card">
         <div className="row" style={{ gap: 14 }}>
           <span className="crest-art" style={{ width: 56, height: 56 }}>
@@ -97,14 +85,15 @@ export default function Profile() {
         </div>
       </div>
 
-      {/* ---------- motion settings ---------- */}
       <div className="glass card">
-        <b style={{
-          fontSize: 13,
-          letterSpacing: '.04em',
-          color: 'var(--ink-dim)',
-          textTransform: 'uppercase',
-        }}>
+        <b
+          style={{
+            fontSize: 13,
+            letterSpacing: '.04em',
+            color: 'var(--ink-dim)',
+            textTransform: 'uppercase',
+          }}
+        >
           Motion & Feel
         </b>
         <div className="col" style={{ gap: 14, marginTop: 14 }}>
@@ -119,37 +108,29 @@ export default function Profile() {
             hint="Vibration feedback on taps"
             on={s.haptics}
             onChange={(v) => update({ haptics: v })}
-            tone="#7cc4ff"
+            tone="#7aa8c4"
           />
           <Toggle
             label="Sound"
             hint="Ambient fire & UI sounds"
             on={s.sound}
             onChange={(v) => update({ sound: v })}
-            tone="#5ce39a"
+            tone="#8bc76a"
           />
           <Toggle
             label="Data saver"
             hint="Lighter effects on slow networks"
             on={s.reducedData}
             onChange={(v) => update({ reducedData: v })}
-            tone="#c39bff"
+            tone="#a878c9"
           />
         </div>
       </div>
 
-      {/* ---------- admin shortcut (Phase 7 fills this) ---------- */}
-      <div className="glass card">
-        <div className="row between">
-          <div className="row">
-            <Icon name="spark" size={26} style={{ color: '#ffd27a' }} />
-            <div className="col" style={{ gap: 1 }}>
-              <b>Admin Control Room</b>
-              <span className="tiny">Keepers only</span>
-            </div>
-          </div>
-          <Button variant="ghost" onClick={() => nav('/admin')}>Open</Button>
-        </div>
+      <div className="glass card" style={{ textAlign: 'center' }}>
+        <span className="tiny" style={{ opacity: 0.75 }}>
+          Admins manage TRIBES at <b style={{ color: 'var(--gold)' }}>/admin</b> on desktop.
+        </span>
       </div>
     </motion.div>
   );
