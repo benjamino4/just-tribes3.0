@@ -22,6 +22,27 @@ CREATE TABLE IF NOT EXISTS trial_defs (
   created_at       TIMESTAMPTZ DEFAULT now()
 );
 
+-- self-heal: a legacy trial_defs (e.g. old 'loyalty' schema) may already exist.
+-- CREATE TABLE IF NOT EXISTS never adds columns, so patch any missing ones here.
+ALTER TABLE trial_defs ADD COLUMN IF NOT EXISTS reward_ember     BIGINT DEFAULT 0;
+ALTER TABLE trial_defs ADD COLUMN IF NOT EXISTS reward_renown    BIGINT DEFAULT 0;
+ALTER TABLE trial_defs ADD COLUMN IF NOT EXISTS cooldown_hours   INT DEFAULT 20;
+ALTER TABLE trial_defs ADD COLUMN IF NOT EXISTS max_per_window   INT DEFAULT 1;
+ALTER TABLE trial_defs ADD COLUMN IF NOT EXISTS window_hours     INT DEFAULT 0;
+ALTER TABLE trial_defs ADD COLUMN IF NOT EXISTS window_start_utc INT DEFAULT 0;
+ALTER TABLE trial_defs ADD COLUMN IF NOT EXISTS active           BOOLEAN DEFAULT true;
+ALTER TABLE trial_defs ADD COLUMN IF NOT EXISTS sort_order       INT DEFAULT 100;
+ALTER TABLE trial_defs ADD COLUMN IF NOT EXISTS kind             TEXT DEFAULT 'standard';
+ALTER TABLE trial_defs ADD COLUMN IF NOT EXISTS minigame         TEXT DEFAULT 'hold';
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'trial_defs' AND column_name = 'reward_loyalty') THEN
+    UPDATE trial_defs SET reward_renown = reward_loyalty
+      WHERE (reward_renown IS NULL OR reward_renown = 0) AND reward_loyalty IS NOT NULL;
+  END IF;
+END $$;
+
 CREATE TABLE IF NOT EXISTS trial_log (
   id       BIGSERIAL PRIMARY KEY,
   user_id  BIGINT NOT NULL,
@@ -45,6 +66,20 @@ CREATE TABLE IF NOT EXISTS daily_quests (
   weight         INT DEFAULT 100,
   created_at     TIMESTAMPTZ DEFAULT now()
 );
+
+-- self-heal: patch a legacy daily_quests table missing newer columns.
+ALTER TABLE daily_quests ADD COLUMN IF NOT EXISTS reward_ember   BIGINT DEFAULT 0;
+ALTER TABLE daily_quests ADD COLUMN IF NOT EXISTS reward_renown  BIGINT DEFAULT 0;
+ALTER TABLE daily_quests ADD COLUMN IF NOT EXISTS active         BOOLEAN DEFAULT true;
+ALTER TABLE daily_quests ADD COLUMN IF NOT EXISTS weight         INT DEFAULT 100;
+DO $$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'daily_quests' AND column_name = 'reward_loyalty') THEN
+    UPDATE daily_quests SET reward_renown = reward_loyalty
+      WHERE (reward_renown IS NULL OR reward_renown = 0) AND reward_loyalty IS NOT NULL;
+  END IF;
+END $$;
 
 CREATE TABLE IF NOT EXISTS daily_quest_log (
   id         BIGSERIAL PRIMARY KEY,
