@@ -1,30 +1,43 @@
+// TRIBES-FILE: web/src/main.jsx
+// PHASE: 2 — Identity & shell
+// Telegram init happens via lib/telegram.js — no inline SDK here.
+
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
-import './styles/global.css';
-import './styles/components.css';
 import App from './App.jsx';
+import { AppProvider } from './lib/store.jsx';
 import { initTelegram } from './lib/telegram.js';
+import './styles/tokens.css';
+import './styles/base.css';
+import './styles/components.css';
 
+/* ---------- Telegram SDK ---------- */
 initTelegram();
 
-// Apply reduced-effects on low-end devices for buttery performance.
+/* ---------- reduced-effects tier (low-end phones) ---------- */
 try {
-  const lowMem = navigator.deviceMemory && navigator.deviceMemory <= 4;
-  const lowCore = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4;
-  if (lowMem && lowCore) document.documentElement.setAttribute('data-fx', 'reduced');
-} catch (e) {}
+  const mem = navigator.deviceMemory && navigator.deviceMemory <= 4;
+  const cpu = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4;
+  if (mem && cpu) document.documentElement.setAttribute('data-fx', 'reduced');
+} catch {}
 
-const root = createRoot(document.getElementById('root'));
-root.render(
+/* ---------- default profile settings ---------- */
+try {
+  const raw = localStorage.getItem('tribes.settings');
+  const s = raw ? JSON.parse(raw) : { animations: true, haptics: true, sound: false };
+  document.documentElement.setAttribute('data-fx', s.animations ? 'full' : 'reduced');
+  window.__hapticsEnabled = s.haptics;
+  window.__soundEnabled = s.sound;
+  window.__animEnabled = s.animations;
+} catch {}
+
+createRoot(document.getElementById('root')).render(
   <React.StrictMode>
-    <div className="world" aria-hidden="true">
-      <div className="aurora" />
-      <div className="heat" />
-      <div className="vig" />
-    </div>
     <BrowserRouter>
-      <App />
+      <AppProvider>
+        <App />
+      </AppProvider>
     </BrowserRouter>
   </React.StrictMode>
 );

@@ -1,9 +1,9 @@
 {
   "name": "tribes-web",
+  "version": "4.0.0",
   "private": true,
-  "version": "3.0.0",
   "type": "module",
-  "description": "TRIBES — Rise of the Tribes. React + vanilla hybrid client with a fluid iOS/HarmonyOS/OxygenOS-inspired design system.",
+  "description": "TRIBES frontend — React + Vite + Framer Motion.",
   "scripts": {
     "dev": "vite",
     "build": "vite build",
@@ -13,11 +13,10 @@
     "framer-motion": "10.18.0",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-router-dom": "6.26.2",
-    "zustand": "4.5.5"
+    "react-router-dom": "6.26.2"
   },
   "devDependencies": {
     "@vitejs/plugin-react": "4.3.1",
-    "vite": "4.5.5"
+    "vite": "5.4.2"
   }
 }

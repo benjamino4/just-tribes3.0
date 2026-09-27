@@ -3,26 +3,31 @@ services:
     name: tribes
     runtime: node
     plan: free
-    # Build the React frontend into server/public, then install server deps.
+    region: oregon
     buildCommand: npm run build
     startCommand: npm start
     healthCheckPath: /api/health
+    autoDeploy: true
     envVars:
       - key: NODE_VERSION
         value: "20"
       - key: NODE_ENV
         value: production
+
+      # required secrets — set in Render dashboard
       - key: DATABASE_URL
         sync: false
       - key: BOT_TOKEN
         sync: false
-      - key: ADMIN_BOT_TOKEN
-        sync: false
       - key: ADMIN_TOKEN
         sync: false
-      - key: ADMIN_IDS
-        sync: false
+
+      # optional
       - key: APP_URL
+        sync: false
+      - key: ADMIN_BOT_TOKEN
+        sync: false
+      - key: ADMIN_IDS
         sync: false
       - key: TON_RECEIVE_ADDRESS
         sync: false
@@ -30,7 +35,13 @@ services:
         sync: false
       - key: TON_NETWORK
         value: mainnet
+
+      # safe defaults
       - key: ALLOW_GUEST
         value: "0"
       - key: PUSH_FLUSH_SECONDS
         value: "20"
+
+      # First deploy only: flip to "1" to run migrations, then back to "0"
+      - key: MIGRATE
+        value: "0"

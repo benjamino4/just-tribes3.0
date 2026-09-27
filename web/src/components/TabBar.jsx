@@ -1,37 +1,32 @@
-import React from 'react';
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Icon from './Icon.jsx';
-import { haptic } from '../lib/telegram.js';
+import { useMotionConfig } from '../lib/motion.js';
 
 const TABS = [
-  { to: '/', icon: 'fire', label: 'Fire' },
-  { to: '/tribe', icon: 'tribe', label: 'Tribe' },
-  { to: '/ranks', icon: 'ranks', label: 'Ranks' },
-  { to: '/lands', icon: 'lands', label: 'Lands' },
-  { to: '/store', icon: 'store', label: 'Sky' },
+  { to: '/',           icon: 'fire',  label: 'Hearth' },
+  { to: '/longhouse',  icon: 'tribe', label: 'Longhouse' },
+  { to: '/standings',  icon: 'ranks', label: 'Standings' },
+  { to: '/settlement', icon: 'lands', label: 'Settlement' },
+  { to: '/post',       icon: 'store', label: 'Post' },
 ];
 
 export default function TabBar() {
-  const loc = useLocation();
+  const location = useLocation();
+  const M = useMotionConfig();
+
   return (
     <nav className="tabbar" aria-label="Primary">
-      {TABS.map((t) => {
-        const active = t.to === '/' ? loc.pathname === '/' : loc.pathname.startsWith(t.to);
+      {TABS.map(t => {
+        const active = t.to === '/' ? location.pathname === '/' : location.pathname.startsWith(t.to);
         return (
-          <NavLink
-            key={t.to}
-            to={t.to}
-            className="tab"
-            data-active={active}
-            onClick={() => haptic('select')}
-          >
+          <NavLink key={t.to} to={t.to} className="tab" data-active={active}>
             {active && (
               <motion.span
                 layoutId="tab-pill"
                 className="tab-pill"
                 style={{ left: 8, right: 8 }}
-                transition={{ type: 'spring', stiffness: 480, damping: 34 }}
+                transition={M.buoyant}
               />
             )}
             <Icon name={t.icon} size={22} className="glyph" />

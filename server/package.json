@@ -1,12 +1,14 @@
 {
   "name": "tribes-server",
-  "version": "3.0.0",
+  "version": "4.0.0",
   "private": true,
   "type": "module",
-  "description": "TRIBES — Telegram Mini App backend: stone-age tribe idle game with live Tribe Wars, TON Connect and Telegram Stars.",
-  "engines": { "node": ">=18" },
+  "description": "TRIBES backend \u2014 Express + Postgres. Stone-age tribe idle game with live Tribe Wars, TON Connect and Telegram Stars.",
+  "engines": { "node": ">=20" },
   "scripts": {
-    "start": "node src/index.js"
+    "start": "node src/index.js",
+    "dev": "node --watch src/index.js",
+    "migrate": "MIGRATE=1 node src/index.js"
   },
   "dependencies": {
     "express": "4.19.2",
