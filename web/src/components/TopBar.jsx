@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useApp } from '../lib/store.js';
+import { useApp } from '../lib/store.jsx';
 import { fmt } from '../lib/format.js';
 import Icon from './Icon.jsx';
 import { useMotionConfig } from '../lib/motion.js';
