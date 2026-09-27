@@ -1,36 +1,131 @@
-/* TRIBES-FILE: web/src/styles/animations.css
-   PHASE: 4 — Relics
-   Freeze SVG SMIL animations in the reduced tier. */
+/* =====================================================================
+   TRIBES — animations (Obsidian Glass v3)
+   Twelve orchestrated keyframe sets + reduced tier rules.
+   ===================================================================== */
 
+/* 1. emoji freeze in reduced tier */
 :root[data-fx="reduced"] .emoji-static,
 :root[data-fx="reduced"] svg * {
   animation-play-state: paused !important;
 }
 
-/* Relic card hover bloom */
+/* 2. relic card hover bloom */
 .relic-card.rc-legendary:hover {
-  box-shadow: 0 16px 44px rgba(255,150,30,.4), inset 0 1px 0 rgba(255,255,255,.15);
+  box-shadow:
+    0 20px 55px rgba(217,166,70,0.42),
+    inset 0 1px 0 rgba(255, 243, 208, 0.20);
 }
 .relic-card.rc-cursed:hover {
-  box-shadow: 0 16px 44px rgba(139,92,246,.4), inset 0 1px 0 rgba(255,255,255,.1);
+  box-shadow:
+    0 20px 55px rgba(118, 66, 163, 0.44),
+    inset 0 1px 0 rgba(255, 243, 208, 0.14);
 }
 
-/* Card breathing for cursed relics */
+/* 3. cursed pulse */
 @keyframes cursedPulse {
-  0%, 100% { opacity: .35; }
-  50%      { opacity: .65; }
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.65; }
 }
 :root[data-fx="reduced"] .relic-cursed-overlay {
   animation: none !important;
-  opacity: .5 !important;
+  opacity: 0.5 !important;
 }
-/* ---------- dynamic island breathing ---------- */
+
+/* 4. island breathing (info + war states) */
 @keyframes islandBreath {
-  0%, 100% { box-shadow: 0 12px 40px rgba(0,0,0,.7), 0 0 30px var(--glow); }
-  50%      { box-shadow: 0 12px 40px rgba(0,0,0,.7), 0 0 50px var(--glow); }
+  0%, 100% { box-shadow: 0 16px 44px rgba(0,0,0,0.75), 0 0 30px var(--glow); }
+  50%      { box-shadow: 0 16px 44px rgba(0,0,0,0.75), 0 0 52px var(--glow); }
 }
 @keyframes islandWarBreath {
-  0%, 100% { box-shadow: 0 12px 40px rgba(0,0,0,.7), 0 0 30px rgba(224,86,46,.35); }
-  50%      { box-shadow: 0 12px 40px rgba(0,0,0,.7), 0 0 60px rgba(224,86,46,.55); }
+  0%, 100% { box-shadow: 0 16px 44px rgba(0,0,0,0.75), 0 0 30px rgba(208,72,58,0.40); }
+  50%      { box-shadow: 0 16px 44px rgba(0,0,0,0.75), 0 0 64px rgba(208,72,58,0.60); }
 }
 :root[data-fx="reduced"] .glass.strong { animation: none !important; }
+
+/* 5. hero card idle breathing (very subtle, adds life to still cards) */
+@keyframes heroBreath {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50%      { transform: translateY(-1px) scale(1.002); }
+}
+.glass.hero { animation: heroBreath 6s var(--ease-soft) infinite; }
+:root[data-fx="reduced"] .glass.hero { animation: none; }
+@media (prefers-reduced-motion: reduce) { .glass.hero { animation: none; } }
+
+/* 6. gold hairline shimmer for special chips */
+@keyframes goldShimmer {
+  0%, 40%  { background-position: -200% 0; }
+  100%     { background-position: 200% 0; }
+}
+.chip.gold::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg,
+    transparent 30%,
+    rgba(255, 226, 161, 0.30) 50%,
+    transparent 70%);
+  background-size: 200% 100%;
+  animation: goldShimmer 5s var(--ease-soft) infinite;
+  pointer-events: none;
+}
+.chip.gold { position: relative; overflow: hidden; }
+:root[data-fx="reduced"] .chip.gold::before { display: none; }
+
+/* 7. orb drift — ambient background particles (used by hero cards) */
+@keyframes orbDriftA {
+  0%   { transform: translate(0, 0) scale(1); }
+  50%  { transform: translate(12px, -8px) scale(1.05); }
+  100% { transform: translate(0, 0) scale(1); }
+}
+@keyframes orbDriftB {
+  0%   { transform: translate(0, 0) scale(1.04); }
+  50%  { transform: translate(-14px, 6px) scale(1); }
+  100% { transform: translate(0, 0) scale(1.04); }
+}
+
+/* 8. tab pill pop (used when switching tabs) */
+@keyframes tabPop {
+  0%   { transform: scale(1); }
+  50%  { transform: scale(0.94); }
+  100% { transform: scale(1); }
+}
+.tab:active .tab-icon-wrap { animation: tabPop 0.35s var(--ease-spring); }
+
+/* 9. spark — a small flash used for chest / achievement pulses */
+@keyframes sparkFlash {
+  0%   { opacity: 0; transform: scale(0.6); }
+  30%  { opacity: 1; transform: scale(1.1); }
+  100% { opacity: 0; transform: scale(1.4); }
+}
+
+/* 10. ember rise — reusable rising ember */
+@keyframes emberRise {
+  0%   { transform: translateY(0) scale(1); opacity: 0; }
+  15%  { opacity: 1; }
+  100% { transform: translateY(-180px) scale(0.18); opacity: 0; }
+}
+
+/* 11. gold ring pulse — used around avatars, chiefs, wonders */
+@keyframes goldRingPulse {
+  0%, 100% {
+    box-shadow:
+      0 0 0 0 rgba(239, 193, 104, 0.42),
+      0 0 0 0 rgba(239, 193, 104, 0.20);
+  }
+  50% {
+    box-shadow:
+      0 0 0 4px rgba(239, 193, 104, 0.08),
+      0 0 0 12px rgba(239, 193, 104, 0.0);
+  }
+}
+.ring-gold { animation: goldRingPulse 3s var(--ease-soft) infinite; }
+
+/* 12. horn shake — used when a war is declared */
+@keyframes hornShake {
+  0%, 100% { transform: translateX(0) rotate(0); }
+  20%      { transform: translateX(-2px) rotate(-1.5deg); }
+  40%      { transform: translateX( 2px) rotate( 1.5deg); }
+  60%      { transform: translateX(-1.6px) rotate(-1deg); }
+  80%      { transform: translateX( 1.6px) rotate( 1deg); }
+}
+.horn-shake { animation: hornShake 0.7s var(--ease-soft); }

@@ -159,16 +159,19 @@ export default function Hint({ text, tone = '#e8b866' }) {
                     width: pos.W,
                     maxWidth: 'calc(100vw - 24px)',
                     zIndex: 901,
-                    padding: '10px 12px',
+                    padding: '12px 14px',
                     borderRadius: 'var(--r-md)',
                     fontSize: 12.5,
-                    lineHeight: 1.5,
+                    lineHeight: 1.55,
                     color: 'var(--ink-dim)',
+                    borderColor: 'rgba(239,193,104,0.24)',
+                    boxShadow:
+                      '0 20px 50px rgba(0,0,0,.7), 0 0 0 1px rgba(239,193,104,0.10), inset 0 1px 0 var(--glass-hi)',
                   }}
                 >
                   <b
                     style={{
-                      color: tone,
+                      color: 'var(--gold-300)',
                       display: 'block',
                       marginBottom: 3,
                       fontSize: 12,

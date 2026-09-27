@@ -1,7 +1,8 @@
-// TRIBES-FILE: web/src/components/TopBar.jsx
-// PHASE: 2 — Identity & shell
-// Adds a gear icon that navigates to /profile.
-
+// =====================================================================
+// TopBar — Obsidian Glass v3
+// Crest chip on the left, resource chips + gear on the right.
+// Ember chip pulses on change. Stars chip is gold-tinted.
+// =====================================================================
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store.jsx';
@@ -20,15 +21,16 @@ export default function TopBar() {
   return (
     <header className="topbar">
       <button
-        className="chip crest-chip"
-        onClick={() => { haptic('light'); nav('/profile'); }}
+        className="crest-chip"
+        onClick={() => { haptic('light'); nav('/longhouse'); }}
+        aria-label="Open your tribe"
       >
         <span className="crest-art">
-          <Icon name="tribe" size={18} style={{ color: '#2a1200' }} />
+          <Icon name="tribe" size={18} style={{ color: '#1f1403' }} />
         </span>
         <span className="crest-meta">
-          <b>{tribe ? tribe.name : 'No Tribe'}</b>
-          <i>{user.role || 'Wanderer'}</i>
+          <b>{tribe ? tribe.name : 'Wanderer'}</b>
+          <i>{user.role || 'Kin'}</i>
         </span>
       </button>
 
@@ -36,17 +38,17 @@ export default function TopBar() {
         <motion.span
           key={user.ember}
           initial={{ scale: 1 }}
-          animate={{ scale: [1, 1.14, 1] }}
-          transition={{ ...M.ember, duration: 0.35 }}
-          className="chip"
+          animate={{ scale: [1, 1.16, 1] }}
+          transition={{ ...M.ember, duration: 0.42 }}
+          className="chip ember"
           title="Ember"
         >
           <Icon name="ember" size={15} style={{ color: 'var(--ember-400)' }} />
           <b className="tabular">{fmt(user.ember || 0)}</b>
         </motion.span>
 
-        <span className="chip" title="Stars">
-          <Icon name="spark" size={14} style={{ color: 'var(--gold)' }} />
+        <span className="chip gold" title="Stars">
+          <Icon name="star" size={14} style={{ color: 'var(--gold-300)' }} />
           <b className="tabular">{fmt(user.stars || 0)}</b>
         </span>
 
