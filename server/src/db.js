@@ -100,6 +100,47 @@ CREATE TABLE IF NOT EXISTS users (
   referred_by   BIGINT,
   created_at    TIMESTAMPTZ DEFAULT now()
 );
+-- reconcile: self-heal an older pre-existing users table (add any missing columns).
+-- CREATE TABLE IF NOT EXISTS never adds columns, so an old v3 table (loyalty, no
+-- renown) would otherwise break the index below and every runtime query.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS username      TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS first_name    TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS photo_url     TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS role          TEXT DEFAULT 'Toddler';
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ember         BIGINT DEFAULT 500;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS stars         BIGINT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS renown        BIGINT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS streak        INT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_checkin  TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ash_ready_at  TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ash_count     INT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ton_address   TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS tribe_id      BIGINT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS name_color    TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_glow   TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS avatar_id     BIGINT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS trials_state  JSONB DEFAULT '{}'::jsonb;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_guest      BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS banned        BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS ban_reason    TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS blessed       BOOLEAN DEFAULT false;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS wallet_verified_at TIMESTAMPTZ;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS allocation    BIGINT DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_code TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by   BIGINT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS created_at    TIMESTAMPTZ DEFAULT now();
+-- carry legacy loyalty balances over to renown, if the old column is present
+DO $do$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'users' AND column_name = 'loyalty') THEN
+    UPDATE users SET renown = loyalty
+      WHERE (renown IS NULL OR renown = 0) AND loyalty IS NOT NULL;
+  END IF;
+END
+$do$;
+CREATE UNIQUE INDEX IF NOT EXISTS users_referral_code_uq
+  ON users (referral_code) WHERE referral_code IS NOT NULL;
 CREATE INDEX IF NOT EXISTS users_tribe_idx      ON users (tribe_id);
 CREATE INDEX IF NOT EXISTS users_renown_idx     ON users (renown DESC);
 CREATE INDEX IF NOT EXISTS users_referred_by_idx ON users (referred_by);
@@ -131,6 +172,38 @@ CREATE TABLE IF NOT EXISTS tribes (
   losses          INT DEFAULT 0,
   created_at      TIMESTAMPTZ DEFAULT now()
 );
+-- reconcile: self-heal an older pre-existing tribes table (add any missing columns)
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS name            TEXT;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS name_id         BIGINT;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS hue             INT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS motto           TEXT DEFAULT '';
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS crest           TEXT DEFAULT 'totem';
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS banner          TEXT DEFAULT 'sun';
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS palette         TEXT DEFAULT 'ember';
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS level           INT DEFAULT 1;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS treasury        BIGINT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS created_by      BIGINT;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS members         INT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS renown_total    BIGINT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS donated_total   BIGINT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS members_total   BIGINT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS ash_total       BIGINT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS quests_total    BIGINT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS checkins_total  BIGINT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS relics_total    BIGINT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS shares_total    BIGINT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS wins            INT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS losses          INT DEFAULT 0;
+ALTER TABLE tribes ADD COLUMN IF NOT EXISTS created_at      TIMESTAMPTZ DEFAULT now();
+DO $do$
+BEGIN
+  IF EXISTS (SELECT 1 FROM information_schema.columns
+             WHERE table_name = 'tribes' AND column_name = 'loyalty_total') THEN
+    UPDATE tribes SET renown_total = loyalty_total
+      WHERE (renown_total IS NULL OR renown_total = 0) AND loyalty_total IS NOT NULL;
+  END IF;
+END
+$do$;
 CREATE INDEX IF NOT EXISTS tribes_renown_idx ON tribes (renown_total DESC);
 
 -- === tribe names pool ===
