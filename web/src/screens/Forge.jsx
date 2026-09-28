@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Emoji from '../components/Emoji.jsx';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
 import { useMotionConfig, V, SECTION_MOTION, staggerParent } from '../lib/motion.js';
@@ -114,7 +115,7 @@ export default function Forge() {
                       fontSize: 30,
                     }}
                   >
-                    {preset === 'cursed' ? '🗝️' : '🏺'}
+                    <Emoji name={preset === 'cursed' ? 'curse-key' : 'relic-vase'} size={34} />
                   </motion.div>
 
                   <div className="grow">
@@ -137,8 +138,9 @@ export default function Forge() {
                     variant="primary" block haptic="heavy"
                     onClick={() => openPack(p.slug)}
                   >
-                    <Icon name="spark" size={14} style={{ color: '#2a1200' }} />
-                    Open · {p.price_stars} ⭐
+                   <Icon name="star" size={14} style={{ color: '#1a0b02' }} />
+Open · {p.price_stars}
+<Emoji name="star" size={14} style={{ marginLeft: 4 }} />
                   </Button>
                 </div>
               </div>

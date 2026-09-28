@@ -3,6 +3,7 @@
 // The War Stage: front-line visualization, live score, tactic wheel.
 
 import { useState, useEffect, useRef } from 'react';
+import Emoji from '../components/Emoji.jsx';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
@@ -205,13 +206,8 @@ export default function War() {
                     onClick={() => { haptic('select'); setSelectedFront(f.idx); }}
                   >
                     <span className="war-front-glyph">
-                      {f.terrain === 'plains' ? '🌾' :
-                       f.terrain === 'forest' ? '🌲' :
-                       f.terrain === 'hills' ? '⛰️' :
-                       f.terrain === 'swamp' ? '🪨' :
-                       f.terrain === 'ruins' ? '🏰' :
-                       f.terrain === 'ashlands' ? '🌋' : '⚔️'}
-                    </span>
+  <Emoji name={`terrain-${f.terrain}`} size={22} />
+</span>
                     <span className="war-front-name">{f.name}</span>
                     <div className="war-front-bars">
                       <i style={{ width: (myF / tot * 100) + '%' }} />
@@ -236,7 +232,8 @@ export default function War() {
               </div>
               {hint?.hint && (
                 <p className="tiny" style={{ marginTop: 8, textAlign: 'center', color: 'var(--gold)' }}>
-                  💡 {hint.hint}
+                  <Emoji name="bulb" size={14} style={{ verticalAlign: 'text-bottom', marginRight: 4 }} />
+{hint.hint}
                 </p>
               )}
             </div>

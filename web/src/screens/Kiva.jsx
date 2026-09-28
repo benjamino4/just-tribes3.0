@@ -16,7 +16,7 @@ import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
 import Sheet from '../components/Sheet.jsx';
 import EmojiPicker from '../components/EmojiPicker.jsx';
-import Emoji from '../components/Emoji.jsx';
+import Emoji, { EmojiText } from '../components/Emoji.jsx';
 import { toast } from '../components/Toast.jsx';
 
 export default function Kiva() {
@@ -142,9 +142,9 @@ export default function Kiva() {
       <div className="row between" style={{ margin: '2px 2px 12px' }}>
         <div className="row" style={{ gap: 10 }}>
           <button className="chip" style={{ padding: 9, borderRadius: 999 }}
-                  onClick={() => { haptic('light'); nav(-1); }}>
-            <Icon name="chevL" size={18} />
-          </button>
+        onClick={() => { haptic('light'); setEmojiOpen(true); }}>
+  😀
+</button>
           <h2 className="display" style={{ fontSize: 22 }}>The Kiva</h2>
           <Hint text="Your tribe's fireside. Five emojis are free. Unlock spirit sets with Stars. Chiefs may seal messages and call a Curfew to lock the board." />
         </div>
@@ -179,11 +179,10 @@ export default function Kiva() {
       </div>
 
       {/* composer */}
-      <div className="kiva-composer glass strong">
-        <button className="chip" style={{ padding: 9, borderRadius: 999 }}
-                onClick={() => { haptic('light'); setEmojiOpen(true); }}>
-          😀
-        </button>
+      <button className="chip" style={{ padding: 9, borderRadius: 999 }}
+        onClick={() => { haptic('light'); setEmojiOpen(true); }}>
+  <Emoji name="smile" size={18} />
+</button>
         {isChief && (
           <button className="chip" style={{ padding: 9, borderRadius: 999 }}
                   onClick={() => { haptic('light'); setPollOpen(true); }}>
@@ -296,12 +295,7 @@ function KivaBubble({ m, mine, chief, onSeal, onVote }) {
 
 /* replaces :key: tokens with animated emojis */
 function renderBody(text) {
-  const parts = String(text).split(/(:[a-z_]+:)/g);
-  return parts.map((p, i) => {
-    const match = /^:([a-z_]+):$/.exec(p);
-    if (match) return <Emoji key={i} name={match[1]} size={18} style={{ verticalAlign: 'text-bottom' }} />;
-    return <span key={i}>{p}</span>;
-  });
+  return <EmojiText>{text}</EmojiText>;
 }
 
 /* ---------- poll ---------- */

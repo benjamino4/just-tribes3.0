@@ -9,8 +9,8 @@
 // Presets: ember | cursed | shards | goldburst (matches DB `anim_preset`).
 
 import { useState, useEffect } from 'react';
+import Emoji from './Emoji.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
-import { RARITY_TONE, RARITY_LABEL, ANIM_PRESETS, DOMAIN_GLYPH } from '../data/relics.js';
 import { useMotionConfig } from '../lib/motion.js';
 import { haptic } from '../lib/haptics.js';
 import Button from './Button.jsx';
@@ -126,7 +126,7 @@ export default function PackReveal({ open, relic, rarity, preset = 'ember', onCl
                   }}>
                     {relic.svg
                       ? <div dangerouslySetInnerHTML={{ __html: relic.svg }} style={{ width: '75%', height: '75%' }} />
-                      : <span style={{ fontSize: '3.5rem' }}>{DOMAIN_GLYPH[relic.domain] || '🏺'}</span>}
+                      : <Emoji name={relic.domain ? `dom-${relic.domain}` : 'relic-vase'} size={100} />}
                   </div>
                 </motion.div>
 
@@ -199,18 +199,15 @@ export default function PackReveal({ open, relic, rarity, preset = 'ember', onCl
 
 /* ---------- pack sigil ---------- */
 function PackSigil({ preset }) {
-  const M = useMotionConfig();
-  if (preset === 'cursed') {
-    return (
-      <motion.span
-        animate={{ scale: [1, 1.08, 1], rotate: [0, -3, 3, 0] }}
-        transition={{ duration: 3, repeat: M.drift.repeat || 0 }}
-        style={{ fontSize: '3.2rem', filter: 'drop-shadow(0 4px 12px rgba(0,0,0,.6))' }}
-      >
-        🗝️
-      </motion.span>
-    );
-  }
+  const map = {
+    ember:     'dom-fire',
+    cursed:    'curse-key',
+    shards:    'ice_crystal',
+    goldburst: 'star',
+    molten:    'dom-fire',
+  };
+  return <Emoji name={map[preset] || 'dom-fire'} size={56} />;
+}
   return (
     <motion.span
       animate={{ y: [0, -6, 0] }}

@@ -1,60 +1,94 @@
-// TRIBES-FILE: web/src/data/emojis.js
-// PHASE: 4 — Relics
-// The 25 animated SVG emojis. Each is a small self-contained SVG string
-// with a shared animate API: <Emoji name="fire" size={24} animate />.
-//
-// 5 free (fire, clap, swords, thumbsup, joy)
-// 5 spirits (flame_flicker, spark_orbit, skull_pulse, moon_phase, bolt_strike)
-// 5 ancestors (eye_blink, eagle_flap, wolf_gaze, rune_draw, halo_glow)
-// 5 rites (dagger_drip, blood_seal, wound_open, crack_spread, ember_trail)
-// 5 winter (ice_crystal, frost_breath, snowfall, freeze_shatter, aurora_wave)
+// =====================================================================
+// TRIBES — client-side emoji fallback.
+// Mirrors server/src/lib/builtinEmojis.js.
+// If the server is unreachable, the registry falls back to this.
+// =====================================================================
+
+const svg = (content) => `<svg viewBox="0 0 24 24">${content}</svg>`;
 
 export const EMOJI = {
-  /* ---------- free ---------- */
-  fire: `<svg viewBox="0 0 24 24"><path fill="#ff7a18" d="M12 2c1.5 3.5-.5 4.5-.5 6.5A3 3 0 0 0 15 11c0-2 .8-3 .8-3 2.2 2 3.2 4.4 3.2 6.6a7 7 0 1 1-14 0c0-3.3 2-5.5 3.4-7.6C9.6 5.6 11.7 4.5 12 2z"/></svg>`,
-  clap: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#ffcf8f"/><circle cx="9" cy="10" r="1.6" fill="#2a1200"/><circle cx="15" cy="10" r="1.6" fill="#2a1200"/><path d="M8 15c1.3 1.6 6.7 1.6 8 0" stroke="#2a1200" stroke-width="1.6" fill="none" stroke-linecap="round"/></svg>`,
-  swords: `<svg viewBox="0 0 24 24"><g stroke="#cfd0d8" stroke-width="2" stroke-linecap="round"><path d="M3 21 14 10 15 6 19 3 18 7 7 18z"/><path d="M21 21 10 10 9 6 5 3 6 7 17 18z"/></g></svg>`,
-  thumbsup: `<svg viewBox="0 0 24 24"><path fill="#ffcf8f" d="M8 10v9h8a3 3 0 0 0 2.8-2l1.2-5a2 2 0 0 0-2-2.5h-4l.8-4A2.5 2.5 0 0 0 12 3z"/><rect x="4" y="10" width="3" height="9" fill="#ff9f45"/></svg>`,
-  joy: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="#ffcf8f"/><path d="M7 15c1 2 3 2.5 5 2.5s4-.5 5-2.5" stroke="#2a1200" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="9" cy="10" r="1.4" fill="#2a1200"/><circle cx="15" cy="10" r="1.4" fill="#2a1200"/></svg>`,
+  // ---------- brand + utility ----------
+  'brand-fire': svg('<path fill="#f26a10" d="M12 2c1.5 3.5-.5 4.5-.5 6.5A3 3 0 0 0 15 11c0-2 .8-3 .8-3 2.2 2 3.2 4.4 3.2 6.6a7 7 0 1 1-14 0c0-3.3 2-5.5 3.4-7.6C9.6 5.6 11.7 4.5 12 2z"/>'),
+  'smile': svg('<circle cx="12" cy="12" r="10" fill="#ffcf8f"/><circle cx="9" cy="10" r="1.6" fill="#1a0b02"/><circle cx="15" cy="10" r="1.6" fill="#1a0b02"/><path d="M7 14c1 2 3.5 3 5 3s4-1 5-3" stroke="#1a0b02" stroke-width="1.6" fill="none" stroke-linecap="round"/>'),
+  'bulb': svg('<path d="M9 18h6M10 21h4M12 3a6 6 0 0 0-4 10c1 1 1 2 1 3h6c0-1 0-2 1-3a6 6 0 0 0-4-10z" fill="none" stroke="#efc168" stroke-width="1.8" stroke-linecap="round"/>'),
+  'star': svg('<path fill="#efc168" d="M12 2 14 9l7 1-5 5 1 7-5-3-5 3 1-7-5-5 7-1z"/>'),
+  'crown': svg('<path fill="#efc168" d="M4 18h16l-1-9-4 4-3-6-3 6-4-4z"/>'),
+  'shield': svg('<path d="M12 2 4 5v7c0 6 4 9 8 10 4-1 8-4 8-10V5z" fill="none" stroke="#efc168" stroke-width="2" stroke-linejoin="round"/>'),
+  'lock': svg('<path d="M6 11V8a6 6 0 0 1 12 0v3" fill="none" stroke="#efc168" stroke-width="2" stroke-linecap="round"/><rect x="5" y="11" width="14" height="10" rx="2" fill="#efc168"/>'),
 
-  /* ---------- spirits ---------- */
-  flame_flicker: `<svg viewBox="0 0 24 24"><g><animateTransform attributeName="transform" type="scale" values="1;1.08;1" dur="1.2s" repeatCount="indefinite" additive="sum"/><path fill="url(#ff)" d="M12 2c1.5 3.5-.5 4.5-.5 6.5A3 3 0 0 0 15 11c0-2 .8-3 .8-3 2.2 2 3.2 4.4 3.2 6.6a7 7 0 1 1-14 0c0-3.3 2-5.5 3.4-7.6C9.6 5.6 11.7 4.5 12 2z"/></g><defs><linearGradient id="ff" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#c53a05"/><stop offset=".5" stop-color="#ff7a18"/><stop offset="1" stop-color="#fff3c4"/></linearGradient></defs></svg>`,
-  spark_orbit: `<svg viewBox="0 0 24 24"><g><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="3s" repeatCount="indefinite"/><circle cx="12" cy="4" r="2" fill="#ffd27a"/><circle cx="20" cy="12" r="1.6" fill="#ffcf8f"/><circle cx="12" cy="20" r="2" fill="#ff9f45"/><circle cx="4" cy="12" r="1.6" fill="#ffcf8f"/></g></svg>`,
-  skull_pulse: `<svg viewBox="0 0 24 24"><g><animate attributeName="opacity" values=".7;1;.7" dur="1.8s" repeatCount="indefinite"/><path fill="#e6ded1" d="M12 2a9 9 0 0 0-9 9c0 3 1.2 5 3 6.2V21h3v-2.5h2V21h4v-2.5h2V21h3v-3.8c1.8-1.2 3-3.2 3-6.2a9 9 0 0 0-9-9z"/><circle cx="8" cy="11" r="2" fill="#1a1020"/><circle cx="16" cy="11" r="2" fill="#1a1020"/></g></svg>`,
-  moon_phase: `<svg viewBox="0 0 24 24"><g><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="10s" repeatCount="indefinite"/><circle cx="12" cy="12" r="9" fill="#f6efe6"/><circle cx="16" cy="11" r="8" fill="rgba(0,0,0,.55)"/></g></svg>`,
-  bolt_strike: `<svg viewBox="0 0 24 24"><g><animate attributeName="opacity" values="1;0;1;1" keyTimes="0;.1;.2;1" dur="3s" repeatCount="indefinite"/><path fill="#ffd27a" d="M13 2 5 14h5l-1 8 9-12h-5z"/></g></svg>`,
+  // ---------- reaction set ----------
+  'reaction-fire': svg('<path fill="#f26a10" d="M12 2c1 3-1 4-1 6a3 3 0 0 0 3 3c0-2 1-3 1-3 2 2 3 4 3 6a6 6 0 1 1-12 0c0-3 2-5 3-7 1-1 3-2 3-5z"/>'),
+  'reaction-clap': svg('<circle cx="12" cy="12" r="9" fill="#ffcf8f"/><circle cx="9" cy="10" r="1.6" fill="#1a0b02"/><circle cx="15" cy="10" r="1.6" fill="#1a0b02"/><path d="M8 15c1.3 1.6 6.7 1.6 8 0" stroke="#1a0b02" stroke-width="1.6" fill="none" stroke-linecap="round"/>'),
+  'reaction-swords': svg('<g stroke="#cfd0d8" stroke-width="2" stroke-linecap="round" fill="none"><path d="M3 21 14 10 15 6 19 3 18 7 7 18z"/><path d="M21 21 10 10 9 6 5 3 6 7 17 18z"/></g>'),
+  'reaction-thumbsup': svg('<path fill="#ffcf8f" d="M8 10v9h8a3 3 0 0 0 2.8-2l1.2-5a2 2 0 0 0-2-2.5h-4l.8-4A2.5 2.5 0 0 0 12 3z"/><rect x="4" y="10" width="3" height="9" fill="#ff8324"/>'),
+  'reaction-joy': svg('<circle cx="12" cy="12" r="10" fill="#ffcf8f"/><path d="M7 15c1 2 3 2.5 5 2.5s4-.5 5-2.5" stroke="#1a0b02" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="9" cy="10" r="1.4" fill="#1a0b02"/><circle cx="15" cy="10" r="1.4" fill="#1a0b02"/>'),
 
-  /* ---------- ancestors ---------- */
-  eye_blink: `<svg viewBox="0 0 24 24"><path d="M2 12c3-5 7-7 10-7s7 2 10 7c-3 5-7 7-10 7S5 17 2 12z" fill="#f6efe6"/><circle cx="12" cy="12" r="3.4" fill="#2a1200"><animate attributeName="r" values="3.4;.1;3.4" keyTimes="0;.5;1" dur="4s" repeatCount="indefinite"/></circle></svg>`,
-  eagle_flap: `<svg viewBox="0 0 24 24"><g><animateTransform attributeName="transform" type="scale" values="1;.88;1" dur=".6s" repeatCount="indefinite" additive="sum"/><path fill="#4a4038" d="M12 6 2 12l4 2 6-4 6 4 4-2z"/><path fill="#2a1200" d="M10 14h4l-1 6-1-3-1 3z"/></g></svg>`,
-  wolf_gaze: `<svg viewBox="0 0 24 24"><path fill="#4a4038" d="M4 4l3 5h10l3-5 1 9-9 9-9-9z"/><g><animate attributeName="opacity" values=".6;1;.6" dur="1.4s" repeatCount="indefinite"/><circle cx="9" cy="12" r="1.6" fill="#ffcf8f"/><circle cx="15" cy="12" r="1.6" fill="#ffcf8f"/></g></svg>`,
-  rune_draw: `<svg viewBox="0 0 24 24"><path d="M4 20 12 4l8 16M8 14h8" stroke="#ffcf8f" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-dasharray="60" stroke-dashoffset="60"><animate attributeName="stroke-dashoffset" from="60" to="0" dur="2s" repeatCount="indefinite"/></path></svg>`,
-  halo_glow: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="10" fill="none" stroke="#ffd27a" stroke-width="1.4"><animate attributeName="r" values="8;11;8" dur="2.4s" repeatCount="indefinite"/><animate attributeName="opacity" values=".4;1;.4" dur="2.4s" repeatCount="indefinite"/></circle><circle cx="12" cy="12" r="4" fill="#ffd27a"/></svg>`,
+  // ---------- spirits ----------
+  'flame_flicker': svg('<defs><linearGradient id="ff1" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#8f3402"/><stop offset=".5" stop-color="#f26a10"/><stop offset="1" stop-color="#fff2e0"/></linearGradient></defs><g><animateTransform attributeName="transform" type="scale" values="1;1.08;1" dur="1.2s" repeatCount="indefinite" additive="sum"/><path fill="url(#ff1)" d="M12 2c1.5 3.5-.5 4.5-.5 6.5A3 3 0 0 0 15 11c0-2 .8-3 .8-3 2.2 2 3.2 4.4 3.2 6.6a7 7 0 1 1-14 0c0-3.3 2-5.5 3.4-7.6C9.6 5.6 11.7 4.5 12 2z"/></g>'),
+  'spark_orbit': svg('<g><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="3s" repeatCount="indefinite"/><circle cx="12" cy="4" r="2" fill="#efc168"/><circle cx="20" cy="12" r="1.6" fill="#ffcf8f"/><circle cx="12" cy="20" r="2" fill="#ff8324"/><circle cx="4" cy="12" r="1.6" fill="#ffcf8f"/></g>'),
+  'skull_pulse': svg('<g><animate attributeName="opacity" values=".7;1;.7" dur="1.8s" repeatCount="indefinite"/><path fill="#f0e6cf" d="M12 2a9 9 0 0 0-9 9c0 3 1.2 5 3 6.2V21h3v-2.5h2V21h4v-2.5h2V21h3v-3.8c1.8-1.2 3-3.2 3-6.2a9 9 0 0 0-9-9z"/><circle cx="8" cy="11" r="2" fill="#0b0a10"/><circle cx="16" cy="11" r="2" fill="#0b0a10"/></g>'),
+  'moon_phase': svg('<g><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="10s" repeatCount="indefinite"/><circle cx="12" cy="12" r="9" fill="#f0e6cf"/><circle cx="16" cy="11" r="8" fill="rgba(0,0,0,.62)"/></g>'),
+  'bolt_strike': svg('<g><animate attributeName="opacity" values="1;0;1;1" keyTimes="0;.1;.2;1" dur="3s" repeatCount="indefinite"/><path fill="#efc168" d="M13 2 5 14h5l-1 8 9-12h-5z"/></g>'),
 
-  /* ---------- rites ---------- */
-  dagger_drip: `<svg viewBox="0 0 24 24"><path d="M12 2 10 14h4z" fill="#cfd0d8"/><rect x="8" y="14" width="8" height="2" fill="#4a4038"/><path d="M12 16v3" stroke="#c0392b" stroke-width="1.6" stroke-linecap="round"><animate attributeName="y2" values="18;22;18" dur="1.6s" repeatCount="indefinite"/></path></svg>`,
-  blood_seal: `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="#8b1a1a"/><path fill="#c0392b" d="M12 6l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="8s" repeatCount="indefinite"/></path></svg>`,
-  wound_open: `<svg viewBox="0 0 24 24"><path d="M12 3c-3 4-3 8 0 12s3 6 0 6-3-2 0-6-3-8 0-12z" fill="#c0392b" opacity=".9"><animate attributeName="opacity" values=".7;1;.7" dur="2s" repeatCount="indefinite"/></path><circle cx="12" cy="12" r="9" fill="none" stroke="#8b1a1a" stroke-width="1" opacity=".6"/></svg>`,
-  crack_spread: `<svg viewBox="0 0 24 24"><path d="M12 2 10 9l3 3-2 4 2 4-2 6" stroke="#8b1a1a" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-dasharray="30" stroke-dashoffset="30"><animate attributeName="stroke-dashoffset" from="30" to="0" dur="2s" repeatCount="indefinite"/></path></svg>`,
-  ember_trail: `<svg viewBox="0 0 24 24"><g><animateTransform attributeName="transform" type="translate" values="0 0;-2 -3;-4 -6;-6 -9" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;.6;.3;0" dur="2s" repeatCount="indefinite"/><circle cx="20" cy="20" r="1.6" fill="#ffcf8f"/><circle cx="18" cy="17" r="1.2" fill="#ff9f45"/><circle cx="16" cy="14" r="1" fill="#ff7a18"/></g></svg>`,
+  // ---------- ancestors ----------
+  'eye_blink': svg('<path d="M2 12c3-5 7-7 10-7s7 2 10 7c-3 5-7 7-10 7S5 17 2 12z" fill="#f0e6cf"/><circle cx="12" cy="12" r="3.4" fill="#0b0a10"><animate attributeName="r" values="3.4;.1;3.4" keyTimes="0;.5;1" dur="4s" repeatCount="indefinite"/></circle>'),
+  'eagle_flap': svg('<g><animateTransform attributeName="transform" type="scale" values="1;.88;1" dur=".6s" repeatCount="indefinite" additive="sum"/><path fill="#4a4235" d="M12 6 2 12l4 2 6-4 6 4 4-2z"/><path fill="#0b0a10" d="M10 14h4l-1 6-1-3-1 3z"/></g>'),
+  'wolf_gaze': svg('<path fill="#4a4235" d="M4 4l3 5h10l3-5 1 9-9 9-9-9z"/><g><animate attributeName="opacity" values=".6;1;.6" dur="1.4s" repeatCount="indefinite"/><circle cx="9" cy="12" r="1.6" fill="#efc168"/><circle cx="15" cy="12" r="1.6" fill="#efc168"/></g>'),
+  'rune_draw': svg('<path d="M4 20 12 4l8 16M8 14h8" stroke="#efc168" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-dasharray="60" stroke-dashoffset="60"><animate attributeName="stroke-dashoffset" from="60" to="0" dur="2s" repeatCount="indefinite"/></path>'),
+  'halo_glow': svg('<circle cx="12" cy="12" r="10" fill="none" stroke="#efc168" stroke-width="1.4"><animate attributeName="r" values="8;11;8" dur="2.4s" repeatCount="indefinite"/><animate attributeName="opacity" values=".4;1;.4" dur="2.4s" repeatCount="indefinite"/></circle><circle cx="12" cy="12" r="4" fill="#efc168"/>'),
 
-  /* ---------- winter ---------- */
-  ice_crystal: `<svg viewBox="0 0 24 24"><g stroke="#8ddcff" stroke-width="1.6" fill="none" stroke-linecap="round"><path d="M12 2v20M2 12h20M5 5l14 14M19 5 5 19"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="20s" repeatCount="indefinite"/></path></g></svg>`,
-  frost_breath: `<svg viewBox="0 0 24 24"><g fill="none" stroke="#b8e8ff" stroke-width="1.6" stroke-linecap="round" opacity=".9"><path d="M4 12h6M4 8h3M4 16h3"/><animateTransform attributeName="transform" type="translate" values="0 0;2 0;4 0;2 0;0 0" dur="3s" repeatCount="indefinite"/></g></svg>`,
-  snowfall: `<svg viewBox="0 0 24 24"><g fill="#e6f6ff">${[0,1,2,3,4,5].map((i) => `<circle cx="${4 + i * 3.2}" cy="4" r="1.4"><animate attributeName="cy" values="2;22;2" dur="${2 + i * 0.3}s" repeatCount="indefinite"/></circle>`).join('')}</g></svg>`,
-  freeze_shatter: `<svg viewBox="0 0 24 24"><g><animate attributeName="opacity" values="0;1;1;0" dur="3s" repeatCount="indefinite"/><path d="M12 4 9 12l4 4 3-8z" fill="#8ddcff"/><path d="M12 4v18M4 12h16" stroke="#8ddcff" stroke-width="1" fill="none" opacity=".4"/></g></svg>`,
-  aurora_wave: `<svg viewBox="0 0 24 24"><path d="M2 16c4-4 8-4 10 0s6 4 10 0" stroke="#5ac8ff" stroke-width="2" fill="none" stroke-linecap="round"><animate attributeName="d" values="M2 16c4-4 8-4 10 0s6 4 10 0;M2 12c4 4 8 4 10 0s6-4 10 0;M2 16c4-4 8-4 10 0s6 4 10 0" dur="4s" repeatCount="indefinite"/></path><path d="M2 20c4-3 8-3 10 0s6 3 10 0" stroke="#7cc4ff" stroke-width="1.4" fill="none" opacity=".7"/></svg>`,
+  // ---------- rites ----------
+  'dagger_drip': svg('<path d="M12 2 10 14h4z" fill="#cfd0d8"/><rect x="8" y="14" width="8" height="2" fill="#4a4235"/><path d="M12 16v3" stroke="#a83028" stroke-width="1.6" stroke-linecap="round"><animate attributeName="y2" values="18;22;18" dur="1.6s" repeatCount="indefinite"/></path>'),
+  'blood_seal': svg('<circle cx="12" cy="12" r="9" fill="#661a16"/><path fill="#d0483a" d="M12 6l2 4 4 1-3 3 1 4-4-2-4 2 1-4-3-3 4-1z"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="8s" repeatCount="indefinite"/></path>'),
+  'wound_open': svg('<path d="M12 3c-3 4-3 8 0 12s3 6 0 6-3-2 0-6-3-8 0-12z" fill="#d0483a" opacity=".9"><animate attributeName="opacity" values=".7;1;.7" dur="2s" repeatCount="indefinite"/></path><circle cx="12" cy="12" r="9" fill="none" stroke="#661a16" stroke-width="1" opacity=".7"/>'),
+  'crack_spread': svg('<path d="M12 2 10 9l3 3-2 4 2 4-2 6" stroke="#661a16" stroke-width="1.6" fill="none" stroke-linecap="round" stroke-dasharray="30" stroke-dashoffset="30"><animate attributeName="stroke-dashoffset" from="30" to="0" dur="2s" repeatCount="indefinite"/></path>'),
+  'ember_trail': svg('<g><animateTransform attributeName="transform" type="translate" values="0 0;-2 -3;-4 -6;-6 -9" dur="2s" repeatCount="indefinite"/><animate attributeName="opacity" values="1;.6;.3;0" dur="2s" repeatCount="indefinite"/><circle cx="20" cy="20" r="1.6" fill="#ffcf8f"/><circle cx="18" cy="17" r="1.2" fill="#ff8324"/><circle cx="16" cy="14" r="1" fill="#f26a10"/></g>'),
+
+  // ---------- winter ----------
+  'ice_crystal': svg('<g stroke="#b9d5ff" stroke-width="1.6" fill="none" stroke-linecap="round"><path d="M12 2v20M2 12h20M5 5l14 14M19 5 5 19"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="20s" repeatCount="indefinite"/></path></g>'),
+  'frost_breath': svg('<g fill="none" stroke="#b9d5ff" stroke-width="1.6" stroke-linecap="round" opacity=".9"><path d="M4 12h6M4 8h3M4 16h3"/><animateTransform attributeName="transform" type="translate" values="0 0;2 0;4 0;2 0;0 0" dur="3s" repeatCount="indefinite"/></g>'),
+  'snowfall': svg('<g fill="#e6f6ff"><circle cx="4" cy="4" r="1.4"><animate attributeName="cy" values="2;22;2" dur="2s" repeatCount="indefinite"/></circle><circle cx="9" cy="4" r="1.4"><animate attributeName="cy" values="2;22;2" dur="2.3s" repeatCount="indefinite"/></circle><circle cx="14" cy="4" r="1.4"><animate attributeName="cy" values="2;22;2" dur="2.6s" repeatCount="indefinite"/></circle><circle cx="19" cy="4" r="1.4"><animate attributeName="cy" values="2;22;2" dur="2.9s" repeatCount="indefinite"/></circle></g>'),
+  'freeze_shatter': svg('<g><animate attributeName="opacity" values="0;1;1;0" dur="3s" repeatCount="indefinite"/><path d="M12 4 9 12l4 4 3-8z" fill="#b9d5ff"/><path d="M12 4v18M4 12h16" stroke="#b9d5ff" stroke-width="1" fill="none" opacity=".4"/></g>'),
+  'aurora_wave': svg('<path d="M2 16c4-4 8-4 10 0s6 4 10 0" stroke="#5f92d4" stroke-width="2" fill="none" stroke-linecap="round"><animate attributeName="d" values="M2 16c4-4 8-4 10 0s6 4 10 0;M2 12c4 4 8 4 10 0s6-4 10 0;M2 16c4-4 8-4 10 0s6 4 10 0" dur="4s" repeatCount="indefinite"/></path><path d="M2 20c4-3 8-3 10 0s6 3 10 0" stroke="#b9d5ff" stroke-width="1.4" fill="none" opacity=".7"/>'),
+
+  // ---------- domains ----------
+  'dom-fire': svg('<path fill="#f26a10" d="M12 2c1.5 3.5-.5 4.5-.5 6.5A3 3 0 0 0 15 11c0-2 .8-3 .8-3 2.2 2 3.2 4.4 3.2 6.6a7 7 0 1 1-14 0c0-3.3 2-5.5 3.4-7.6C9.6 5.6 11.7 4.5 12 2z"/>'),
+  'dom-bone': svg('<path fill="#f0e6cf" d="M4 8a3 3 0 1 0 2 5l3 3a3 3 0 1 0 5-2l3-3a3 3 0 1 0-2-5l-3 3a3 3 0 0 0-5 2z" stroke="#877a5c" stroke-width="1.4" stroke-linejoin="round"/>'),
+  'dom-sun': svg('<circle cx="12" cy="12" r="5" fill="#efc168"/><g stroke="#ff8324" stroke-width="2" stroke-linecap="round"><path d="M12 2v3M12 19v3M2 12h3M19 12h3M5 5l2 2M17 17l2 2M19 5l-2 2M7 17l-2 2"/></g>'),
+  'dom-moon': svg('<path fill="#cfd0d8" d="M20 15A9 9 0 1 1 9 4a7 7 0 0 0 11 11z"/>'),
+  'dom-ash': svg('<g stroke="#b8a99a" stroke-width="2" stroke-linecap="round"><path d="M5 15h14M6 12h12M8 9h8M4 18h16"/></g>'),
+
+  // ---------- relic/pack sigils ----------
+  'relic-vase': svg('<path fill="#c9a06a" d="M8 3h8l-1 3 3 6c1 3-1 8-6 9S5 15 6 12l3-6z"/><path d="M9 3h6" stroke="#8a5e19" stroke-width="1.4"/>'),
+  'curse-key': svg('<circle cx="8" cy="8" r="4" fill="none" stroke="#7642a3" stroke-width="2"/><path d="M11 11l8 8-2 2-2-2-1 1-2-2-1 1-2-2" stroke="#7642a3" stroke-width="2" fill="none" stroke-linejoin="round"/>'),
+  'war-swords': svg('<g stroke="#d0483a" stroke-width="2" stroke-linecap="round" fill="none"><path d="M3 21 14 10 15 6 19 3 18 7 7 18z"/><path d="M21 21 10 10 9 6 5 3 6 7 17 18z"/></g>'),
+
+  // ---------- terrain ----------
+  'terrain-plains': svg('<path fill="#c9a961" d="M2 18c4-3 8-3 12 0s6 3 8 0v6H2z"/><path stroke="#8a7330" stroke-width="1.4" stroke-linecap="round" d="M6 14v-4M10 14v-6M14 14v-5"/>'),
+  'terrain-forest': svg('<path fill="#3a7248" d="M12 2 6 12h4l-4 8h12l-4-8h4z"/><rect x="11" y="18" width="2" height="4" fill="#4a2810"/>'),
+  'terrain-hills': svg('<path fill="#6b5540" d="M2 20c3-8 7-12 12-12s7 6 8 12z"/><path fill="#4a3928" d="M10 20c2-5 5-7 8-7s5 4 6 7z"/>'),
+  'terrain-swamp': svg('<ellipse cx="12" cy="18" rx="10" ry="4" fill="#3a5030"/><path d="M4 14h4M12 12h4M18 16h3" stroke="#5a7a45" stroke-width="1.4" stroke-linecap="round"/>'),
+  'terrain-ruins': svg('<path fill="none" stroke="#7a6a4a" stroke-width="1.8" stroke-linejoin="round" d="M4 20V10l4-3v6l4-5v8l4-4v8l4-3v5z"/>'),
+  'terrain-ashlands': svg('<path fill="#3a1a10" d="M2 20 8 8l3 6 4-9 3 7 4-4v12z"/><circle cx="10" cy="14" r="1" fill="#f26a10"/><circle cx="15" cy="12" r="1" fill="#ff8324"/>'),
+  'terrain-vs': svg('<g stroke="#efc168" stroke-width="2" stroke-linecap="round" fill="none"><path d="M4 20 12 4l8 16"/></g>'),
+
+  // ---------- trials ----------
+  'trial-kindle': svg('<path fill="#f26a10" d="M12 2c1.5 3.5-.5 4.5-.5 6.5A3 3 0 0 0 15 11c0-2 .8-3 .8-3 2.2 2 3.2 4.4 3.2 6.6a7 7 0 1 1-14 0c0-3.3 2-5.5 3.4-7.6C9.6 5.6 11.7 4.5 12 2z"/>'),
+  'trial-stoke': svg('<path fill="none" stroke="#b9d5ff" stroke-width="1.8" stroke-linecap="round" d="M3 12h4M11 8h4M17 14h4"><animateTransform attributeName="transform" type="translate" values="0 0;3 0;0 0" dur="1.4s" repeatCount="indefinite"/></path>'),
+  'trial-feed': svg('<rect x="4" y="12" width="16" height="4" rx="2" fill="#8a5a30"/><rect x="6" y="8" width="12" height="4" rx="2" fill="#a87840"/>'),
+  'trial-cry': svg('<path fill="#ffcf8f" d="M4 12c3-5 8-6 8-6s5 1 8 6l-2 4c-3-2-9-2-12 0z"/><path d="M12 18v3" stroke="#a83028" stroke-width="1.6" stroke-linecap="round"/>'),
+  'trial-sift': svg('<g fill="none" stroke="#efc168" stroke-width="1.8" stroke-linecap="round"><path d="M12 4a8 8 0 1 0 8 8"><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="4s" repeatCount="indefinite"/></path></g><circle cx="12" cy="12" r="2" fill="#ff8324"/>'),
 };
 
-export const FREE_KEYS = ['fire', 'clap', 'swords', 'thumbsup', 'joy'];
+export const FREE_KEYS = ['reaction-fire', 'reaction-clap', 'reaction-swords', 'reaction-thumbsup', 'reaction-joy'];
 
 export const SETS = {
-  spirits: ['flame_flicker', 'spark_orbit', 'skull_pulse', 'moon_phase', 'bolt_strike'],
+  spirits:   ['flame_flicker', 'spark_orbit', 'skull_pulse', 'moon_phase', 'bolt_strike'],
   ancestors: ['eye_blink', 'eagle_flap', 'wolf_gaze', 'rune_draw', 'halo_glow'],
-  rites: ['dagger_drip', 'blood_seal', 'wound_open', 'crack_spread', 'ember_trail'],
-  winter: ['ice_crystal', 'frost_breath', 'snowfall', 'freeze_shatter', 'aurora_wave'],
+  rites:     ['dagger_drip', 'blood_seal', 'wound_open', 'crack_spread', 'ember_trail'],
+  winter:    ['ice_crystal', 'frost_breath', 'snowfall', 'freeze_shatter', 'aurora_wave'],
 };
 
 export function emojiHtml(key) {
-  return EMOJI[key] || EMOJI.spark_orbit;
+  return EMOJI[key] || EMOJI['spark_orbit'];
 }

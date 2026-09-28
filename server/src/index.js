@@ -101,6 +101,12 @@ app.post('/api/admin/webhook', async (req, res) => {
   res.json({ ok: true });
 });
 
+import { emojiRouter } from './routes/emoji.js';
+import { adminEmojiRouter } from './routes/admin_emoji.js';
+// ... (add these imports at the top with the other imports)
+
+app.use('/api/emoji', emojiRouter);
+app.use('/api/admin/emoji', adminEmojiRouter);
 /* ---------- admin REST ---------- */
 app.use('/api/admin', adminRouter);
 

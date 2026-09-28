@@ -18,13 +18,6 @@ export const RARITY_LABEL = {
   legendary: 'Legendary',
 };
 
-export const DOMAIN_GLYPH = {
-  fire: '🔥',
-  bone: '🦴',
-  sun:  '☀️',
-  moon: '🌙',
-  ash:  '⚡',
-};
 
 export const ANIM_PRESETS = {
   ember:     { primary: '#ff9f45', secondary: '#c53a05', duration: 1600 },

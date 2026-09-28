@@ -4,6 +4,7 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
+import Emoji from '../components/Emoji.jsx';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
 import { useMotionConfig, V } from '../lib/motion.js';
@@ -92,7 +93,8 @@ export default function TradingPost() {
         </div>
         {user.blessed && (
           <p className="tiny" style={{ marginTop: 6, color: 'var(--gold)' }}>
-            ✨ Admin blessing active — all Stars purchases are free.
+            <Emoji name="halo_glow" size={14} style={{ verticalAlign: 'text-bottom', marginRight: 4 }} />
+Admin blessing active — all Stars purchases are free.
           </p>
         )}
       </div>
@@ -127,8 +129,9 @@ export default function TradingPost() {
                 <span className="tiny">{it.desc}</span>
               </div>
               <Button variant="primary" onClick={() => buy(it)} disabled={busy}>
-                <Icon name="spark" size={13} style={{ color: '#2a1200' }} />
-                {it.stars} ⭐
+               <Icon name="star" size={13} style={{ color: '#1a0b02' }} />
+{it.stars}
+<Emoji name="star" size={12} style={{ marginLeft: 3 }} />
               </Button>
             </div>
           </div>

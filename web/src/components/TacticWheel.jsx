@@ -4,6 +4,7 @@
 
 import { motion } from 'framer-motion';
 import { useMotionConfig } from '../lib/motion.js';
+import Emoji from './Emoji.jsx';
 import { haptic } from '../lib/haptics.js';
 
 export default function TacticWheel({ tactics, terrain, onPick, cooldown }) {
@@ -29,7 +30,7 @@ export default function TacticWheel({ tactics, terrain, onPick, cooldown }) {
           transform: 'translate(-50%, -50%)',
         }}
       >
-        <span style={{ fontSize: 26, color: '#2a1200' }}>⚔️</span>
+        <Emoji name="war-swords" size={30} />
       </motion.div>
 
       {slots.map((t, i) => {

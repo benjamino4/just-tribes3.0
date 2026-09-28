@@ -3,6 +3,7 @@
 // Wheel of Ash. Free + paid spins. Landing animation on result.
 
 import { useState } from 'react';
+import Emoji from '../components/Emoji.jsx';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
@@ -24,10 +25,11 @@ const FALLBACK = [
   { slot_index: 5,  label: '1k',      kind: 'ember' },
   { slot_index: 6,  label: '+10',     kind: 'renown' },
   { slot_index: 7,  label: '2.5k',    kind: 'ember' },
-  { slot_index: 8,  label: '+10 ⭐',  kind: 'stars' },
+  { slot_index: 8,  label: '+10 ★',  kind: 'stars' },
+{ slot_index: 9,  label: 'Relic',   kind: 'relic' },
   { slot_index: 9,  label: 'Relic',   kind: 'relic' },
   { slot_index: 10, label: '5k',      kind: 'ember' },
-  { slot_index: 11, label: '+50 ⭐',  kind: 'stars' },
+  { slot_index: 11, label: '+50 ★',  kind: 'stars' },
 ];
 
 const TONE = {
@@ -139,7 +141,12 @@ export default function Spin() {
           onClick={doSpin}
           disabled={spinning || (!spin.freeAvailable && spin.paidLeft <= 0)}
         >
-          {spinning ? 'Spinning…' : spin.freeAvailable ? 'Free Spin' : `Spin · ${spin.starsPerSpin || 25} ⭐`}
+          {spinning ? 'Spinning…' : spin.freeAvailable ? 'Free Spin' : (
+  <span className="row" style={{ gap: 6, justifyContent: 'center' }}>
+    Spin · {spin.starsPerSpin || 25}
+    <Emoji name="star" size={14} />
+  </span>
+)}
         </Button>
       </div>
 

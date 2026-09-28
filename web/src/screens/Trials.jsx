@@ -3,6 +3,7 @@
 // Full trials page + minigame sheet (hold / stoke / feed / cry / sift).
 
 import { useState, useRef, useEffect } from 'react';
+import Emoji from '../components/Emoji.jsx';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
@@ -40,7 +41,9 @@ export default function Trials() {
           <div className="glass card">
             <div className="row between">
               <div className="row">
-                <span className="crest-art" style={{ fontSize: 22 }}>{t.glyph || '🔥'}</span>
+                <span className="crest-art">
+  <Emoji name={t.slug ? `trial-${t.slug}` : 'trial-kindle'} size={22} />
+</span>
                 <div className="col" style={{ gap: 1 }}>
                   <b style={{ fontSize: 14 }}>{t.name}</b>
                   <span className="tiny">
@@ -194,7 +197,7 @@ function SiftGame({ onSubmit }) {
             display: 'grid', placeItems: 'center',
           }}
         >
-          <span style={{ fontSize: 18 }}>🌀</span>
+          <Emoji name="trial-sift" size={18} />
         </motion.button>
       ))}
     </div>
