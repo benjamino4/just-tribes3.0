@@ -1,19 +1,19 @@
 // TRIBES-FILE: web/src/screens/Spin.jsx
 // PHASE: 3 — Economy
-// Wheel of Ash. Free + paid spins. Landing animation on result.
+// Wheel of Ash. Free + paid spins.
 
 import { useState } from 'react';
-import Emoji from '../components/Emoji.jsx';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
-import { useMotionConfig, V, SECTION_MOTION } from '../lib/motion.js';
+import { useMotionConfig, V } from '../lib/motion.js';
 import { fmt } from '../lib/format.js';
 import { apiPost } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
 import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
+import Emoji from '../components/Emoji.jsx';
 import { toast } from '../components/Toast.jsx';
 
 const FALLBACK = [
@@ -26,18 +26,17 @@ const FALLBACK = [
   { slot_index: 6,  label: '+10',     kind: 'renown' },
   { slot_index: 7,  label: '2.5k',    kind: 'ember' },
   { slot_index: 8,  label: '+10 ★',  kind: 'stars' },
-{ slot_index: 9,  label: 'Relic',   kind: 'relic' },
   { slot_index: 9,  label: 'Relic',   kind: 'relic' },
   { slot_index: 10, label: '5k',      kind: 'ember' },
   { slot_index: 11, label: '+50 ★',  kind: 'stars' },
 ];
 
 const TONE = {
-  ember:  '#ff9f45',
-  renown: '#c39bff',
-  stars:  '#7cc4ff',
-  relic:  '#5ce39a',
-  empty:  '#7d7466',
+  ember:  '#ff8324',
+  renown: '#a26cd1',
+  stars:  '#5f92d4',
+  relic:  '#8ab06a',
+  empty:  '#877a5c',
 };
 
 const SLICE = 360 / FALLBACK.length;
@@ -80,11 +79,12 @@ export default function Spin() {
       className="col" style={{ gap: 4 }}>
       <div className="row between" style={{ margin: '2px 2px 12px' }}>
         <div className="row" style={{ gap: 10 }}>
-          <button className="chip" style={{ padding: 9, borderRadius: 999 }} onClick={() => { haptic('light'); nav(-1); }}>
+          <button className="chip" style={{ padding: 9, borderRadius: 999 }}
+                  onClick={() => { haptic('light'); nav(-1); }}>
             <Icon name="chevL" size={18} />
           </button>
           <h2 className="display" style={{ fontSize: 22 }}>Wheel of Ash</h2>
-          <Hint text="One free spin daily. Land on a segment to win Ember — or hit the Jackpot. Extra spins can be bought with Stars." />
+          <Hint text="One free spin daily. Land on a segment to win Ember — or hit the Jackpot." />
         </div>
       </div>
 
@@ -96,7 +96,8 @@ export default function Spin() {
             width: 0, height: 0,
             borderLeft: '11px solid transparent',
             borderRight: '11px solid transparent',
-            borderTop: '20px solid var(--gold)',
+            borderTop: '20px solid var(--gold-400)',
+            filter: 'drop-shadow(0 0 8px var(--gold-400))',
           }} />
 
           <motion.div
@@ -105,7 +106,7 @@ export default function Spin() {
             style={{
               width: 250, height: 250, borderRadius: '50%',
               position: 'relative',
-              boxShadow: 'var(--sh-3), inset 0 0 0 6px rgba(255,255,255,.08)',
+              boxShadow: 'var(--sh-3), inset 0 0 0 6px rgba(255,243,208,.08)',
               background: `conic-gradient(${rewards
                 .map((r, i) => `${TONE[r.kind] || TONE.ember} ${i * SLICE}deg ${(i + 1) * SLICE}deg`)
                 .join(',')})`,
@@ -119,7 +120,7 @@ export default function Spin() {
                   left: '50%', top: '50%',
                   transformOrigin: '0 0',
                   transform: `rotate(${i * SLICE + SLICE / 2}deg) translateY(-96px)`,
-                  color: '#2a1200',
+                  color: '#1a0b02',
                   fontWeight: 800,
                   fontSize: r.label?.length > 4 ? 9 : 13,
                 }}
@@ -130,7 +131,7 @@ export default function Spin() {
             <span style={{
               position: 'absolute', inset: '42%', borderRadius: '50%',
               background: 'var(--bg-1)',
-              border: '3px solid rgba(255,255,255,.15)',
+              border: '3px solid rgba(255,243,208,.15)',
             }} />
           </motion.div>
         </div>
@@ -142,11 +143,11 @@ export default function Spin() {
           disabled={spinning || (!spin.freeAvailable && spin.paidLeft <= 0)}
         >
           {spinning ? 'Spinning…' : spin.freeAvailable ? 'Free Spin' : (
-  <span className="row" style={{ gap: 6, justifyContent: 'center' }}>
-    Spin · {spin.starsPerSpin || 25}
-    <Emoji name="star" size={14} />
-  </span>
-)}
+            <span className="row" style={{ gap: 6, justifyContent: 'center' }}>
+              Spin · {spin.starsPerSpin || 25}
+              <Emoji name="star" size={14} />
+            </span>
+          )}
         </Button>
       </div>
 
