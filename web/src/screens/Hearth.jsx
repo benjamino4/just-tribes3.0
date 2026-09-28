@@ -1,20 +1,21 @@
 // =====================================================================
-// Hearth — the home screen.
-//   • Living Fire (streak-driven, tap-to-extend, dims on loss)
-//   • Home War tile (live, vibrates, resolves)
-//   • 6 primary tiles + More sheet
+// Hearth — home screen.
+//   • Bonfire banner (conditional)
+//   • First Pack banner (conditional)
+//   • Home War tile — vibrates while a war is active
+//   • Living Fire hero with tap-to-extend
+//   • Six primary tiles + More sheet
 //   • Daily tasks
-//   • Bonfire + First Pack banners
 // =====================================================================
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { motion, AnimatePresence } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
 import { useMotionConfig, V, staggerParent, SECTION_MOTION } from '../lib/motion.js';
 import { fmt, shortTime } from '../lib/format.js';
 import { apiPost } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
-import Campfire from '../components/Campfire.jsx';
+import LivingFire, { fireStateFor } from '../components/LivingFire.jsx';
 import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
@@ -22,31 +23,42 @@ import Sheet from '../components/Sheet.jsx';
 import { toast } from '../components/Toast.jsx';
 
 const PRIMARY_TILES = [
-  { to: '/war',    name: 'War Room',     icon: 'bolt',  shape: 'shield', tone: '#e0562e' },
-  { to: '/trials', name: 'Trials',       icon: 'ranks', shape: 'blob',   tone: '#ff9745' },
-  { to: '/forge',  name: 'The Forge',    icon: 'store', shape: 'curved', tone: '#e8b866' },
-  { to: '/spin',   name: 'Wheel of Ash', icon: 'spark', shape: 'circle', tone: '#7aa8c4' },
-  { to: '/vault',  name: 'The Vault',    icon: 'crown', shape: 'soft',   tone: '#a878c9' },
-  { to: '/ash',    name: 'Gather the Ash', icon: 'ash', shape: 'blob',   tone: '#8a7f6e' },
+  { to: '/war',    name: 'War Room',       icon: 'swords',  tone: 'var(--blood-400)', shape: 'shield' },
+  { to: '/trials', name: 'Trials',         icon: 'bolt',    tone: 'var(--ember-400)', shape: 'blob'   },
+  { to: '/forge',  name: 'The Forge',      icon: 'urn',     tone: 'var(--gold-300)',  shape: 'curved' },
+  { to: '/spin',   name: 'Wheel of Ash',   icon: 'crystal', tone: 'var(--lapis-400)', shape: 'circle' },
+  { to: '/vault',  name: 'The Vault',      icon: 'relic',   tone: 'var(--gold-400)',  shape: 'soft'   },
+  { to: '#ash',    name: 'Gather the Ash', icon: 'ash',     tone: 'var(--bone-200)',  shape: 'blob'   },
 ];
+
+const SHAPES = {
+  soft:   26,
+  blob:   '46% 54% 42% 58% / 55% 45% 55% 45%',
+  circle: '50%',
+  curved: 40,
+  shield: '32px 32px 46% 46% / 32px 32px 60% 60%',
+};
 
 const MORE_GROUPS = [
   {
     label: 'Tribe',
     items: [
-      { to: '/kiva',       name: 'The Kiva',     icon: 'fire',  sub: 'Tribe chat' },
-      { to: '/moot',       name: 'Council',      icon: 'crown', sub: 'Elections & roles' },
-      { to: '/pyre',       name: 'The Pyre',     icon: 'fire',  sub: 'Treasury' },
-      { to: '/watchtower', name: 'Watchtower',   icon: 'spark', sub: 'Spies & alliances' },
-      { to: '/chronicle',  name: 'Chronicle',    icon: 'ranks', sub: 'War history' },
+      { to: '/kiva',       name: 'The Kiva',     icon: 'hearth', sub: 'Tribe chat' },
+      { to: '/moot',       name: 'Council',      icon: 'crown',  sub: 'Elections & roles' },
+      { to: '/pyre',       name: 'The Pyre',     icon: 'pyre',   sub: 'Treasury' },
+      { to: '/watchtower', name: 'Watchtower',   icon: 'spy',    sub: 'Spies & alliances' },
+      { to: '/chronicle',  name: 'Chronicle',    icon: 'scroll', sub: 'War history' },
     ],
   },
   {
     label: 'Personal',
     items: [
-      { to: '/profile',    name: 'Profile',      icon: 'user',  sub: 'Identity' },
-      { to: '/inbox',      name: 'Inbox',        icon: 'spark', sub: 'Notifications' },
-      { to: '/',           name: 'Streak Trail', icon: 'fire',  sub: 'Daily ritual' },
+      { to: '/profile',      name: 'Profile',      icon: 'user',      sub: 'Identity' },
+      { to: '/achievements', name: 'Achievements', icon: 'crown',     sub: 'Badges & milestones' },
+      { to: '/quests/social', name: 'Social Quests', icon: 'megaphone', sub: 'Complete for rewards' },
+      { to: '/inbox',        name: 'Inbox',        icon: 'bell',      sub: 'Notifications' },
+      { to: '/renown',       name: 'Path of Renown', icon: 'crown',   sub: 'Role ladder' },
+      { to: '/season',       name: 'Championship', icon: 'crown',     sub: 'Season standings' },
     ],
   },
   {
@@ -54,23 +66,11 @@ const MORE_GROUPS = [
     items: [
       { to: '/standings',  name: 'Standings',    icon: 'ranks', sub: 'Global ranks' },
       { to: '/settlement', name: 'Settlement',   icon: 'lands', sub: 'Buildings' },
-      { to: '/post',       name: 'Trading Post', icon: 'store', sub: 'Stars & TON' },
+      { to: '/post',       name: 'Trading Post', icon: 'store', sub: 'Stars & Obsidian' },
+      { to: '/ledger',     name: 'War Ledger',   icon: 'coin',  sub: 'Bet on live wars' },
     ],
   },
 ];
-
-// ---------- Living Fire derivation ----------
-function fireStateFor(streak) {
-  const s = Number(streak) || 0;
-  if (s <= 0)  return { size: 120, flames: 0, embers: 0,  tone: 'cold',    lit: false };
-  if (s < 3)   return { size: 160, flames: 2, embers: 3,  tone: 'flicker', lit: true };
-  if (s < 7)   return { size: 180, flames: 3, embers: 5,  tone: 'warm',    lit: true };
-  if (s < 14)  return { size: 200, flames: 4, embers: 8,  tone: 'bright',  lit: true };
-  if (s < 30)  return { size: 220, flames: 5, embers: 12, tone: 'hot',     lit: true };
-  if (s < 60)  return { size: 240, flames: 6, embers: 16, tone: 'white',   lit: true };
-  if (s < 100) return { size: 260, flames: 8, embers: 22, tone: 'gold',    lit: true };
-  return             { size: 300, flames: 10, embers: 30, tone: 'eternal', lit: true };
-}
 
 export default function Hearth() {
   const nav = useNavigate();
@@ -140,7 +140,7 @@ export default function Hearth() {
   const myScore  = war ? Number(war.attacker_score) : 0;
   const foeScore = war ? Number(war.defender_score) : 0;
   const endsMs = war ? new Date(war.end_at).getTime() - Date.now() : 0;
-  const canDeclare = ['Chief','Head','Elder'].includes(user.role);
+  const canDeclare = ['Chief', 'Head', 'Elder'].includes(user.role);
 
   return (
     <motion.div
@@ -166,7 +166,7 @@ export default function Hearth() {
             borderColor: 'rgba(255,180,100,.4)',
           }}
         >
-          <Icon name="bolt" size={18} style={{ color: 'var(--gold)' }} />
+          <Icon name="bolt" size={18} style={{ color: 'var(--gold-300)' }} />
           <div className="grow">
             <b style={{ fontSize: 14 }}>{bonfire.title}</b>
             <div className="tiny">×{bonfire.multiplier} · ends in {shortTime(bonfire.ends_in_ms)}</div>
@@ -190,7 +190,7 @@ export default function Hearth() {
           }}
           onClick={() => { haptic('light'); setFirstPackSheet(true); }}
         >
-          <Icon name="spark" size={26} style={{ color: 'var(--gold)' }} />
+          <Icon name="star" size={26} style={{ color: 'var(--gold-300)' }} />
           <div className="grow">
             <b style={{ fontSize: 14 }}>First Pack available</b>
             <div className="tiny">+{fmt(firstPack.ember)} Ember waiting</div>
@@ -227,16 +227,8 @@ export default function Hearth() {
           <Hint text="Your Hearth tracks your daily streak. Feed it every day to earn Ember and climb milestone rewards." />
         </div>
 
-        <div
-          style={{
-            transform: fireExtended ? 'scale(1.55)' : 'scale(1)',
-            transformOrigin: 'center top',
-            transition: 'transform .4s cubic-bezier(.34,1.3,.5,1)',
-            filter: fireExtended ? 'none' : 'none',
-            marginTop: fireExtended ? 20 : 4,
-          }}
-        >
-          <Campfire streak={streak} lit={fire.lit} />
+        <div style={{ marginTop: fireExtended ? 20 : 4 }}>
+          <LivingFire streak={streak} extended={fireExtended} />
         </div>
 
         {!fireExtended && (
@@ -250,13 +242,15 @@ export default function Hearth() {
             className="tiny"
             style={{ marginTop: 90, textAlign: 'center', letterSpacing: '.02em' }}
           >
-            The flame remembers <b style={{ color: 'var(--ember-200)' }}>{streak} days</b>.
+            The flame remembers{' '}
+            <b style={{ color: 'var(--ember-200)' }}>{streak} days</b>.
           </p>
         )}
 
         {!fireExtended && (
           <p className="tiny" style={{ margin: '4px 0 14px' }}>
-            Feed it daily · <b style={{ color: 'var(--ember-200)' }}>{streak} days</b>
+            Feed it daily ·{' '}
+            <b style={{ color: 'var(--ember-200)' }}>{streak} days</b>
           </p>
         )}
 
@@ -281,19 +275,12 @@ export default function Hearth() {
           disabled={!!checkinDone}
           style={{ marginTop: fireExtended ? 6 : 0, position: 'relative', zIndex: 2 }}
         >
-          <Icon name="fire" size={20} />
-          {checkinDone ? 'Fire fed today' : `Feed the Fire · +120`}
+          <Icon name="hearth" size={20} />
+          {checkinDone ? 'Fire fed today' : 'Feed the Fire · +120'}
         </Button>
 
         {fireExtended && (
-          <div
-            className="tiny"
-            style={{
-              marginTop: 10,
-              opacity: 0.6,
-              transition: 'opacity .4s ease .6s',
-            }}
-          >
+          <div className="tiny" style={{ marginTop: 10, opacity: 0.6 }}>
             Streak {streak} · buffs +{Math.floor(streak / 7) * 10}% ember
           </div>
         )}
@@ -315,20 +302,30 @@ export default function Hearth() {
             animate={{ opacity: 1, y: 0 }}
             transition={{ ...M.buoyant, delay: i * 0.05 }}
             whileTap={{ scale: 0.95 }}
-            onClick={() => { haptic('medium'); nav(t.to); }}
+            onClick={() => {
+              haptic('medium');
+              if (t.to === '#ash') { setAshSheet(true); return; }
+              nav(t.to);
+            }}
             className="glass"
             style={{
-              padding: 16,
+              padding: 18,
               textAlign: 'left',
-              borderRadius: 'var(--r-lg)',
+              borderRadius: typeof SHAPES[t.shape] === 'number' ? SHAPES[t.shape] : 'var(--r-lg)',
               minHeight: 118,
               display: 'flex',
               flexDirection: 'column',
               justifyContent: 'space-between',
               overflow: 'hidden',
+              borderColor: 'var(--glass-brd)',
+              background: 'linear-gradient(160deg, rgba(31,29,40,0.55), rgba(11,10,16,0.72))',
+              boxShadow: '0 10px 30px rgba(0,0,0,.45), inset 0 1px 0 rgba(255,243,208,0.08)',
             }}
           >
-            <Icon name={t.icon} size={34} style={{ color: t.tone }} />
+            <Icon name={t.icon} size={34} style={{
+              color: t.tone,
+              filter: `drop-shadow(0 0 12px ${t.tone}44)`,
+            }} />
             <div className="row between" style={{ width: '100%' }}>
               <b style={{ fontSize: 15 }}>{t.name}</b>
               <Icon name="chevron" size={16} style={{ color: 'var(--ink-dim)' }} />
@@ -352,7 +349,7 @@ export default function Hearth() {
           gap: 12,
         }}
       >
-        <Icon name="gear" size={22} style={{ color: 'var(--gold)' }} />
+        <Icon name="gear" size={22} style={{ color: 'var(--gold-300)' }} />
         <div className="grow" style={{ textAlign: 'left' }}>
           <b style={{ fontSize: 14 }}>More</b>
           <div className="tiny">Everything else</div>
@@ -384,9 +381,9 @@ export default function Hearth() {
                           }}
                         >
                           <Icon
-                            name={t.claimed ? 'check' : 'spark'}
+                            name={t.claimed ? 'check' : 'bolt'}
                             size={18}
-                            style={{ color: t.claimed ? 'var(--good)' : 'var(--gold)' }}
+                            style={{ color: t.claimed ? 'var(--good)' : 'var(--gold-300)' }}
                           />
                         </span>
                         <div className="col" style={{ gap: 1 }}>
@@ -453,9 +450,10 @@ export default function Hearth() {
                 className="tiny"
                 style={{
                   textTransform: 'uppercase',
-                  letterSpacing: '.08em',
+                  letterSpacing: '.10em',
                   marginBottom: 8,
                   display: 'block',
+                  color: 'var(--bone-200)',
                 }}
               >
                 {g.label}
@@ -472,12 +470,12 @@ export default function Hearth() {
                       gap: 12,
                       padding: '12px 14px',
                       borderRadius: 'var(--r-md)',
-                      background: 'rgba(255,255,255,.04)',
+                      background: 'rgba(255,243,208,.04)',
                       border: '1px solid var(--glass-brd)',
                       textAlign: 'left',
                     }}
                   >
-                    <Icon name={it.icon} size={22} style={{ color: 'var(--gold)' }} />
+                    <Icon name={it.icon} size={22} style={{ color: 'var(--gold-300)' }} />
                     <div className="grow" style={{ textAlign: 'left' }}>
                       <b style={{ fontSize: 14 }}>{it.name}</b>
                       <div className="tiny">{it.sub}</div>
@@ -506,7 +504,7 @@ function Stat({ label, value }) {
 /* ====================================================================
    HOME WAR TILE
    States:
-     - active   : live score + timer, subtle vibrate
+     - active   : live score + timer, subtle vibrate, swords clash
      - leader   : "declare one" prompt (Chief/Head/Elder)
      - peaceful : quiet strip
    ==================================================================== */
@@ -518,16 +516,8 @@ function WarTile({ war, myScore, foeScore, endsMs, canDeclare, onTap, M }) {
     return (
       <motion.div
         onClick={onTap}
-        animate={{
-          x: [0, -1.2, 1.2, -0.8, 0.8, 0],
-          y: [0, 0, 0, 0, 0, 0],
-        }}
-        transition={{
-          duration: 1.4,
-          repeat: Infinity,
-          repeatDelay: 0.4,
-          ease: 'easeInOut',
-        }}
+        animate={{ x: [0, -1.2, 1.2, -0.8, 0.8, 0] }}
+        transition={{ duration: 1.4, repeat: Infinity, repeatDelay: 0.4, ease: 'easeInOut' }}
         className="glass"
         style={{
           padding: '12px 16px',
@@ -536,34 +526,33 @@ function WarTile({ war, myScore, foeScore, endsMs, canDeclare, onTap, M }) {
           alignItems: 'center',
           gap: 12,
           cursor: 'pointer',
-          borderColor: 'rgba(224,86,46,.55)',
-          boxShadow: '0 0 24px rgba(224,86,46,.25), var(--sh-inset-hi)',
+          borderColor: 'rgba(208,72,58,.55)',
+          boxShadow: '0 0 24px rgba(208,72,58,.25), var(--sh-inset-hi)',
           position: 'relative',
           overflow: 'hidden',
         }}
       >
-        {/* Two clashing swords at the left */}
         <div style={{ position: 'relative', width: 26, height: 26, flex: '0 0 auto' }}>
           <motion.span
             animate={{ rotate: [-18, -8, -18] }}
             transition={{ duration: 2, repeat: Infinity }}
             style={{ position: 'absolute', left: 0, top: 0 }}
           >
-            <Icon name="bolt" size={18} style={{ color: '#ff9745' }} />
+            <Icon name="bolt" size={18} style={{ color: 'var(--ember-300)' }} />
           </motion.span>
           <motion.span
             animate={{ rotate: [18, 8, 18] }}
             transition={{ duration: 2, repeat: Infinity }}
             style={{ position: 'absolute', right: 0, top: 0 }}
           >
-            <Icon name="bolt" size={18} style={{ color: '#ff9745' }} />
+            <Icon name="bolt" size={18} style={{ color: 'var(--ember-300)' }} />
           </motion.span>
         </div>
 
         <div className="grow" style={{ minWidth: 0 }}>
           <div className="row between" style={{ marginBottom: 4 }}>
-            <b style={{ fontSize: 13, color: '#ffb876' }}>War vs {war.opponent}</b>
-            <span className="tiny" style={{ color: 'rgba(255,180,118,.9)' }}>
+            <b style={{ fontSize: 13, color: 'var(--ember-200)' }}>War vs {war.opponent}</b>
+            <span className="tiny" style={{ color: 'rgba(255,200,140,.9)' }}>
               {shortTime(endsMs)} left
             </span>
           </div>
@@ -579,26 +568,21 @@ function WarTile({ war, myScore, foeScore, endsMs, canDeclare, onTap, M }) {
             <motion.div
               animate={{ width: myPct + '%' }}
               transition={M.ember}
-              style={{
-                background: 'linear-gradient(90deg,#a83b02,#ff9745)',
-              }}
+              style={{ background: 'linear-gradient(90deg,#8f3402,#ff8324)' }}
             />
-            <div style={{ flex: 1, background: 'linear-gradient(90deg,#5a3a7a,#8b5cf6)' }} />
+            <div style={{ flex: 1, background: 'linear-gradient(90deg,#4c1d95,#8b5cf6)' }} />
           </div>
           <div className="row between" style={{ marginTop: 4 }}>
-            <span className="tiny tabular" style={{ color: 'var(--gold)' }}>
+            <span className="tiny tabular" style={{ color: 'var(--gold-300)' }}>
               {fmt(myScore)} – {fmt(foeScore)}
             </span>
-            <span
-              className="tiny"
-              style={{ color: winning ? 'var(--good)' : '#ff8a8a' }}
-            >
+            <span className="tiny" style={{ color: winning ? 'var(--good)' : 'var(--blood-200)' }}>
               {winning ? 'Winning' : 'Behind'}
             </span>
           </div>
         </div>
 
-        <Icon name="chevron" size={18} style={{ color: 'rgba(255,180,118,.8)' }} />
+        <Icon name="chevron" size={18} style={{ color: 'rgba(255,200,140,.8)' }} />
       </motion.div>
     );
   }
@@ -616,10 +600,10 @@ function WarTile({ war, myScore, foeScore, endsMs, canDeclare, onTap, M }) {
           alignItems: 'center',
           gap: 12,
           cursor: 'pointer',
-          borderColor: 'rgba(232,184,102,.35)',
+          borderColor: 'rgba(239,193,104,.35)',
         }}
       >
-        <Icon name="bolt" size={22} style={{ color: 'var(--gold)' }} />
+        <Icon name="bolt" size={22} style={{ color: 'var(--gold-300)' }} />
         <div className="grow">
           <b style={{ fontSize: 14 }}>No war rages</b>
           <div className="tiny">Declare one from the War Room</div>
