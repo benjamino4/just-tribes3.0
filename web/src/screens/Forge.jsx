@@ -4,10 +4,9 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Emoji from '../components/Emoji.jsx';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
-import { useMotionConfig, V, SECTION_MOTION, staggerParent } from '../lib/motion.js';
+import { useMotionConfig, V, staggerParent } from '../lib/motion.js';
 import { fmt } from '../lib/format.js';
 import { apiGet, apiPost } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
@@ -15,6 +14,7 @@ import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
 import PackReveal from '../components/PackReveal.jsx';
+import Emoji from '../components/Emoji.jsx';
 import { toast } from '../components/Toast.jsx';
 
 export default function Forge() {
@@ -47,11 +47,8 @@ export default function Forge() {
       setRevealing(r);
       reload();
     } catch (e) {
-      if (e.data?.need != null) {
-        toast(`Not enough Stars · need ${e.data.need}`, 'bad');
-      } else {
-        toast(e.message || 'Could not open the pack', 'bad');
-      }
+      if (e.data?.need != null) toast(`Not enough Stars · need ${e.data.need}`, 'bad');
+      else toast(e.message || 'Could not open the pack', 'bad');
     }
   }
 
@@ -75,14 +72,15 @@ export default function Forge() {
         <div className="glass card" style={{ marginBottom: 6 }}>
           <div className="row between">
             <b style={{ fontSize: 14 }}>Your Stars</b>
-            <span className="chip" style={{ color: 'var(--gold)' }}>
-              <Icon name="spark" size={14} style={{ color: 'var(--gold)' }} />
+            <span className="chip gold">
+              <Icon name="star" size={14} style={{ color: 'var(--gold-300)' }} />
               <b className="tabular">{fmt(user.stars)}</b>
             </span>
           </div>
           {user.blessed && (
-            <p className="tiny" style={{ marginTop: 6, color: 'var(--gold)' }}>
-              Admin blessing active — caches cost no Stars.
+            <p className="tiny" style={{ marginTop: 6, color: 'var(--gold-300)' }}>
+              <Emoji name="halo_glow" size={14} style={{ verticalAlign: 'text-bottom', marginRight: 4 }} />
+              Warden blessing active — caches cost no Stars.
             </p>
           )}
         </div>
@@ -90,7 +88,8 @@ export default function Forge() {
 
       {loading && <p className="muted" style={{ padding: 12 }}>Loading caches…</p>}
 
-      <motion.div variants={staggerParent(0.06)} initial="initial" animate="animate" style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+      <motion.div variants={staggerParent(0.06)} initial="initial" animate="animate"
+        style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {packs.map((p) => {
           const preset = p.anim_preset || 'ember';
           return (
@@ -105,14 +104,13 @@ export default function Forge() {
                       borderRadius: 16,
                       display: 'grid', placeItems: 'center',
                       background: preset === 'cursed'
-                        ? 'radial-gradient(circle at 30% 25%, #8b5cf6, #2a1020)'
+                        ? 'radial-gradient(circle at 30% 25%, #a26cd1, #2a1020)'
                         : preset === 'goldburst'
-                        ? 'radial-gradient(circle at 30% 25%, #ffd27a, #2a1200)'
+                        ? 'radial-gradient(circle at 30% 25%, #efc168, #2a1200)'
                         : preset === 'shards'
-                        ? 'radial-gradient(circle at 30% 25%, #7cc4ff, #102030)'
-                        : 'radial-gradient(circle at 30% 25%, #ff9f45, #2a1200)',
-                      boxShadow: '0 8px 24px rgba(0,0,0,.45)',
-                      fontSize: 30,
+                        ? 'radial-gradient(circle at 30% 25%, #5f92d4, #102030)'
+                        : 'radial-gradient(circle at 30% 25%, #ff8324, #2a1200)',
+                      boxShadow: '0 8px 24px rgba(0,0,0,.5)',
                     }}
                   >
                     <Emoji name={preset === 'cursed' ? 'curse-key' : 'relic-vase'} size={34} />
@@ -134,13 +132,10 @@ export default function Forge() {
                 </div>
 
                 <div className="row" style={{ gap: 8, marginTop: 14 }}>
-                  <Button
-                    variant="primary" block haptic="heavy"
-                    onClick={() => openPack(p.slug)}
-                  >
-                   <Icon name="star" size={14} style={{ color: '#1a0b02' }} />
-Open · {p.price_stars}
-<Emoji name="star" size={14} style={{ marginLeft: 4 }} />
+                  <Button variant="primary" block haptic="heavy" onClick={() => openPack(p.slug)}>
+                    <Icon name="star" size={14} style={{ color: '#1a0b02' }} />
+                    Open · {p.price_stars}
+                    <Emoji name="star" size={13} style={{ marginLeft: 3 }} />
                   </Button>
                 </div>
               </div>
