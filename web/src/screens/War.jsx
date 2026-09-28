@@ -2,8 +2,7 @@
 // PHASE: 6 — War
 // The War Stage: front-line visualization, live score, tactic wheel.
 
-import { useState, useEffect, useRef } from 'react';
-import Emoji from '../components/Emoji.jsx';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
@@ -15,6 +14,7 @@ import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
 import TacticWheel from '../components/TacticWheel.jsx';
+import Emoji from '../components/Emoji.jsx';
 import { toast } from '../components/Toast.jsx';
 
 export default function War() {
@@ -29,12 +29,6 @@ export default function War() {
   const [selectedFront, setSelectedFront] = useState(0);
   const [busy, setBusy] = useState(false);
   const [particles, setParticles] = useState([]);
-  const [tick, setTick] = useState(0);
-
-  useEffect(() => {
-    const id = setInterval(() => setTick((t) => t + 1), 1000);
-    return () => clearInterval(id);
-  }, []);
 
   useEffect(() => {
     (async () => {
@@ -62,7 +56,6 @@ export default function War() {
     if (busy || !war) return;
     setBusy(true);
     try {
-      // spawn particles from wheel to selected front
       spawnParticles();
       const r = await apiPost('/api/war/action', { front: selectedFront, kind });
       toast(`+${fmt(r.points)} pts`, 'good');
@@ -91,8 +84,11 @@ export default function War() {
     return (
       <motion.div variants={V.page} initial="initial" animate="animate" exit="exit" transition={M.buoyant}>
         <div className="glass card" style={{ textAlign: 'center', padding: 28 }}>
-          <h2 className="display" style={{ fontSize: 22 }}>No war to wage</h2>
-          <Button variant="primary" block style={{ marginTop: 14 }} onClick={() => nav('/longhouse')}>Join a Tribe</Button>
+          <Emoji name="war-swords" size={48} />
+          <h2 className="display" style={{ fontSize: 22, marginTop: 12 }}>No war to wage</h2>
+          <Button variant="primary" block style={{ marginTop: 14 }} onClick={() => nav('/longhouse')}>
+            Join a Tribe
+          </Button>
         </div>
       </motion.div>
     );
@@ -114,7 +110,7 @@ export default function War() {
             <Icon name="chevL" size={18} />
           </button>
           <h2 className="display" style={{ fontSize: 22 }}>The War Room</h2>
-          <Hint text="Wars are fought across three fronts, each with its own terrain. Terrain favours some tactics and resists others. Beaten tribes earn Vengeance. Allies cannot be matched against each other." />
+          <Hint text="Wars are fought across three fronts, each with its own terrain. Terrain favours some tactics and resists others." />
         </div>
       </div>
 
@@ -150,14 +146,14 @@ export default function War() {
             <div className="war-foe">
               <div className="war-banner">
                 <span className="crest">
-                  <Icon name="tribe" size={22} style={{ color: '#2a1200' }} />
+                  <Icon name="tribe" size={22} style={{ color: '#1f1403' }} />
                 </span>
                 <b style={{ fontSize: 13 }}>{war.attacker.name}</b>
               </div>
               <span className="war-vs display">VS</span>
               <div className="war-banner foe">
                 <span className="crest">
-                  <Icon name="tribe" size={22} style={{ color: '#fff' }} />
+                  <Icon name="tribe" size={22} style={{ color: '#f0e6cf' }} />
                 </span>
                 <b style={{ fontSize: 13 }}>{war.defender.name}</b>
               </div>
@@ -174,19 +170,17 @@ export default function War() {
                 <motion.div
                   animate={{ width: myScore / total * 100 + '%' }}
                   transition={M.ember}
-                  style={{ background: 'linear-gradient(90deg,#c53a05,#ff9f45)' }}
+                  style={{ background: 'linear-gradient(90deg,#8f3402,#ff8324)' }}
                 />
                 <motion.div
                   animate={{ width: foeScore / total * 100 + '%' }}
                   transition={M.ember}
-                  style={{ background: 'linear-gradient(90deg,#8b5cf6,#6b4a8b)' }}
+                  style={{ background: 'linear-gradient(90deg,#4c1d95,#8b5cf6)' }}
                 />
               </div>
               <div className="row between" style={{ marginTop: 8 }}>
                 <b className="tabular" style={{ color: 'var(--ember-300)' }}>{fmt(myScore)}</b>
-                <span className="chip" style={{
-                  color: myScore >= foeScore ? 'var(--good)' : '#ff8a8a',
-                }}>
+                <span className="chip" style={{ color: myScore >= foeScore ? 'var(--good)' : 'var(--blood-200)' }}>
                   {myScore >= foeScore ? 'Winning' : 'Behind'} · {shortTime(endsMs)}
                 </span>
                 <b className="tabular" style={{ color: '#c9b0ff' }}>{fmt(foeScore)}</b>
@@ -206,8 +200,8 @@ export default function War() {
                     onClick={() => { haptic('select'); setSelectedFront(f.idx); }}
                   >
                     <span className="war-front-glyph">
-  <Emoji name={`terrain-${f.terrain}`} size={22} />
-</span>
+                      <Emoji name={`terrain-${f.terrain}`} size={22} />
+                    </span>
                     <span className="war-front-name">{f.name}</span>
                     <div className="war-front-bars">
                       <i style={{ width: (myF / tot * 100) + '%' }} />
@@ -221,7 +215,9 @@ export default function War() {
 
           {tactics && (
             <div className="glass card" style={{ position: 'relative' }}>
-              <b style={{ fontSize: 13, color: 'var(--ink-dim)', textTransform: 'uppercase' }}>Choose a tactic</b>
+              <b style={{ fontSize: 13, color: 'var(--ink-dim)', textTransform: 'uppercase', letterSpacing: '0.08em' }}>
+                Choose a tactic
+              </b>
               <div style={{ margin: '12px 0' }}>
                 <TacticWheel
                   tactics={tactics.offensive || []}
@@ -231,23 +227,22 @@ export default function War() {
                 />
               </div>
               {hint?.hint && (
-                <p className="tiny" style={{ marginTop: 8, textAlign: 'center', color: 'var(--gold)' }}>
+                <p className="tiny" style={{ marginTop: 8, textAlign: 'center', color: 'var(--gold-300)' }}>
                   <Emoji name="bulb" size={14} style={{ verticalAlign: 'text-bottom', marginRight: 4 }} />
-{hint.hint}
+                  {hint.hint}
                 </p>
               )}
             </div>
           )}
 
-          {/* particle layer */}
           {particles.map((p) => (
             <span
               key={p.id}
               className="war-particle"
               style={{
                 left: '50%', top: '50%',
-                ['--dx']: p.dx + 'px',
-                ['--dy']: p.dy + 'px',
+                '--dx': p.dx + 'px',
+                '--dy': p.dy + 'px',
               }}
             />
           ))}
