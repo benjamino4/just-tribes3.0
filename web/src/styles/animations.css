@@ -1,6 +1,6 @@
 /* =====================================================================
    TRIBES — animations (Obsidian Glass v3)
-   Twelve orchestrated keyframe sets + reduced tier rules.
+   Twelve named keyframe systems + reduced tier rules.
    ===================================================================== */
 
 /* 1. emoji freeze in reduced tier */
@@ -42,7 +42,7 @@
 }
 :root[data-fx="reduced"] .glass.strong { animation: none !important; }
 
-/* 5. hero card idle breathing (very subtle, adds life to still cards) */
+/* 5. hero card idle breathing */
 @keyframes heroBreath {
   0%, 100% { transform: translateY(0) scale(1); }
   50%      { transform: translateY(-1px) scale(1.002); }
@@ -51,27 +51,9 @@
 :root[data-fx="reduced"] .glass.hero { animation: none; }
 @media (prefers-reduced-motion: reduce) { .glass.hero { animation: none; } }
 
-/* 6. gold hairline shimmer for special chips */
-@keyframes goldShimmer {
-  0%, 40%  { background-position: -200% 0; }
-  100%     { background-position: 200% 0; }
-}
-.chip.gold::before {
-  content: '';
-  position: absolute; inset: 0;
-  border-radius: inherit;
-  background: linear-gradient(115deg,
-    transparent 30%,
-    rgba(255, 226, 161, 0.30) 50%,
-    transparent 70%);
-  background-size: 200% 100%;
-  animation: goldShimmer 5s var(--ease-soft) infinite;
-  pointer-events: none;
-}
-.chip.gold { position: relative; overflow: hidden; }
-:root[data-fx="reduced"] .chip.gold::before { display: none; }
+/* 6. gold hairline shimmer for special chips (defined in components.css) */
 
-/* 7. orb drift — ambient background particles (used by hero cards) */
+/* 7. orb drift — ambient background particles */
 @keyframes orbDriftA {
   0%   { transform: translate(0, 0) scale(1); }
   50%  { transform: translate(12px, -8px) scale(1.05); }
@@ -83,7 +65,7 @@
   100% { transform: translate(0, 0) scale(1.04); }
 }
 
-/* 8. tab pill pop (used when switching tabs) */
+/* 8. tab pill pop */
 @keyframes tabPop {
   0%   { transform: scale(1); }
   50%  { transform: scale(0.94); }
@@ -91,21 +73,21 @@
 }
 .tab:active .tab-icon-wrap { animation: tabPop 0.35s var(--ease-spring); }
 
-/* 9. spark — a small flash used for chest / achievement pulses */
+/* 9. spark flash */
 @keyframes sparkFlash {
   0%   { opacity: 0; transform: scale(0.6); }
   30%  { opacity: 1; transform: scale(1.1); }
   100% { opacity: 0; transform: scale(1.4); }
 }
 
-/* 10. ember rise — reusable rising ember */
+/* 10. ember rise — reusable */
 @keyframes emberRise {
   0%   { transform: translateY(0) scale(1); opacity: 0; }
   15%  { opacity: 1; }
   100% { transform: translateY(-180px) scale(0.18); opacity: 0; }
 }
 
-/* 11. gold ring pulse — used around avatars, chiefs, wonders */
+/* 11. gold ring pulse */
 @keyframes goldRingPulse {
   0%, 100% {
     box-shadow:
@@ -120,7 +102,7 @@
 }
 .ring-gold { animation: goldRingPulse 3s var(--ease-soft) infinite; }
 
-/* 12. horn shake — used when a war is declared */
+/* 12. horn shake */
 @keyframes hornShake {
   0%, 100% { transform: translateX(0) rotate(0); }
   20%      { transform: translateX(-2px) rotate(-1.5deg); }
@@ -129,3 +111,28 @@
   80%      { transform: translateX( 1.6px) rotate( 1deg); }
 }
 .horn-shake { animation: hornShake 0.7s var(--ease-soft); }
+
+/* ---------- LIVE PULSE (used by war arena, badge dots) ---------- */
+@keyframes livePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50%      { opacity: 0.55; transform: scale(1.4); }
+}
+
+/* ---------- TICKER SLIDE (war feed) ---------- */
+@keyframes tickerSlide {
+  0%   { transform: translateX(0); }
+  100% { transform: translateX(-50%); }
+}
+
+/* ---------- REDUCED TIER CATCH-ALL ---------- */
+:root[data-fx="reduced"] *,
+:root[data-fx="reduced"] *::before,
+:root[data-fx="reduced"] *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+}
+:root[data-fx="reduced"] .btn,
+:root[data-fx="reduced"] .chip {
+  transition-duration: var(--dur-1) !important;
+}

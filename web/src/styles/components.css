@@ -2,7 +2,7 @@
    TRIBES — Component primitives (Obsidian Glass v3)
    ===================================================================== */
 
-/* ---------- glass base ---------- */
+/* ---------- GLASS ---------- */
 .glass {
   position: relative;
   background:
@@ -23,8 +23,6 @@
               box-shadow var(--dur-2) var(--ease-ember),
               border-color var(--dur-2) var(--ease-soft);
 }
-
-/* hero variant — used for the hearth card, Longhouse header, War stage, etc. */
 .glass.hero {
   background:
     radial-gradient(140% 95% at 50% 120%, rgba(242,106,16,0.14), transparent 58%),
@@ -38,15 +36,11 @@
     var(--sh-inset-hi);
   border-color: var(--glass-brd-warm);
 }
-
-/* strong — topbar, tabbar, sheets */
 .glass.strong {
   background: var(--glass-bg-strong);
   -webkit-backdrop-filter: blur(30px) saturate(140%);
           backdrop-filter: blur(30px) saturate(140%);
 }
-
-/* sunken — inputs, wells, emoji cells */
 .glass.sunken {
   background: var(--glass-bg-sunken);
   box-shadow:
@@ -54,8 +48,6 @@
     inset 0 -1px 0 rgba(255,243,208,0.03),
     var(--sh-1);
 }
-
-/* raise — floating chips, badges */
 .glass.raise {
   background: var(--glass-bg-raise);
   box-shadow:
@@ -63,15 +55,12 @@
     0 8px 24px rgba(0, 0, 0, 0.5),
     var(--sh-inset-hi);
 }
-
-/* deep — modals behind modals */
 .glass.deep { background: var(--glass-bg-deep); }
 
-/* ---------- card ---------- */
 .card { padding: 16px; }
 .card + .card { margin-top: 14px; }
 
-/* ---------- button (rebuilt) ---------- */
+/* ---------- BUTTONS ---------- */
 .btn {
   --bg: var(--glass-bg-strong);
   position: relative;
@@ -91,7 +80,6 @@
   -webkit-tap-highlight-color: transparent;
 }
 .btn::after {
-  /* press-ripple layer — appears on :active */
   content: '';
   position: absolute;
   inset: 0;
@@ -103,10 +91,8 @@
 }
 .btn:active::after { opacity: 1; }
 .btn:active { transform: scale(0.965); filter: brightness(1.05); }
-
 .btn.block { width: 100%; }
 
-/* primary — ember */
 .btn.primary {
   background: linear-gradient(180deg, var(--ember-400), var(--ember-600));
   border-color: rgba(255,131,36,0.55);
@@ -126,38 +112,30 @@
   0%, 65% { transform: translate(-140%); }
   100%    { transform: translate( 140%); }
 }
-
-/* gold — secondary CTA (used for Chief actions, upgrades) */
 .btn.gold {
   background: linear-gradient(180deg, var(--gold-300), var(--gold-500));
   border-color: rgba(239,193,104,0.6);
   color: #1f1403;
   box-shadow: var(--sh-gold), var(--sh-inset-hi);
 }
-
-/* ghost — flat subtle */
 .btn.ghost {
   background: rgba(255, 243, 208, 0.04);
   border-color: rgba(216, 201, 166, 0.16);
 }
-
-/* danger — blood */
 .btn.danger {
   background: linear-gradient(180deg, var(--blood-400), var(--blood-500));
   border-color: rgba(208,72,58,0.6);
   color: #fff;
   box-shadow: var(--sh-blood);
 }
-
-/* sizes */
 .btn.lg { padding: 15px 24px; font-size: 16px; }
 .btn.sm { padding: 9px 14px; font-size: 13px; }
-
+.btn.tiny { padding: 5px 10px; font-size: 11.5px; }
 .btn:disabled { opacity: 0.5; pointer-events: none; }
 
 :root[data-fx="reduced"] .btn.primary::before { animation: none; display: none; }
 
-/* ---------- chip ---------- */
+/* ---------- CHIPS ---------- */
 .chip {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 7px 13px; border-radius: var(--r-pill);
@@ -172,15 +150,32 @@
 }
 .chip b { font-variant-numeric: tabular-nums; }
 .chip.gold {
+  position: relative; overflow: hidden;
   border-color: rgba(239,193,104,0.42);
   box-shadow: var(--sh-gold);
+}
+.chip.gold::before {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(115deg,
+    transparent 30%,
+    rgba(255, 226, 161, 0.30) 50%,
+    transparent 70%);
+  background-size: 200% 100%;
+  animation: goldShimmer 5s var(--ease-soft) infinite;
+  pointer-events: none;
+}
+@keyframes goldShimmer {
+  0%, 40% { background-position: -200% 0; }
+  100%    { background-position:  200% 0; }
 }
 .chip.ember {
   border-color: rgba(255,131,36,0.42);
   box-shadow: var(--sh-ember);
 }
 
-/* ---------- topbar (rebuilt) ---------- */
+/* ---------- TOPBAR ---------- */
 .topbar {
   position: absolute; top: 0; left: 0; right: 0; z-index: 20;
   height: calc(var(--safe-top) + var(--topbar-h));
@@ -223,7 +218,7 @@
 .crest-meta b { font-size: 13px; letter-spacing: 0.01em; }
 .crest-meta i { font-size: 10px; font-style: normal; color: var(--ink-dim); letter-spacing: 0.04em; }
 
-/* ---------- TABBAR — fully rebuilt ---------- */
+/* ---------- TABBAR ---------- */
 .tabbar {
   position: absolute;
   left: 50%; transform: translateX(-50%);
@@ -251,8 +246,6 @@
     var(--sh-inset-hi);
   isolation: isolate;
 }
-
-/* each tab is a 2-column grid: [icon] [label-pill] when active */
 .tab {
   position: relative; z-index: 2;
   display: flex;
@@ -271,16 +264,13 @@
   text-transform: uppercase;
   -webkit-tap-highlight-color: transparent;
 }
-
 .tab .tab-icon-wrap {
   position: relative;
   width: 26px; height: 26px;
   display: grid; place-items: center;
   transition: transform var(--dur-2) var(--ease-spring);
 }
-
 .tab .tab-icon-wrap::before {
-  /* glow behind the active icon */
   content: '';
   position: absolute; inset: -8px;
   border-radius: 50%;
@@ -289,7 +279,6 @@
   transition: opacity var(--dur-2) var(--ease-soft);
   pointer-events: none;
 }
-
 .tab .tab-label {
   font-size: 9.5px;
   line-height: 1;
@@ -298,20 +287,11 @@
   transition: opacity var(--dur-2) var(--ease-soft),
               transform var(--dur-2) var(--ease-spring);
 }
-
-.tab[data-active="true"] {
-  color: var(--bone-50);
-}
-.tab[data-active="true"] .tab-icon-wrap {
-  transform: translateY(-2px) scale(1.06);
-}
+.tab[data-active="true"] { color: var(--bone-50); }
+.tab[data-active="true"] .tab-icon-wrap { transform: translateY(-2px) scale(1.06); }
 .tab[data-active="true"] .tab-icon-wrap::before { opacity: 1; }
-.tab[data-active="true"] .tab-label {
-  opacity: 1;
-  transform: translateY(-1px);
-}
+.tab[data-active="true"] .tab-label { opacity: 1; transform: translateY(-1px); }
 
-/* the moving pill (uses framer-motion layoutId) */
 .tab-pill {
   position: absolute;
   z-index: 1;
@@ -326,8 +306,6 @@
     0 0 0 1px rgba(0,0,0,0.35),
     inset 0 1px 0 rgba(255,243,208,0.16);
 }
-
-/* small badge dot for unread etc */
 .tab .tab-badge {
   position: absolute;
   top: 8px; right: calc(50% - 18px);
@@ -342,7 +320,42 @@
   50%      { transform: scale(1.25); opacity: 0.75; }
 }
 
-/* ---------- campfire (unchanged visuals, tinted for v3) ---------- */
+/* ---------- PROGRESS BAR ---------- */
+.bar {
+  height: 10px; border-radius: 999px;
+  background: rgba(6,5,8,0.55);
+  box-shadow: inset 0 1px 0 rgba(0,0,0,0.55);
+  overflow: hidden;
+  position: relative;
+}
+.bar > i {
+  display: block; height: 100%; border-radius: 999px;
+  background:
+    linear-gradient(180deg, rgba(255,243,208,0.28), transparent 50%),
+    linear-gradient(90deg, var(--ember-600), var(--ember-400));
+  box-shadow: 0 0 14px rgba(242,106,16,0.55), inset 0 1px 0 rgba(255,243,208,0.28);
+  transition: width var(--dur-2) var(--ease-ember);
+  position: relative;
+}
+.bar > i::after {
+  content: '';
+  position: absolute; inset: 0;
+  background: linear-gradient(90deg, transparent, rgba(255,243,208,0.22), transparent);
+  animation: barSweep 2.8s var(--ease-soft) infinite;
+}
+@keyframes barSweep {
+  0%   { transform: translateX(-100%); }
+  100% { transform: translateX( 100%); }
+}
+.bar.good > i {
+  background:
+    linear-gradient(180deg, rgba(212,232,182,0.30), transparent 50%),
+    linear-gradient(90deg, var(--moss-500), var(--moss-400));
+  box-shadow: 0 0 14px rgba(138,176,106,0.55);
+}
+:root[data-fx="reduced"] .bar > i::after { display: none; }
+
+/* ---------- CAMPFIRE (fallback component) ---------- */
 .campfire {
   position: relative; width: 200px; height: 200px;
   display: grid; place-items: center;
@@ -398,39 +411,3 @@
 @media (prefers-reduced-motion: reduce) {
   .cf-flame, .cf-flames, .cf-halo, .cf-ember { animation: none !important; }
 }
-
-/* ---------- progress bar ---------- */
-.bar {
-  height: 10px; border-radius: 999px;
-  background: rgba(6,5,8,0.55);
-  box-shadow: inset 0 1px 0 rgba(0,0,0,0.55);
-  overflow: hidden;
-  position: relative;
-}
-.bar > i {
-  display: block; height: 100%; border-radius: 999px;
-  background:
-    linear-gradient(180deg, rgba(255,243,208,0.28), transparent 50%),
-    linear-gradient(90deg, var(--ember-600), var(--ember-400));
-  box-shadow: 0 0 14px rgba(242,106,16,0.55), inset 0 1px 0 rgba(255,243,208,0.28);
-  transition: width var(--dur-2) var(--ease-ember);
-  position: relative;
-}
-.bar > i::after {
-  /* animated highlight sweep */
-  content: '';
-  position: absolute; inset: 0;
-  background: linear-gradient(90deg, transparent, rgba(255,243,208,0.22), transparent);
-  animation: barSweep 2.8s var(--ease-soft) infinite;
-}
-@keyframes barSweep {
-  0%   { transform: translateX(-100%); }
-  100% { transform: translateX(100%); }
-}
-.bar.good > i {
-  background:
-    linear-gradient(180deg, rgba(212,232,182,0.30), transparent 50%),
-    linear-gradient(90deg, var(--moss-500), var(--moss-400));
-  box-shadow: 0 0 14px rgba(138,176,106,0.55);
-}
-:root[data-fx="reduced"] .bar > i::after { display: none; }
