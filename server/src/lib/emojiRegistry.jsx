@@ -12,7 +12,7 @@ const Ctx = createContext({
   free: [],
   ready: false,
   reload: async () => {},
-  resolve: (key) => EMOJI[key] || EMOJI.spark_orbit,
+  resolve: (key) => EMOJI[key] || EMOJI['spark_orbit'],
 });
 
 export function EmojiProvider({ children }) {
