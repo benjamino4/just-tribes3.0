@@ -1,6 +1,7 @@
 // TRIBES-FILE: web/src/screens/Kiva.jsx
 // PHASE: 5 — Council & Kiva
 // Parchment scroll UI, live SSE messages, polls, seals, curfew, boons.
+// Obsidian Glass v3 with custom SVG emojis.
 
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
@@ -21,7 +22,7 @@ import { toast } from '../components/Toast.jsx';
 
 export default function Kiva() {
   const nav = useNavigate();
-  const { data, patch } = useApp();
+  const { data } = useApp();
   const M = useMotionConfig();
   const user = data?.user || {};
   const tribe = data?.tribe;
@@ -126,11 +127,14 @@ export default function Kiva() {
     return (
       <motion.div variants={V.page} initial="initial" animate="animate" exit="exit" transition={M.buoyant}>
         <div className="glass card" style={{ textAlign: 'center', padding: 32 }}>
-          <h2 className="display" style={{ fontSize: 22 }}>The Kiva is silent</h2>
+          <Emoji name="lock" size={48} />
+          <h2 className="display" style={{ fontSize: 22, marginTop: 12 }}>The Kiva is silent</h2>
           <p className="tiny" style={{ marginTop: 8, marginBottom: 16 }}>
             Join a tribe to enter the fireside.
           </p>
-          <Button variant="primary" block onClick={() => nav('/longhouse')}>Find a Tribe</Button>
+          <Button variant="primary" block onClick={() => nav('/longhouse')}>
+            Find a Tribe
+          </Button>
         </div>
       </motion.div>
     );
@@ -142,9 +146,9 @@ export default function Kiva() {
       <div className="row between" style={{ margin: '2px 2px 12px' }}>
         <div className="row" style={{ gap: 10 }}>
           <button className="chip" style={{ padding: 9, borderRadius: 999 }}
-        onClick={() => { haptic('light'); setEmojiOpen(true); }}>
-  😀
-</button>
+                  onClick={() => { haptic('light'); nav(-1); }}>
+            <Icon name="chevL" size={18} />
+          </button>
           <h2 className="display" style={{ fontSize: 22 }}>The Kiva</h2>
           <Hint text="Your tribe's fireside. Five emojis are free. Unlock spirit sets with Stars. Chiefs may seal messages and call a Curfew to lock the board." />
         </div>
@@ -156,7 +160,7 @@ export default function Kiva() {
 
       {curfew && (
         <div className="kiva-curfew" style={{ marginBottom: 10 }}>
-          <Icon name="lock" size={14} style={{ color: '#e0d2ff' }} />
+          <Icon name="lock" size={14} style={{ color: '#e0c6ff' }} />
           <span className="grow">
             Curfew in effect. {isChief ? 'You called it — only you may speak.' : 'Only the Chief may speak.'}
           </span>
@@ -179,16 +183,27 @@ export default function Kiva() {
       </div>
 
       {/* composer */}
-      <button className="chip" style={{ padding: 9, borderRadius: 999 }}
-        onClick={() => { haptic('light'); setEmojiOpen(true); }}>
-  <Emoji name="smile" size={18} />
-</button>
+      <div className="kiva-composer glass strong">
+        <button
+          className="chip"
+          style={{ padding: 9, borderRadius: 999 }}
+          onClick={() => { haptic('light'); setEmojiOpen(true); }}
+          aria-label="Open emoji"
+        >
+          <Emoji name="smile" size={18} />
+        </button>
+
         {isChief && (
-          <button className="chip" style={{ padding: 9, borderRadius: 999 }}
-                  onClick={() => { haptic('light'); setPollOpen(true); }}>
+          <button
+            className="chip"
+            style={{ padding: 9, borderRadius: 999 }}
+            onClick={() => { haptic('light'); setPollOpen(true); }}
+            aria-label="Open poll composer"
+          >
             <Icon name="ranks" size={16} />
           </button>
         )}
+
         <input
           className="kiva-input"
           value={draft}
@@ -197,26 +212,42 @@ export default function Kiva() {
           onKeyDown={(e) => e.key === 'Enter' && post()}
           disabled={!!curfew && !isChief}
         />
-        <Button variant="primary" onClick={post} disabled={!draft.trim() || (!!curfew && !isChief)}>
+
+        <Button
+          variant="primary"
+          onClick={post}
+          disabled={!draft.trim() || (!!curfew && !isChief)}
+        >
           Send
         </Button>
       </div>
 
-      <EmojiPicker open={emojiOpen} onClose={() => setEmojiOpen(false)}
-        onPick={(key) => setDraft((d) => d + ' :' + key + ': ')} />
+      <EmojiPicker
+        open={emojiOpen}
+        onClose={() => setEmojiOpen(false)}
+        onPick={(key) => setDraft((d) => d + ' :' + key + ': ')}
+      />
 
-      <PollSheet open={pollOpen} onClose={() => setPollOpen(false)}
+      <PollSheet
+        open={pollOpen}
+        onClose={() => setPollOpen(false)}
         onPost={async (payload) => {
           try {
             const r = await apiPost('/api/kiva/poll', payload);
             setMessages((m) => [...m, r.message]);
-            if (payload.curfew) setCurfew({ started_by: user.id, ends_at: new Date(Date.now() + (payload.hours || 3) * 3600 * 1000).toISOString() });
+            if (payload.curfew) {
+              setCurfew({
+                started_by: user.id,
+                ends_at: new Date(Date.now() + (payload.hours || 3) * 3600 * 1000).toISOString(),
+              });
+            }
             setPollOpen(false);
             toast('Poll posted', 'good');
           } catch (e) {
             toast(e.message || 'Could not post poll', 'bad');
           }
-        }} />
+        }}
+      />
 
       <BoonsSheet open={boonsOpen} onClose={() => setBoonsOpen(false)} />
     </motion.div>
@@ -236,7 +267,7 @@ function KivaBubble({ m, mine, chief, onSeal, onVote }) {
   ].filter(Boolean).join(' ');
 
   if (m.kind === 'system') {
-    return <div className={cls}>{m.body}</div>;
+    return <div className={cls}><EmojiText size={14}>{m.body}</EmojiText></div>;
   }
 
   return (
@@ -244,12 +275,27 @@ function KivaBubble({ m, mine, chief, onSeal, onVote }) {
       className={cls}
       initial={{ opacity: 0, y: 8 }}
       animate={{ opacity: 1, y: 0 }}
+      style={{ position: 'relative' }}
     >
+      {chief && (
+        <motion.div
+          animate={{ x: ['-100%', '100%'] }}
+          transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
+          style={{
+            position: 'absolute', top: 0, left: 0,
+            height: 2, width: '40%',
+            background: 'linear-gradient(90deg, transparent, var(--gold-300), transparent)',
+            pointerEvents: 'none',
+            borderRadius: 2,
+          }}
+        />
+      )}
+
       {!mine && (
         <div className="row between" style={{ marginBottom: 3 }}>
           <b style={{
             fontSize: 12.5,
-            color: chief ? 'var(--gold)' : 'var(--ember-200)',
+            color: chief ? 'var(--gold-300)' : 'var(--ember-200)',
           }}>
             {m.first_name || m.username || 'Kin'}
           </b>
@@ -268,7 +314,7 @@ function KivaBubble({ m, mine, chief, onSeal, onVote }) {
 
       {m.body && (
         <span style={{ fontSize: 14.5, lineHeight: 1.45 }}>
-          {renderBody(m.body)}
+          <EmojiText size={18}>{m.body}</EmojiText>
         </span>
       )}
 
@@ -281,7 +327,7 @@ function KivaBubble({ m, mine, chief, onSeal, onVote }) {
           {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
         </span>
         <button onClick={onSeal} className="tiny" style={{
-          color: m.pinned ? 'var(--gold)' : 'var(--ink-faint)',
+          color: m.pinned ? 'var(--gold-300)' : 'var(--ink-faint)',
           background: 'none',
           display: 'flex', alignItems: 'center', gap: 3,
         }}>
@@ -291,11 +337,6 @@ function KivaBubble({ m, mine, chief, onSeal, onVote }) {
       </div>
     </motion.div>
   );
-}
-
-/* replaces :key: tokens with animated emojis */
-function renderBody(text) {
-  return <EmojiText>{text}</EmojiText>;
 }
 
 /* ---------- poll ---------- */
@@ -340,7 +381,7 @@ function PollSheet({ open, onClose, onPost }) {
   return (
     <Sheet open={open} onClose={onClose} title="Post a poll">
       <input
-        style={{ width: '100%', padding: '11px 12px', borderRadius: 12, background: 'rgba(255,255,255,.06)', border: '1px solid var(--glass-brd)', color: 'var(--ink)', fontSize: 14 }}
+        style={{ width: '100%', padding: '11px 12px', borderRadius: 12, background: 'rgba(255,243,208,.06)', border: '1px solid var(--glass-brd)', color: 'var(--ink)', fontSize: 14 }}
         placeholder="Ask the tribe…"
         value={q_}
         onChange={(e) => setQ(e.target.value)}
@@ -348,7 +389,7 @@ function PollSheet({ open, onClose, onPost }) {
       <div className="col" style={{ gap: 8, marginTop: 10 }}>
         {opts.map((o, i) => (
           <input key={i}
-            style={{ width: '100%', padding: '11px 12px', borderRadius: 12, background: 'rgba(255,255,255,.06)', border: '1px solid var(--glass-brd)', color: 'var(--ink)', fontSize: 14 }}
+            style={{ width: '100%', padding: '11px 12px', borderRadius: 12, background: 'rgba(255,243,208,.06)', border: '1px solid var(--glass-brd)', color: 'var(--ink)', fontSize: 14 }}
             placeholder={`Option ${i + 1}`}
             value={o}
             onChange={(e) => setOpts((arr) => arr.map((x, j) => j === i ? e.target.value : x))}
@@ -369,7 +410,7 @@ function PollSheet({ open, onClose, onPost }) {
         <input
           type="number" min="1" max="24" value={hours}
           onChange={(e) => setHours(Number(e.target.value) || 3)}
-          style={{ width: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(255,255,255,.06)', border: '1px solid var(--glass-brd)', color: 'var(--ink)' }}
+          style={{ width: 60, padding: '6px 8px', borderRadius: 8, background: 'rgba(255,243,208,.06)', border: '1px solid var(--glass-brd)', color: 'var(--ink)' }}
         />
       </div>
 
@@ -392,7 +433,6 @@ function PollSheet({ open, onClose, onPost }) {
 
 /* ---------- boons sheet ---------- */
 function BoonsSheet({ open, onClose }) {
-  const M = useMotionConfig();
   const [data, setData] = useState(null);
   const [busy, setBusy] = useState(false);
 
@@ -408,7 +448,7 @@ function BoonsSheet({ open, onClose }) {
     setBusy(true);
     try {
       const r = await apiPost('/api/kiva/boons/buy', { slug });
-      toast(r.free ? 'Chief\'s gift — free' : 'Boon purchased', 'good');
+      toast(r.free ? "Chief's gift — free" : 'Boon purchased', 'good');
       const fresh = await apiGet('/api/kiva/boons');
       setData(fresh);
     } catch (e) {
@@ -430,7 +470,7 @@ function BoonsSheet({ open, onClose }) {
               <div className="col" style={{ gap: 1 }}>
                 <b className="row" style={{ gap: 6 }}>
                   {b.name}
-                  {b.chiefFree && <Icon name="crown" size={12} style={{ color: 'var(--gold)' }} />}
+                  {b.chiefFree && <Icon name="crown" size={12} style={{ color: 'var(--gold-300)' }} />}
                 </b>
                 <span className="tiny">{b.desc}</span>
               </div>
