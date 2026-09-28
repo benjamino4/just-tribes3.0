@@ -1,7 +1,7 @@
 // =====================================================================
 // TabBar — Obsidian Glass v3
-// Floating capsule. Moving gold-ember pill. Glow behind active icon.
-// Optional per-tab badge dots. Haptic thump on switch.
+// 5 tabs. Moving gold-ember pill. Icon glow. Optional badge dots.
+// Haptic thump on switch.
 // =====================================================================
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -11,11 +11,11 @@ import { haptic } from '../lib/haptics.js';
 import { useApp } from '../lib/store.jsx';
 
 const TABS = [
-  { to: '/',           icon: 'hearth',   label: 'Hearth',     badgeKey: null },
-  { to: '/longhouse',  icon: 'tribe',    label: 'Tribe',      badgeKey: 'kivaUnread' },
-  { to: '/standings',  icon: 'ranks',    label: 'Ranks',      badgeKey: null },
-  { to: '/settlement', icon: 'lands',    label: 'Settle',     badgeKey: null },
-  { to: '/post',       icon: 'store',    label: 'Post',       badgeKey: null },
+  { to: '/',           icon: 'hearth', label: 'Hearth', badgeKey: null },
+  { to: '/longhouse',  icon: 'tribe',  label: 'Tribe',  badgeKey: 'kivaUnread' },
+  { to: '/standings',  icon: 'ranks',  label: 'Ranks',  badgeKey: null },
+  { to: '/settlement', icon: 'lands',  label: 'Settle', badgeKey: null },
+  { to: '/post',       icon: 'store',  label: 'Post',   badgeKey: null },
 ];
 
 export default function TabBar() {

@@ -1,7 +1,9 @@
 // =====================================================================
 // TopBar — Obsidian Glass v3
-// Crest chip on the left, resource chips + gear on the right.
-// Ember chip pulses on change. Stars chip is gold-tinted.
+// Crest chip (left) → Longhouse.
+// Ember chip pulses on change.
+// Stars chip with gold class.
+// Gear → Profile.
 // =====================================================================
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';

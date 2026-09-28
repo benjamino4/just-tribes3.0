@@ -1,7 +1,7 @@
 // =====================================================================
 // Sheet — Obsidian Glass v3
-// Bottom sheet with drag-to-dismiss. Morphing corners: only the top two
-// corners are rounded. Handle bar is a wide gold-tinted capsule.
+// Bottom sheet with drag-to-dismiss. Gold handle bar.
+// Corners: r-2xl top only.
 // =====================================================================
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';

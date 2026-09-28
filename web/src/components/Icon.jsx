@@ -1,6 +1,6 @@
 // =====================================================================
 // TRIBES — Icon set (v3)
-// 60 hand-tuned SVG paths. Consistent 24×24 grid, 1.8 stroke, round caps.
+// 60 hand-tuned SVG paths at 24×24 grid, 1.8 stroke, round caps.
 // The FILLED set is for silhouettes that read better solid.
 // =====================================================================
 
@@ -123,3 +123,8 @@ export default function Icon({ name, size = 24, stroke = 1.8, className, style }
     </svg>
   );
 }
+
+// Backwards-compat aliases — old code used these names.
+Icon.PATHS = PATHS;
+PATHS.fire  = PATHS.hearth;
+PATHS.spark = PATHS.bolt;

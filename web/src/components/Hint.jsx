@@ -1,8 +1,7 @@
 // =====================================================================
 // Hint — the glowing bulb popover.
-// Now portals to body so it can never be clipped by a parent's
-// overflow:hidden or stray off-screen near a row edge.
-// Only one Hint can be open at a time via a shared context.
+// Portals to body. Viewport-clamped. One open at a time via context.
+// Dismiss on outside tap, ESC, or scroll.
 // =====================================================================
 import { useState, useRef, useEffect, useCallback, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
@@ -10,7 +9,6 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { useMotionConfig } from '../lib/motion.js';
 import { haptic } from '../lib/haptics.js';
 
-// Shared "which hint is open" state so only one at a time.
 const HintCtx = createContext(null);
 
 export function HintProvider({ children }) {
@@ -22,7 +20,7 @@ export function HintProvider({ children }) {
 
 let hintIdSeq = 0;
 
-export default function Hint({ text, tone = '#e8b866' }) {
+export default function Hint({ text, tone = '#efc168' }) {
   const ctx = useContext(HintCtx);
   const idRef = useRef(null);
   if (idRef.current === null) idRef.current = ++hintIdSeq;
@@ -42,13 +40,11 @@ export default function Hint({ text, tone = '#e8b866' }) {
     const vw = window.innerWidth;
     const vh = window.innerHeight;
 
-    // Prefer below-right, flip when not enough room
     let top = rect.bottom + 8;
     let left = rect.right - W;
     if (left < PAD) left = PAD;
     if (left + W > vw - PAD) left = vw - W - PAD;
 
-    // If not enough space below, flip above
     const estimatedH = 160;
     if (top + estimatedH > vh - PAD) {
       top = rect.top - estimatedH - 8;
@@ -58,7 +54,6 @@ export default function Hint({ text, tone = '#e8b866' }) {
     setPos({ top, left, W });
   }, []);
 
-  // Recompute when opening, on scroll, and on resize
   useEffect(() => {
     if (!isOpen) return;
     computePosition();
@@ -78,7 +73,6 @@ export default function Hint({ text, tone = '#e8b866' }) {
     };
   }, [isOpen, computePosition]);
 
-  // ESC dismiss
   useEffect(() => {
     if (!isOpen) return;
     const onKey = (e) => {
@@ -104,18 +98,15 @@ export default function Hint({ text, tone = '#e8b866' }) {
           onClick={toggle}
           whileTap={{ scale: 0.85 }}
           style={{
-            width: 24,
-            height: 24,
+            width: 24, height: 24,
             borderRadius: 999,
-            display: 'grid',
-            placeItems: 'center',
-            background: 'rgba(255,255,255,.06)',
+            display: 'grid', placeItems: 'center',
+            background: 'rgba(255,243,208,.06)',
             border: '1px solid var(--glass-brd)',
           }}
         >
           <motion.svg
-            width="14"
-            height="14"
+            width="14" height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke={tone}
@@ -141,7 +132,6 @@ export default function Hint({ text, tone = '#e8b866' }) {
           <AnimatePresence>
             {isOpen && pos && (
               <>
-                {/* click-away layer */}
                 <div
                   onClick={close}
                   style={{ position: 'fixed', inset: 0, zIndex: 900 }}
@@ -165,16 +155,17 @@ export default function Hint({ text, tone = '#e8b866' }) {
                     lineHeight: 1.55,
                     color: 'var(--ink-dim)',
                     borderColor: 'rgba(239,193,104,0.24)',
-                    boxShadow:
-                      '0 20px 50px rgba(0,0,0,.7), 0 0 0 1px rgba(239,193,104,0.10), inset 0 1px 0 var(--glass-hi)',
+                    boxShadow: '0 20px 50px rgba(0,0,0,.7), 0 0 0 1px rgba(239,193,104,0.10), inset 0 1px 0 var(--glass-hi)',
                   }}
                 >
                   <b
                     style={{
                       color: 'var(--gold-300)',
                       display: 'block',
-                      marginBottom: 3,
+                      marginBottom: 4,
                       fontSize: 12,
+                      letterSpacing: '0.04em',
+                      textTransform: 'uppercase',
                     }}
                   >
                     What is this?

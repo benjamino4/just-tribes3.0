@@ -1,7 +1,7 @@
 // =====================================================================
 // Toast — Obsidian Glass v3
-// Colored by kind (good/moss, bad/blood, info/lapis, warn/ochre, default/gold).
-// Icon rotation animation. Spring entrance.
+// Color-coded by kind: good (moss), bad (blood), info (lapis),
+// warn (ochre). Icon rotates in.
 // =====================================================================
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';

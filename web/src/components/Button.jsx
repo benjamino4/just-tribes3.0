@@ -1,6 +1,7 @@
 // =====================================================================
 // Button — Obsidian Glass v3
-// 4 variants. Press ripple. Haptic on click.
+// 4 variants (primary / gold / ghost / danger). Press ripple from
+// click coords. Haptic on click.
 // =====================================================================
 import { useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
@@ -20,7 +21,6 @@ export default function Button({
   const ref = useRef(null);
 
   const handleClick = useCallback((e) => {
-    // set press ripple origin
     if (ref.current) {
       const rect = ref.current.getBoundingClientRect();
       const x = ((e.clientX ?? rect.left + rect.width / 2) - rect.left) / rect.width;

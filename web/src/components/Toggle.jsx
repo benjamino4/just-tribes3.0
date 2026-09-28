@@ -1,7 +1,7 @@
 // =====================================================================
 // Toggle — Obsidian Glass v3
-// Track has an inset shadow. Thumb is a small bone-colored disc.
-// On state: ember glow, thumb slides with a spring.
+// Track has inset shadow when off. Thumb is a bone disc that goes
+// ember-cream when active. Draggable with spring settle.
 // =====================================================================
 import { motion } from 'framer-motion';
 import { useMotionConfig } from '../lib/motion.js';

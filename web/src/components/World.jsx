@@ -1,6 +1,6 @@
 // =====================================================================
 // World — ambient background.
-// Four layers: aurora (drifting pigment), heat (bottom-up ember glow),
+// Four layers: aurora (drifting pigment), heat (bottom-up ember),
 // ash (bone-colored drift specks), vig (deep vignette).
 // =====================================================================
 export default function World() {
