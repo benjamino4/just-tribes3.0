@@ -3,7 +3,6 @@
 // Full trials page + minigame sheet (hold / stoke / feed / cry / sift).
 
 import { useState, useRef, useEffect } from 'react';
-import Emoji from '../components/Emoji.jsx';
 import { useNavigate } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
@@ -14,6 +13,7 @@ import { haptic } from '../lib/haptics.js';
 import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
+import Emoji from '../components/Emoji.jsx';
 import { toast } from '../components/Toast.jsx';
 
 export default function Trials() {
@@ -28,11 +28,12 @@ export default function Trials() {
       className="col" style={{ gap: 4 }}>
       <div className="row between" style={{ margin: '2px 2px 12px' }}>
         <div className="row" style={{ gap: 10 }}>
-          <button className="chip" style={{ padding: 9, borderRadius: 999 }} onClick={() => { haptic('light'); nav(-1); }}>
+          <button className="chip" style={{ padding: 9, borderRadius: 999 }}
+                  onClick={() => { haptic('light'); nav(-1); }}>
             <Icon name="chevL" size={18} />
           </button>
           <h2 className="display" style={{ fontSize: 22 }}>Trials of Fire</h2>
-          <Hint text="Quick skill challenges with a cooldown. Beat them for a burst of Ember and renown. Come back when the cooldown clears." />
+          <Hint text="Quick skill challenges with a cooldown. Beat them for a burst of Ember and renown." />
         </div>
       </div>
 
@@ -42,12 +43,14 @@ export default function Trials() {
             <div className="row between">
               <div className="row">
                 <span className="crest-art">
-  <Emoji name={t.slug ? `trial-${t.slug}` : 'trial-kindle'} size={22} />
-</span>
+                  <Emoji name={t.slug ? `trial-${t.slug}` : 'trial-kindle'} size={22} />
+                </span>
                 <div className="col" style={{ gap: 1 }}>
                   <b style={{ fontSize: 14 }}>{t.name}</b>
                   <span className="tiny">
-                    {t.available ? `${t.hint || ''} · +${fmt(t.reward_ember)}` : `Cooldown · ${shortTime(t.nextIn || 0)}`}
+                    {t.available
+                      ? `${t.hint || ''} · +${fmt(t.reward_ember)}`
+                      : `Cooldown · ${shortTime(t.nextIn || 0)}`}
                   </span>
                 </div>
               </div>
@@ -128,9 +131,11 @@ function TrialModal({ trial, onClose, onDone }) {
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 120,
-        background: 'rgba(0,0,0,.6)',
-        backdropFilter: 'blur(6px)',
+        background: 'rgba(6,5,8,.72)',
+        backdropFilter: 'blur(8px)',
+        WebkitBackdropFilter: 'blur(8px)',
         display: 'grid', placeItems: 'center',
+        padding: 20,
       }}
     >
       <motion.div
@@ -140,7 +145,7 @@ function TrialModal({ trial, onClose, onDone }) {
         transition={M.buoyant}
         className="glass strong"
         onClick={(e) => e.stopPropagation()}
-        style={{ padding: 26, borderRadius: 'var(--r-xl)', width: 280, textAlign: 'center' }}
+        style={{ padding: 26, borderRadius: 'var(--r-2xl)', width: 300, textAlign: 'center' }}
       >
         <h3 className="display" style={{ fontSize: 20, marginBottom: 6 }}>{trial.name}</h3>
         <p className="tiny" style={{ marginBottom: 18 }}>{trial.hint}</p>
@@ -152,7 +157,7 @@ function TrialModal({ trial, onClose, onDone }) {
             style={{
               width: 130, height: 130, borderRadius: '50%',
               margin: '0 auto', display: 'grid', placeItems: 'center',
-              background: `conic-gradient(var(--ember-500) ${charge}%, rgba(255,255,255,.1) 0)`,
+              background: `conic-gradient(var(--ember-500) ${charge}%, rgba(255,243,208,.08) 0)`,
               boxShadow: 'var(--sh-ember)',
             }}
           >
@@ -161,7 +166,7 @@ function TrialModal({ trial, onClose, onDone }) {
               background: 'var(--bg-2)',
               display: 'grid', placeItems: 'center',
             }}>
-              <Icon name="fire" size={54} />
+              <Icon name="hearth" size={54} />
             </span>
           </motion.button>
         ) : (
@@ -189,15 +194,15 @@ function SiftGame({ onSubmit }) {
           transition={M.feather}
           onClick={() => { haptic('select'); setPick(i); onSubmit({ pick: i }); }}
           style={{
-            width: 40, height: 40, borderRadius: '50%',
+            width: 44, height: 44, borderRadius: '50%',
             background: pick === i
-              ? 'radial-gradient(circle, #ffd27a, #ff7a18)'
-              : 'rgba(255,255,255,.08)',
+              ? 'radial-gradient(circle, #ffd27a, #ff8324)'
+              : 'rgba(255,243,208,.06)',
             border: '1px solid var(--glass-brd)',
             display: 'grid', placeItems: 'center',
           }}
         >
-          <Emoji name="trial-sift" size={18} />
+          <Emoji name="trial-sift" size={20} />
         </motion.button>
       ))}
     </div>
