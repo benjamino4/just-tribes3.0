@@ -4,6 +4,7 @@
 
 import express from 'express';
 import { q } from './db.js';
+import * as Gift from './giftcodes.js';
 import { CFG, cfgJSON } from './config.js';
 import { authMiddleware, rateLimit } from './middleware.js';
 import { refreshUserRole, addRenown, activeBonfire } from './economy.js';
