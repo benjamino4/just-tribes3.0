@@ -1,11 +1,11 @@
 // TRIBES-FILE: web/src/components/TacticWheel.jsx
 // PHASE: 6 — War
-// Radial tactic picker. Favored tactics glow gold, resisted dim.
+// Radial tactic picker.
 
 import { motion } from 'framer-motion';
 import { useMotionConfig } from '../lib/motion.js';
-import Emoji from './Emoji.jsx';
 import { haptic } from '../lib/haptics.js';
+import Emoji from './Emoji.jsx';
 
 export default function TacticWheel({ tactics, terrain, onPick, cooldown }) {
   const M = useMotionConfig();
@@ -20,15 +20,11 @@ export default function TacticWheel({ tactics, terrain, onPick, cooldown }) {
 
   return (
     <div className="tactic-wheel">
-      {/* center hub */}
       <motion.div
         className="tactic-slot center"
         whileTap={{ scale: 0.92 }}
         transition={M.tactile}
-        style={{
-          top: '50%', left: '50%',
-          transform: 'translate(-50%, -50%)',
-        }}
+        style={{ top: '50%', left: '50%', transform: 'translate(-50%, -50%)' }}
       >
         <Emoji name="war-swords" size={30} />
       </motion.div>

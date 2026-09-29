@@ -1,11 +1,11 @@
 // TRIBES-FILE: web/src/components/Relic.jsx
 // PHASE: 4 — Relics
 // The relic card primitive. Rarity frames, cursed ripple overlay,
-// wielded chip, art fallback chain (svg → image_url → icon_file → glyph).
+// wielded chip, art fallback chain (svg → image_url → icon_file → inline urn).
 
 import { motion } from 'framer-motion';
+import { RARITY_TONE, RARITY_LABEL } from '../data/relics.js';
 import { useMotionConfig } from '../lib/motion.js';
-import Icon from './Icon.jsx';
 
 function artHtml(r) {
   if (r.svg) return r.svg;
@@ -13,6 +13,12 @@ function artHtml(r) {
   if (src) return `<img src="${src}" alt="" loading="lazy" />`;
   return `<svg viewBox="0 0 24 24"><path fill="#c9a06a" d="M8 3h8l-1 3 3 6c1 3-1 8-6 9S5 15 6 12l3-6z"/><path d="M9 3h6" stroke="#8a5e19" stroke-width="1.4"/></svg>`;
 }
+
+function RARITY_ORDER_SAFE(r) {
+  const s = String(r || 'common');
+  return ['common', 'rare', 'epic', 'legendary'].includes(s) ? s : 'common';
+}
+
 export default function Relic({ relic, compact, onClick, equipped }) {
   const M = useMotionConfig();
   const rarity = RARITY_ORDER_SAFE(relic.rarity);
@@ -38,9 +44,7 @@ export default function Relic({ relic, compact, onClick, equipped }) {
       {cursed && (
         <motion.div
           className="relic-cursed-overlay"
-          animate={{
-            opacity: [0.35, 0.65, 0.35],
-          }}
+          animate={{ opacity: [0.35, 0.65, 0.35] }}
           transition={{ duration: 2.4, repeat: M.drift.repeat || 0 }}
         />
       )}
@@ -74,9 +78,4 @@ export default function Relic({ relic, compact, onClick, equipped }) {
       </div>
     </motion.div>
   );
-}
-
-function RARITY_ORDER_SAFE(r) {
-  const s = String(r || 'common');
-  return ['common', 'rare', 'epic', 'legendary'].includes(s) ? s : 'common';
 }

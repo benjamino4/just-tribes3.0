@@ -5,6 +5,7 @@
 import express from 'express';
 import crypto from 'crypto';
 import { q } from './db.js';
+import * as Gift from './giftcodes.js';
 import { CFG, DEFAULTS, setConfig, resetConfig } from './config.js';
 import { verifyInitData } from './auth.js';
 import { previewReset, backupToJSON, resetProgression, factoryReset, listTables } from './admin_reset.js';
@@ -284,6 +285,14 @@ adminRouter.get('/x-claims', wrap(async (req) => X.claimsList({
 adminRouter.post('/x-claims/approve', wrap(async (req) => X.claimApprove(who(req), req.body.id)));
 adminRouter.post('/x-claims/reject', wrap(async (req) => X.claimReject(who(req), req.body.id, req.body.reason)));
 adminRouter.get('/x-stats', wrap(async () => X.stats()));
-
+adminRouter.get('/gifts', wrap(async (req) => Gift.adminList({
+  q: req.query.q || '',
+  active: req.query.active === '1' ? true : req.query.active === '0' ? false : null,
+  limit: Number(req.query.limit) || 100,
+})));
+adminRouter.post('/gifts', wrap(async (req) => Gift.adminCreate(who(req), req.body || {})));
+adminRouter.post('/gifts/revoke', wrap(async (req) => Gift.adminRevoke(who(req), String(req.body?.code || ''))));
+adminRouter.post('/gifts/delete', wrap(async (req) => Gift.adminDelete(who(req), String(req.body?.code || ''))));
+adminRouter.post('/gifts/grant', wrap(async (req) => Gift.grantToUser(who(req), String(req.body?.code || ''), Number(req.body?.userId))));
 /* whoami */
 adminRouter.get('/whoami', wrap(async (req) => ({ adminId: who(req) })));

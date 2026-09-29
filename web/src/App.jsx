@@ -4,6 +4,7 @@
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import World from './components/World.jsx';
+import GiftBox from './components/GiftBox.jsx';
 import TopBar from './components/TopBar.jsx';
 import TabBar from './components/TabBar.jsx';
 import { ToastHost } from './components/Toast.jsx';
@@ -80,6 +81,10 @@ function Shell() {
       </div>
       <TabBar />
       <ToastHost />
+      <TabBar />
+      <ToastHost />
+      <GiftBox />
+    </div>
     </div>
   );
 }

@@ -4,6 +4,7 @@
 
 import express from 'express';
 import { q } from './db.js';
+import * as Gift from './giftcodes.js';
 import { CFG, cfgJSON } from './config.js';
 import { authMiddleware, rateLimit } from './middleware.js';
 import { refreshUserRole, addRenown, activeBonfire } from './economy.js';
@@ -806,6 +807,24 @@ router.post('/spies/launch', rateLimit('spy_launch', 20), async (req, res, next)
 router.post('/spies/counter', rateLimit('spy_counter', 20), async (req, res, next) => { try {
   res.json(await Spies.raiseCounterSpy(req.user));
 } catch (e) { res.status(400).json({ error: e.message, need: e.need }); } });
+
+router.post('/gift/preview', rateLimit('gift', 60), async (req, res, next) => {
+  try {
+    res.json(await Gift.preview(req.user.id, String(req.body?.code || '')));
+  } catch (e) { next(e); }
+});
+
+router.post('/gift/redeem', rateLimit('gift', 30), async (req, res, next) => {
+  try {
+    res.json(await Gift.redeem(req.user, String(req.body?.code || '')));
+  } catch (e) { res.status(400).json({ error: e.message }); }
+});
+
+router.get('/gift/pending', rateLimit('gift', 60), async (req, res, next) => {
+  try {
+    res.json({ pending: await Gift.pending(req.user.id) });
+  } catch (e) { next(e); }
+});
 
 // ============ NOTIFICATIONS ============ (append to routes.js)
 import * as Notif from './notifications.js';

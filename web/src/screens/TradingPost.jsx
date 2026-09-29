@@ -4,7 +4,6 @@
 
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import Emoji from '../components/Emoji.jsx';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
 import { useMotionConfig, V } from '../lib/motion.js';
@@ -14,13 +13,14 @@ import { haptic } from '../lib/haptics.js';
 import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
+import Emoji from '../components/Emoji.jsx';
 import { toast } from '../components/Toast.jsx';
 
 const TABS = [
-  { id: 'ember',   label: 'Ember' },
-  { id: 'relics',  label: 'Relics' },
-  { id: 'cosmetic',label: 'Cosmetics' },
-  { id: 'bundles', label: 'Bundles' },
+  { id: 'ember',    label: 'Ember' },
+  { id: 'relics',   label: 'Relics' },
+  { id: 'cosmetic', label: 'Cosmetics' },
+  { id: 'bundles',  label: 'Bundles' },
 ];
 
 export default function TradingPost() {
@@ -48,10 +48,13 @@ export default function TradingPost() {
       const r = await apiPost('/api/stars/invoice', { itemId: item.id });
       if (r.link) {
         const tg = window.Telegram?.WebApp;
-        if (tg?.openInvoice) tg.openInvoice(r.link, (status) => {
-          if (status === 'paid') { toast('Purchase complete', 'good'); reload(); }
-        });
-        else window.open(r.link, '_blank');
+        if (tg?.openInvoice) {
+          tg.openInvoice(r.link, (status) => {
+            if (status === 'paid') { toast('Purchase complete', 'good'); reload(); }
+          });
+        } else {
+          window.open(r.link, '_blank');
+        }
       }
     } catch (e) {
       if (e.message?.includes('Already')) toast('Already purchased', 'info');
@@ -79,22 +82,22 @@ export default function TradingPost() {
             <Icon name="chevL" size={18} />
           </button>
           <h2 className="display" style={{ fontSize: 22 }}>The Trading Post</h2>
-          <Hint text="Buy Ember, relics, cosmetics, and bundles with Telegram Stars. Some items are also available with TON." />
+          <Hint text="Buy Ember, relics, cosmetics, and bundles with Telegram Stars." />
         </div>
       </div>
 
       <div className="glass card">
         <div className="row between">
           <b style={{ fontSize: 14 }}>Your Stars</b>
-          <span className="chip" style={{ color: 'var(--gold)' }}>
-            <Icon name="spark" size={14} style={{ color: 'var(--gold)' }} />
+          <span className="chip gold">
+            <Icon name="star" size={14} style={{ color: 'var(--gold-300)' }} />
             <b className="tabular">{fmt(user.stars || 0)}</b>
           </span>
         </div>
         {user.blessed && (
-          <p className="tiny" style={{ marginTop: 6, color: 'var(--gold)' }}>
+          <p className="tiny" style={{ marginTop: 6, color: 'var(--gold-300)' }}>
             <Emoji name="halo_glow" size={14} style={{ verticalAlign: 'text-bottom', marginRight: 4 }} />
-Admin blessing active — all Stars purchases are free.
+            Warden blessing active — all Stars purchases are free.
           </p>
         )}
       </div>
@@ -108,7 +111,7 @@ Admin blessing active — all Stars purchases are free.
               flex: '0 0 auto',
               borderColor: tab === t.id ? 'var(--ember-400)' : 'var(--glass-brd)',
               color: tab === t.id ? 'var(--ember-200)' : 'var(--ink-dim)',
-              background: tab === t.id ? 'rgba(255,122,24,.14)' : 'var(--glass-bg)',
+              background: tab === t.id ? 'rgba(242,106,16,.14)' : 'var(--glass-bg)',
             }}>
             {t.label}
           </button>
@@ -129,9 +132,9 @@ Admin blessing active — all Stars purchases are free.
                 <span className="tiny">{it.desc}</span>
               </div>
               <Button variant="primary" onClick={() => buy(it)} disabled={busy}>
-               <Icon name="star" size={13} style={{ color: '#1a0b02' }} />
-{it.stars}
-<Emoji name="star" size={12} style={{ marginLeft: 3 }} />
+                <Icon name="star" size={13} style={{ color: '#1a0b02' }} />
+                {it.stars}
+                <Emoji name="star" size={12} style={{ marginLeft: 3 }} />
               </Button>
             </div>
           </div>

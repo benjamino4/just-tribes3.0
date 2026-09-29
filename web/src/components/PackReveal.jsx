@@ -9,11 +9,12 @@
 // Presets: ember | cursed | shards | goldburst (matches DB `anim_preset`).
 
 import { useState, useEffect } from 'react';
-import Emoji from './Emoji.jsx';
 import { motion, AnimatePresence } from 'framer-motion';
+import { RARITY_TONE, RARITY_LABEL, ANIM_PRESETS } from '../data/relics.js';
 import { useMotionConfig } from '../lib/motion.js';
 import { haptic } from '../lib/haptics.js';
 import Button from './Button.jsx';
+import Emoji from './Emoji.jsx';
 
 const PHASES = { IDLE: 0, OFFER: 1, BREAK: 2, REVEAL: 3, SETTLE: 4, OFFER_FINAL: 5 };
 
@@ -44,11 +45,11 @@ export default function PackReveal({ open, relic, rarity, preset = 'ember', onCl
         onClick={phase === PHASES.OFFER_FINAL ? onClose : undefined}
         style={{
           position: 'fixed', inset: 0, zIndex: 130,
-          background: `radial-gradient(circle at 50% 45%, rgba(0,0,0,.55), rgba(0,0,0,.94))`,
-          backdropFilter: 'blur(8px)',
-          WebkitBackdropFilter: 'blur(8px)',
+          background: 'radial-gradient(circle at 50% 45%, rgba(6,5,8,.72), rgba(6,5,8,.96))',
+          backdropFilter: 'blur(14px)',
+          WebkitBackdropFilter: 'blur(14px)',
           display: 'grid', placeItems: 'center',
-          padding: 24,
+          padding: 20,
         }}
       >
         {/* spotlight */}
@@ -66,7 +67,7 @@ export default function PackReveal({ open, relic, rarity, preset = 'ember', onCl
 
         <div style={{ position: 'relative', width: 320, textAlign: 'center' }}>
 
-          {/* ---------- phases 1–3: the pack itself ---------- */}
+          {/* ---------- phases 1–2: the pack itself ---------- */}
           <AnimatePresence mode="wait">
             {phase < PHASES.REVEAL && (
               <motion.div
@@ -77,9 +78,7 @@ export default function PackReveal({ open, relic, rarity, preset = 'ember', onCl
                   rotate: phase === PHASES.BREAK ? [-6, 6, -6, 6, 0] : 0,
                 }}
                 exit={{ scale: 0, opacity: 0 }}
-                transition={phase === PHASES.BREAK
-                  ? { duration: 1.5 }
-                  : M.ember}
+                transition={phase === PHASES.BREAK ? { duration: 1.5 } : M.ember}
                 style={{
                   width: 160, height: 200, margin: '0 auto',
                   borderRadius: 22,
@@ -107,7 +106,7 @@ export default function PackReveal({ open, relic, rarity, preset = 'ember', onCl
                     scale: phase >= PHASES.SETTLE ? 1 : 1.15,
                     rotate: 0,
                     opacity: 1,
-                    y: phase >= PHASES.OFFER_FINAL ? 0 : 0,
+                    y: 0,
                   }}
                   transition={M.ember}
                   style={{
@@ -121,12 +120,20 @@ export default function PackReveal({ open, relic, rarity, preset = 'ember', onCl
                   <div style={{
                     width: '100%', aspectRatio: '1 / 1',
                     borderRadius: 14,
-                    background: 'rgba(0,0,0,.35)',
+                    background: 'rgba(6,5,8,.42)',
                     display: 'grid', placeItems: 'center',
                   }}>
-                    {relic.svg
-                      ? <div dangerouslySetInnerHTML={{ __html: relic.svg }} style={{ width: '75%', height: '75%' }} />
-                      : <Emoji name={relic.domain ? `dom-${relic.domain}` : 'relic-vase'} size={100} />}
+                    {relic.svg ? (
+                      <div
+                        dangerouslySetInnerHTML={{ __html: relic.svg }}
+                        style={{ width: '75%', height: '75%' }}
+                      />
+                    ) : (
+                      <Emoji
+                        name={relic.domain ? `dom-${relic.domain}` : 'relic-vase'}
+                        size={100}
+                      />
+                    )}
                   </div>
                 </motion.div>
 
@@ -145,7 +152,7 @@ export default function PackReveal({ open, relic, rarity, preset = 'ember', onCl
                     fontWeight: 800,
                     padding: '6px 14px',
                     borderRadius: 999,
-                    color: '#1a0e00',
+                    color: '#1a0b02',
                     background: `linear-gradient(90deg, ${tone}, ${p.primary})`,
                     boxShadow: `0 6px 22px ${tone}66`,
                   }}>
@@ -169,7 +176,7 @@ export default function PackReveal({ open, relic, rarity, preset = 'ember', onCl
                     animate={{ opacity: 1 }}
                     transition={{ delay: 0.45, duration: 0.5 }}
                     className="tiny"
-                    style={{ marginTop: 6, maxWidth: 280 }}
+                    style={{ marginTop: 6, maxWidth: 280, marginLeft: 'auto', marginRight: 'auto' }}
                   >
                     {relic.description}
                   </motion.p>
@@ -206,17 +213,7 @@ function PackSigil({ preset }) {
     goldburst: 'star',
     molten:    'dom-fire',
   };
-  return <Emoji name={map[preset] || 'dom-fire'} size={56} />;
-}
-  return (
-    <motion.span
-      animate={{ y: [0, -6, 0] }}
-      transition={{ duration: 2.6, repeat: M.drift.repeat || 0 }}
-      style={{ fontSize: '3.2rem', filter: 'drop-shadow(0 4px 12px rgba(0,0,0,.6))' }}
-    >
-      🏺
-    </motion.span>
-  );
+  return <Emoji name={map[preset] || 'dom-fire'} size={72} />;
 }
 
 /* ---------- chains (cursed pack only) ---------- */
@@ -236,6 +233,7 @@ function Chains({ color }) {
             background: `linear-gradient(180deg, ${color}, ${color}44)`,
             top: 40 + i * 30,
             left: '50%',
+            pointerEvents: 'none',
           }}
         />
       ))}
