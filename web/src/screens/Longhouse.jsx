@@ -14,13 +14,25 @@ import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
 
+// tribe-name branding maps (perk-driven, see The Forge Market)
+const TRIBE_FONT = {
+  default: 'var(--font-display)',
+  runic: '"Cinzel", Georgia, serif',
+  blade: '"Oswald", Impact, sans-serif',
+  ash: '"Caveat", cursive',
+  monol: '"Bebas Neue", Arial Narrow, sans-serif',
+};
+const TRIBE_STYLE = { ember: '#ff7a18', gold: '#ffcf7a', frost: '#8ddcff', blood: '#e05545', void: '#b58cff' };
+
 const SECTIONS = [
+  { to: '/warband',    name: 'The Warband',  icon: 'swords', sub: '20 seats · duels',   tone: '#ff7a2e' },
   { to: '/kiva',       name: 'The Kiva',    icon: 'fire',  sub: 'Tribe chat',        tone: '#ff9745' },
   { to: '/moot',       name: 'Council',     icon: 'crown', sub: 'Elections & roles', tone: '#e8b866' },
   { to: '/pyre',       name: 'The Pyre',    icon: 'fire',  sub: 'Shared treasury',   tone: '#e0562e' },
   { to: '/war',        name: 'War Room',    icon: 'bolt',  sub: 'Raids & rivals',    tone: '#ff5a3c' },
   { to: '/watchtower', name: 'Watchtower',  icon: 'spark', sub: 'Spies & pacts',     tone: '#7aa8c4' },
   { to: '/chronicle',  name: 'Chronicle',   icon: 'ranks', sub: 'War history',       tone: '#a878c9' },
+  { to: '/store',      name: 'Forge Market', icon: 'store', sub: 'Brand your tribe',   tone: '#ff9d3c' },
 ];
 
 export default function Longhouse() {
@@ -118,14 +130,16 @@ export default function Longhouse() {
         <div className="row" style={{ gap: 14 }}>
           <motion.span
             className="crest-art"
-            style={{ width: 54, height: 54 }}
+            style={{ width: 54, height: 54, borderRadius: tribe.icon_url ? '50%' : undefined, overflow: 'hidden' }}
             animate={{ rotate: [0, -4, 4, 0] }}
             transition={{ duration: 6, repeat: M.drift.repeat || 0 }}
           >
-            <Icon name="tribe" size={28} style={{ color: '#2a1200' }} />
+            {tribe.icon_url
+              ? <img src={tribe.icon_url} alt="tribe crest" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+              : <Icon name="tribe" size={28} style={{ color: '#2a1200' }} />}
           </motion.span>
           <div className="grow">
-            <h2 className="display" style={{ fontSize: 22 }}>{tribe.name}</h2>
+            <h2 className="display" style={{ fontSize: 22, fontFamily: TRIBE_FONT[tribe.name_font] || undefined, color: TRIBE_STYLE[tribe.name_style] || undefined }}>{tribe.name}</h2>
             <p className="tiny">"{tribe.motto || 'No motto set.'}"</p>
           </div>
         </div>

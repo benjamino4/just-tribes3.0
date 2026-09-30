@@ -26,6 +26,8 @@ import Inbox from './screens/Inbox.jsx';
 import TradingPost from './screens/TradingPost.jsx';
 import Settlement from './screens/Settlement.jsx';
 import Standings from './screens/Standings.jsx';
+import Warband from './screens/Warband.jsx';
+import Store from './screens/Store.jsx';
 import { V, useMotionConfig } from './lib/motion.js';
 
 function NotFound() {
@@ -71,6 +73,8 @@ function Shell() {
               <Route path="/moot"        element={<Moot />} />
               <Route path="/pyre"        element={<Pyre />} />
               <Route path="/war"         element={<War />} />
+              <Route path="/warband"     element={<Warband />} />
+              <Route path="/store"       element={<Store />} />
               <Route path="/watchtower"  element={<Watchtower />} />
               <Route path="/chronicle"   element={<Chronicle />} />
               <Route path="/inbox"       element={<Inbox />} />

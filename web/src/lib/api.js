@@ -71,4 +71,19 @@ export const Endpoints = {
   tribeLeave:   () => apiPost('/api/tribe/leave'),
   tribeDonate:  (amount) => apiPost('/api/tribe/donate', { amount }),
   tribeUpgrade: () => apiPost('/api/tribe/upgrade'),
+
+  // --- warband / seat challenges / bot practice (v4) ---
+  warband:        () => apiGet('/api/warband'),
+  warbandChallenge: (seat_no, game) => apiPost('/api/warband/challenge', { seat_no, game }),
+  warbandResolve: (id, payload) => apiPost('/api/warband/challenge/' + id + '/resolve', payload),
+  botPractice:    () => apiGet('/api/bot-practice'),
+  botPracticeClaim: (payload) => apiPost('/api/bot-practice/claim', payload),
+
+  // --- store / tribe customization (v4 monetization) ---
+  store:          () => apiGet('/api/store'),
+  storeBuyPerk:   (perk) => apiPost('/api/store/perk/buy', { perk }),
+  storeSetName:   (name, font, style) => apiPost('/api/store/tribe-name', { name, font, style }),
+  storeSetIcon:   (icon) => apiPost('/api/store/tribe-icon', { icon }),
+  storeSetBanner: (style) => apiPost('/api/store/tribe-banner', { style }),
+  storePin:       (id) => apiPost('/api/store/pin', { id }),
 };

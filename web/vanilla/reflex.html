@@ -1,0 +1,44 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>Ember Reflex — Vanilla</title>
+  <style>
+    :root { color-scheme: dark; }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: #0b0708; color: #ffe9c9;
+      font-family: system-ui, sans-serif; display: grid; place-items: center; padding: 20px;
+    }
+    .card {
+      width: 340px; max-width: 92vw; padding: 22px; border-radius: 22px;
+      background: linear-gradient(180deg, #1a0f0a, #120a07);
+      border: 1px solid rgba(245,184,64,.18);
+      box-shadow: 0 20px 60px rgba(0,0,0,.5); text-align: center;
+    }
+    h1 { font-size: 20px; margin: 0 0 2px; }
+    p.sub { margin: 0 0 16px; font-size: 12px; color: #a97e57; }
+    canvas { width: 100%; height: 240px; border-radius: 16px; display: block; touch-action: manipulation; cursor: pointer; }
+    .result { margin-top: 14px; font-size: 14px; min-height: 20px; }
+    .result b { color: #f5b840; font-size: 22px; }
+    button.again {
+      margin-top: 12px; width: 100%; padding: 12px; border: 0; border-radius: 14px;
+      font-weight: 700; color: #2a1200; cursor: pointer;
+      background: linear-gradient(180deg, #ffd07a, #ff9a2a);
+    }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <h1>Ember Reflex</h1>
+    <p class="sub">Vanilla build — same engine as the React app. Tap the disc the instant it flares.</p>
+    <canvas id="arena"></canvas>
+    <div class="result" id="out">Tap the disc to begin.</div>
+    <button class="again" id="again" hidden>Train again</button>
+  </div>
+
+  <!-- The very same engine module the React wrapper uses. No framework here. -->
+  <script type="module" src="./reflex.js"></script>
+</body>
+</html>

@@ -21,6 +21,8 @@ import * as Streaks from './streaks.js';
 import * as Relics from './relics.js';
 import * as Kiva from './kiva.js';
 import * as Council from './council.js';
+import * as Warband from './warband.js';
+import * as Store from './store.js';
 
 export const router = express.Router();
 router.use(authMiddleware);
@@ -119,6 +121,10 @@ router.get('/state', rateLimit('state', 120), async (req, res, next) => { try {
       crest: tribe.crest,
       banner: tribe.banner,
       palette: tribe.palette,
+      icon_url: tribe.icon_url || null,
+      name_font: tribe.name_font || 'default',
+      name_style: tribe.name_style || 'plain',
+      banner_style: tribe.banner_style || 'plain',
       renown_total: Number(tribe.renown_total),
       wins: Number(tribe.wins),
       losses: Number(tribe.losses),
@@ -298,6 +304,65 @@ router.post('/spin', rateLimit('spin', 20), async (req, res, next) => { try {
   const r = await Spin.spin(req.user);
   await Quests.bump(req.user.id, 'spin', 1);
   res.json(r);
+} catch (e) { res.status(400).json({ error: e.message, need: e.need }); } });
+
+/* ============ WARBAND / SEAT CHALLENGES / BOT PRACTICE (v4) ============ */
+router.get('/warband', rateLimit('warband', 60), async (req, res, next) => { try {
+  res.json(await Warband.warbandState(req.user));
+} catch (e) { next(e); } });
+
+router.post('/warband/challenge', rateLimit('warband_ch', 20), async (req, res, next) => { try {
+  res.json(await Warband.openChallenge(req.user, req.body?.seat_no, String(req.body?.game || '')));
+} catch (e) { res.status(400).json({ error: e.message, gate: e.gate, challenge_id: e.challenge_id }); } });
+
+router.post('/warband/challenge/:id/resolve', rateLimit('warband_res', 30), async (req, res, next) => { try {
+  res.json(await Warband.resolveChallenge(req.user, Number(req.params.id), req.body || {}));
+} catch (e) { res.status(400).json({ error: e.message }); } });
+
+router.get('/bot-practice', rateLimit('botp', 60), async (req, res, next) => { try {
+  res.json(await Warband.botPracticeState(req.user));
+} catch (e) { next(e); } });
+
+router.post('/bot-practice/claim', rateLimit('botp_claim', 20), async (req, res, next) => { try {
+  res.json(await Warband.claimBotPractice(req.user, req.body || {}));
+} catch (e) { res.status(400).json({ error: e.message, reason: e.reason }); } });
+
+/* ============ STORE / TRIBE CUSTOMIZATION (v4 monetization) ============ */
+router.get('/store', rateLimit('store', 60), async (req, res, next) => { try {
+  res.json(await Store.storeState(req.user));
+} catch (e) { next(e); } });
+
+router.post('/store/perk/buy', rateLimit('store_buy', 20), async (req, res, next) => { try {
+  res.json(await Store.buyPerk(req.user, String(req.body?.perk || '')));
+} catch (e) { res.status(400).json({ error: e.message, need: e.need }); } });
+
+router.post('/store/tribe-name', rateLimit('store_name', 20), async (req, res, next) => { try {
+  res.json(await Store.setTribeName(req.user, req.body || {}));
+} catch (e) { res.status(400).json({ error: e.message, need: e.need, need_perk: e.need_perk }); } });
+
+// Icon data URLs can be large-ish (up to ~130 KB); allow a bigger JSON body here.
+router.post('/store/tribe-icon', express.json({ limit: '400kb' }), rateLimit('store_icon', 20), async (req, res, next) => { try {
+  res.json(await Store.setTribeIcon(req.user, req.body?.icon));
+} catch (e) { res.status(400).json({ error: e.message, need: e.need, need_perk: e.need_perk }); } });
+
+router.post('/store/tribe-banner', rateLimit('store_banner', 20), async (req, res, next) => { try {
+  res.json(await Store.setBannerStyle(req.user, String(req.body?.style || 'plain')));
+} catch (e) { res.status(400).json({ error: e.message, need: e.need, need_perk: e.need_perk }); } });
+
+// Paid Chief pin: highlight a Kiva message for a small Stars fee (~$2).
+router.post('/store/pin', rateLimit('store_pin', 20), async (req, res, next) => { try {
+  const u = req.user;
+  if (!u.tribe_id) return res.status(400).json({ error: 'no tribe' });
+  if (u.role !== 'Chief') return res.status(403).json({ error: 'only the Chief may pin' });
+  const id = Number(req.body?.id);
+  if (!id) return res.status(400).json({ error: 'message id required' });
+  const cost = Number(CFG.pin_message_stars) || 130;
+  if (!u.blessed) {
+    if (Number(u.stars || 0) < cost) { const e = new Error(`Pinning costs ${cost} Stars`); e.need = cost; throw e; }
+    await q('UPDATE users SET stars = stars - $1 WHERE id=$2', [cost, u.id]);
+  }
+  const row = await Kiva.setSeal(u.tribe_id, id, u.id, true);
+  res.json({ ok: true, ...row, cost: u.blessed ? 0 : cost });
 } catch (e) { res.status(400).json({ error: e.message, need: e.need }); } });
 
 /* ============ REFERRALS / FIRST PACK / INSURANCE ============ */

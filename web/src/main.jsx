@@ -15,6 +15,8 @@ import './styles/components.css';
 import './styles/relics.css';
 import './styles/kiva.css';
 import './styles/war.css';
+import './styles/warband.css';
+import './styles/store.css';
 import './styles/animations.css';
 
 initTelegram();

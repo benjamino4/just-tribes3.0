@@ -134,6 +134,53 @@ export const DEFAULTS = {
   tribe_level_caps:  JSON.stringify([5, 8, 12, 18, 25, 35, 50, 70, 90, 120]),
   tribe_level_costs: JSON.stringify([0, 25000, 60000, 140000, 300000, 600000, 1200000, 2400000, 4800000, 9600000]),
   tribe_level_names: JSON.stringify(['Band','Camp','Village','Settlement','Stronghold','Fortress','Domain','Realm','Empire','Kingdom']),
+
+  // ---------- warband & leadership (v4: Rise of the Eternal Flame) ----------
+  warband_seats: 20,
+  seat_inactive_days: 7,
+  seat_gate_streak_days: 5,
+  seat_gate_activity_points: 12,
+  seat_gate_window_days: 7,
+  seat_activity_weights: JSON.stringify({ war: 3, trial: 2, donate: 1, checkin: 1 }),
+
+  chief_inactive_days: 7,
+  chief_impeach_pass_pct: 60,
+
+  warlord_term_days: 14,
+  warlord_tourney_players: 20,
+  warlord_tourney_round_minutes: 60,
+  warlord_final_rps_best_of: 5,
+  war_requires_chief_and_warlord: 1,
+
+  // ---------- bot practice (daily Trials mini-game) ----------
+  bot_practice_per_day: 1,
+  bot_practice_reward_ember: 100,
+  bot_practice_game: 'reflex',
+
+  // ---------- store / tribe customization (v4 monetization) ----------
+  // Prices are in the internal Stars balance (topped up via Telegram Stars
+  // / TON). ~130 Stars ≈ US$2 at typical Star pricing.
+  pin_message_stars: 130,             // Chief pins a Kiva message (≈$2)
+  tribe_name_perk_stars: 400,         // one-time: unlock custom tribe name
+  tribe_icon_perk_stars: 500,         // one-time: unlock custom tribe icon
+  tribe_banner_perk_stars: 260,       // one-time: unlock premium banner styling
+  tribe_name_max_len: 24,
+  tribe_icon_max_kb: 130,             // reject icon data URLs larger than this
+  tribe_name_fonts: JSON.stringify([
+    { id: 'default', name: 'Standard',  css: 'var(--font-display)' },
+    { id: 'runic',   name: 'Runecarve', css: '"Cinzel", Georgia, serif' },
+    { id: 'blade',   name: 'Bladeforge', css: '"Oswald", Impact, sans-serif' },
+    { id: 'ash',     name: 'Ashen Hand', css: '"Caveat", cursive' },
+    { id: 'monol',   name: 'Monolith',  css: '"Bebas Neue", Arial Narrow, sans-serif' },
+  ]),
+  tribe_name_styles: JSON.stringify([
+    { id: 'plain',  name: 'Plain' },
+    { id: 'ember',  name: 'Ember Glow',  color: '#ff7a18' },
+    { id: 'gold',   name: 'Gilded',      color: '#ffcf7a' },
+    { id: 'frost',  name: 'Frostbrand',  color: '#8ddcff' },
+    { id: 'blood',  name: 'Bloodrune',   color: '#e05545' },
+    { id: 'void',   name: 'Voidfire',    color: '#b58cff' },
+  ]),
 };
 
 export const PALETTES = {
