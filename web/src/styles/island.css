@@ -1,0 +1,16 @@
+/* Dynamic Island — carved bone pendant, stacked, tribal */
+/* The pill that floats at the top. Uses .glass but heavier. */
+
+/* Animations the host triggers */
+@keyframes islandIgnite {
+  0% { transform: scale(0.6); opacity: 0; filter: brightness(2); }
+  40% { transform: scale(1.05); opacity: 1; filter: brightness(1.4); }
+  100% { transform: scale(1); opacity: 1; filter: brightness(1); }
+}
+@keyframes islandEmber {
+  0%, 100% { box-shadow: 0 16px 44px rgba(0,0,0,.75), 0 0 30px rgba(208,72,58,0.4); }
+  50%      { box-shadow: 0 16px 44px rgba(0,0,0,.75), 0 0 60px rgba(208,72,58,0.7); }
+}
+:root[data-perf="ultra120"] [data-severity="war"],
+:root[data-perf="ultra"] [data-severity="war"] { animation: islandEmber 1.8s ease-in-out infinite; }
+:root[data-fx="reduced"] [data-severity="war"] { animation: none; }

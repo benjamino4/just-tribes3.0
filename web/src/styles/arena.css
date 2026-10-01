@@ -1,0 +1,11 @@
+.war-front {
+  display: flex; flex-direction: column;
+  transition: transform 0.2s var(--ease-ember), box-shadow 0.2s ease;
+}
+.war-front:active { transform: scale(0.98); }
+.war-front.terrain-plains   { background: linear-gradient(180deg, #3a3a24, #1c1c10); }
+.war-front.terrain-forest   { background: linear-gradient(180deg, #1e3a24, #0e1a10); }
+.war-front.terrain-ruins    { background: linear-gradient(180deg, #2c2430, #14101a); }
+.war-front.terrain-ashlands { background: linear-gradient(180deg, #3a1a10, #1a0a04); }
+.war-front.terrain-hills    { background: linear-gradient(180deg, #3a2e24, #1a140e); }
+.war-front.terrain-swamp    { background: linear-gradient(180deg, #1a2418, #0a0e08); }

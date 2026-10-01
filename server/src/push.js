@@ -1,13 +1,8 @@
-// TRIBES-FILE: server/src/push.js
-// PHASE: 7 — Meta & Admin
-// Queued Telegram notifications with retries.
-// OFF by default in dev; set BOT_TOKEN + PUSH_ENABLED=1 to actually send.
-
 import { q } from './db.js';
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
-const ENABLED   = process.env.PUSH_ENABLED === '1';
-const API       = (t) => `https://api.telegram.org/bot${BOT_TOKEN}/${t}`;
+const ENABLED = process.env.PUSH_ENABLED === '1';
+const API = (t) => `https://api.telegram.org/bot${BOT_TOKEN}/${t}`;
 const MAX_ATTEMPTS = 3;
 
 async function tg(method, body) {
@@ -24,30 +19,23 @@ async function tg(method, body) {
 
 export async function enqueue(userId, body) {
   if (!BOT_TOKEN || !ENABLED) return;
-  await q(
-    'INSERT INTO push_queue (user_id, body) VALUES ($1,$2)',
-    [userId, String(body).slice(0, 4000)]
-  );
+  await q('INSERT INTO push_queue (user_id, body) VALUES ($1,$2)',
+    [userId, String(body).slice(0, 4000)]);
 }
 
 export async function flushQueue(limit = 40) {
   if (!BOT_TOKEN || !ENABLED) return { sent: 0, failed: 0, skipped: true };
-
   const r = await q(
     `SELECT id, user_id, body, attempts FROM push_queue
       WHERE sent_at IS NULL AND send_at <= now() AND attempts < $1
-      ORDER BY id LIMIT $2`,
-    [MAX_ATTEMPTS, limit]
+      ORDER BY id LIMIT $2`, [MAX_ATTEMPTS, limit]
   );
   let sent = 0, failed = 0;
-
   for (const row of r.rows) {
     try {
       await tg('sendMessage', {
-        chat_id: row.user_id,
-        text: row.body,
-        parse_mode: 'HTML',
-        disable_web_page_preview: true,
+        chat_id: row.user_id, text: row.body,
+        parse_mode: 'HTML', disable_web_page_preview: true,
       });
       await q('UPDATE push_queue SET sent_at=now() WHERE id=$1', [row.id]);
       sent++;
@@ -56,12 +44,10 @@ export async function flushQueue(limit = 40) {
       const attempts = (row.attempts || 0) + 1;
       const giveUp = attempts >= MAX_ATTEMPTS;
       await q(
-        `UPDATE push_queue
-            SET attempts = $1,
-                last_error = $2,
+        `UPDATE push_queue SET attempts=$1, last_error=$2,
                 sent_at = CASE WHEN $3 THEN now() ELSE NULL END,
                 send_at = now() + ($1 * interval '30 seconds')
-          WHERE id = $4`,
+          WHERE id=$4`,
         [attempts, String(e.message || '').slice(0, 200), giveUp, row.id]
       );
       failed++;

@@ -1,200 +1,120 @@
-// TRIBES-FILE: web/src/screens/Vault.jsx
-// PHASE: 4 — Relics
-// Your collection. Wield / unwield, view shards, reforge duplicates.
-
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
 import { useMotionConfig, V } from '../lib/motion.js';
-import { fmt } from '../lib/format.js';
-import { apiGet, apiPost } from '../lib/api.js';
+import { Endpoints } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
-import Relic from '../components/Relic.jsx';
 import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
 import { toast } from '../components/Toast.jsx';
 
-const TABS = [
-  { id: 'all',       label: 'All' },
-  { id: 'personal',  label: 'Personal' },
-  { id: 'war',       label: 'War' },
-  { id: 'tribe',     label: 'Tribe' },
-  { id: 'cursed',    label: 'Cursed' },
-  { id: 'owned',     label: 'Mine' },
-];
+const CATS = ['flame', 'blade', 'voice'];
+const CAT_LABELS = { flame: 'Flame', blade: 'Blade', voice: 'Voice' };
+const CAT_ICONS = { flame: 'hearth', blade: 'swords', voice: 'bell' };
 
 export default function Vault() {
   const nav = useNavigate();
   const { reload } = useApp();
   const M = useMotionConfig();
-
   const [state, setState] = useState(null);
-  const [tab, setTab] = useState('owned');
-  const [detail, setDetail] = useState(null);
+  const [tab, setTab] = useState('all');
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const s = await apiGet('/api/relics/state');
-        setState(s);
-      } catch (e) {
-        toast(e.message || 'Could not load the vault', 'bad');
-      }
-    })();
-  }, []);
-
-  async function wield(relicId) {
+  async function load() {
     try {
-      const r = await apiPost('/api/relics/wield', { relicId });
-      if (r.warning) toast(r.warning, 'info');
-      else toast('Relic wielded', 'good');
-      const s = await apiGet('/api/relics/state');
-      setState(s);
-      setDetail(null);
+      const r = await Endpoints.relicsState();
+      setState(r.data || r);
+    } catch (e) { toast(e.message || 'Could not load vault', 'bad'); }
+  }
+  useEffect(() => { load(); }, []);
+
+  async function equip(relicId) {
+    try {
+      await Endpoints.relicsEquip(relicId);
+      toast('Equipped', 'good');
+      load();
       reload();
-    } catch (e) {
-      toast(e.message || 'Could not wield', 'bad');
-    }
+    } catch (e) { toast(e.message || 'Could not equip', 'bad'); }
   }
 
-  async function unwield() {
-    try {
-      await apiPost('/api/relics/unwield');
-      toast('Relic unwielded', 'info');
-      const s = await apiGet('/api/relics/state');
-      setState(s);
-      setDetail(null);
-      reload();
-    } catch (e) {
-      toast(e.message || 'Could not unwield', 'bad');
-    }
-  }
+  if (!state) return <p className="muted" style={{ padding: 24, textAlign: 'center' }}>Loading…</p>;
 
-  if (!state) return (
-    <div style={{ padding: 24, textAlign: 'center' }}>
-      <p className="muted">Loading your vault…</p>
-    </div>
-  );
-
-  const filtered = state.catalog.filter((r) => {
+  const filtered = (state.catalog || []).filter((r) => {
     if (tab === 'owned') return r.owned;
     if (tab === 'all') return true;
-    return r.category === tab || (tab === 'cursed' && r.cursed);
+    return r.category === tab;
   });
 
   return (
-    <motion.div variants={V.page} initial="initial" animate="animate" exit="exit" transition={M.buoyant}
-      className="col" style={{ gap: 4 }}>
+    <motion.div variants={V.page} initial="initial" animate="animate" className="col" style={{ gap: 4 }}>
       <div className="row between" style={{ margin: '2px 2px 12px' }}>
         <div className="row" style={{ gap: 10 }}>
-          <button className="chip" style={{ padding: 9, borderRadius: 999 }}
-                  onClick={() => { haptic('light'); nav(-1); }}>
-            <Icon name="chevL" size={18} />
-          </button>
-          <h2 className="display" style={{ fontSize: 22 }}>The Vault</h2>
-          <Hint text="Your relic collection. Wield one at a time. Duplicates can be reforged into higher rarities." />
+          <h2 className="display" style={{ fontSize: 22 }}>Vault</h2>
+          <Hint slug="vault" text="Equip one relic per category: Flame (economy), Blade (combat), Voice (tribe). Each relic does one thing." />
         </div>
       </div>
 
-      <div className="glass card">
-        <div className="row between">
-          <div className="col">
-            <span className="tiny">Ashen Shards</span>
-            <b style={{ fontSize: 20 }} className="tabular">{fmt(state.cursed_shards)}</b>
-          </div>
-          <div className="col">
-            <span className="tiny">Wielded</span>
-            <b style={{ fontSize: 14 }}>
-              {state.equipped_relic_id
-                ? state.catalog.find((r) => r.id === state.equipped_relic_id)?.name || '—'
-                : 'None'}
-            </b>
-          </div>
-          {state.equipped_relic_id && (
-            <Button variant="ghost" onClick={unwield}>Unwield</Button>
-          )}
-        </div>
+      <div className="row" style={{ gap: 8, marginBottom: 12 }}>
+        {CATS.map((c) => {
+          const equipped = state.slots?.[c];
+          const relic = (state.catalog || []).find((r) => Number(r.id) === Number(equipped));
+          return (
+            <div key={c} className="glass card grow" style={{ padding: 10, textAlign: 'center' }}>
+              <Icon name={CAT_ICONS[c]} size={20} style={{ color: 'var(--gold-300)' }} />
+              <div className="tiny" style={{ marginTop: 4 }}>{CAT_LABELS[c]}</div>
+              <b style={{ fontSize: 12 }}>{relic?.name || '—'}</b>
+            </div>
+          );
+        })}
       </div>
 
-      {/* tabs */}
-      <div className="row" style={{ gap: 8, overflowX: 'auto', padding: '4px 0', marginBottom: 8 }}>
-        {TABS.map((t) => (
-          <button
-            key={t.id}
-            onClick={() => { haptic('select'); setTab(t.id); }}
+      <Button variant="primary" block onClick={() => nav('/vault/forge')}>
+        <Icon name="relic" size={16} /> Open a Cache
+      </Button>
+      <Button variant="ghost" block onClick={() => nav('/vault/store')}>
+        <Icon name="star" size={16} /> Trading Post
+      </Button>
+
+      <div className="row" style={{ gap: 8, marginTop: 12, overflowX: 'auto' }}>
+        {['all', 'flame', 'blade', 'voice', 'owned'].map((t) => (
+          <button key={t}
+            onClick={() => { haptic('select'); setTab(t); }}
             className="chip"
             style={{
               flex: '0 0 auto',
-              borderColor: tab === t.id ? 'var(--ember-400)' : 'var(--glass-brd)',
-              color: tab === t.id ? 'var(--ember-200)' : 'var(--ink-dim)',
-              background: tab === t.id ? 'rgba(255,122,24,.14)' : 'var(--glass-bg)',
+              borderColor: tab === t ? 'var(--ember-400)' : 'var(--glass-brd)',
+              color: tab === t ? 'var(--ember-200)' : 'var(--ink-dim)',
+              background: tab === t ? 'rgba(255,122,24,.14)' : 'var(--glass-bg)'
             }}
-          >
-            {t.label}
-          </button>
+          >{t}</button>
         ))}
       </div>
 
-      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 8 }}>
         {filtered.map((r) => (
-          <Relic
+          <motion.button
             key={r.id}
-            relic={r}
-            compact
-            equipped={r.equipped}
-            onClick={() => { haptic('light'); setDetail(r); }}
-          />
+            whileTap={{ scale: 0.97 }}
+            onClick={() => r.owned ? equip(r.id) : toast('Not owned', 'info')}
+            className="glass"
+            style={{
+              padding: 12, textAlign: 'left',
+              borderColor: r.equipped ? 'var(--gold-400)' : 'var(--glass-brd)',
+              boxShadow: r.equipped ? '0 0 20px rgba(239,193,104,.3)' : undefined
+            }}
+          >
+            <div style={{ fontSize: 10, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--gold-300)', fontWeight: 800 }}>
+              {r.tier} · {r.category}
+            </div>
+            <b style={{ fontSize: 14, display: 'block', marginTop: 4 }}>{r.name}</b>
+            <p className="tiny" style={{ marginTop: 4 }}>{r.description}</p>
+            {r.equipped && <span className="chip" style={{ marginTop: 8, color: 'var(--good)' }}>Equipped</span>}
+          </motion.button>
         ))}
       </div>
 
-      {!filtered.length && (
-        <p className="muted" style={{ textAlign: 'center', padding: 24 }}>
-          {tab === 'owned' ? 'Nothing here yet — open a cache in the Forge.' : 'No relics in this category.'}
-        </p>
-      )}
-
-      {detail && (
-        <div
-          onClick={() => setDetail(null)}
-          style={{
-            position: 'fixed', inset: 0, zIndex: 100,
-            background: 'rgba(0,0,0,.6)', backdropFilter: 'blur(6px)',
-            display: 'flex', alignItems: 'flex-end', justifyContent: 'center',
-          }}
-        >
-          <motion.div
-            initial={{ y: '100%' }}
-            animate={{ y: 0 }}
-            onClick={(e) => e.stopPropagation()}
-            className="glass strong"
-            style={{
-              width: '100%', maxWidth: 'var(--maxw)',
-              borderRadius: 'var(--r-xl) var(--r-xl) 0 0',
-              padding: '20px 18px calc(var(--safe-bot) + 22px)',
-            }}
-          >
-            <div style={{ width: 42, height: 5, borderRadius: 99, background: 'rgba(255,255,255,.25)', margin: '0 auto 16px' }} />
-            <div style={{ maxWidth: 220, margin: '0 auto 16px' }}>
-              <Relic relic={detail} />
-            </div>
-            {detail.owned ? (
-              <Button
-                variant={detail.equipped ? 'ghost' : 'primary'}
-                block haptic="heavy"
-                onClick={() => detail.equipped ? unwield() : wield(detail.id)}
-              >
-                {detail.equipped ? 'Unwield' : 'Wield'}
-              </Button>
-            ) : (
-              <Button variant="ghost" block onClick={() => { setDetail(null); nav('/forge'); }}>
-                Not owned — open a cache
-              </Button>
-            )}
-          </motion.div>
-        </div>
-      )}
+      {!filtered.length && <p className="muted" style={{ textAlign: 'center', padding: 24 }}>No relics here yet.</p>}
     </motion.div>
   );
 }

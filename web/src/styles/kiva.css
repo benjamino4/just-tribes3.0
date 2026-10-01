@@ -1,32 +1,12 @@
-/* TRIBES-FILE: web/src/styles/kiva.css
-   PHASE: 5 — Council & Kiva
-   Parchment scroll effect, message bubbles, chief glow, curfew badge. */
-
 .kiva-scroll {
   position: relative;
-  background:
-    linear-gradient(180deg,
-      rgba(90,60,30,.06) 0%,
-      rgba(60,40,20,.12) 40%,
-      rgba(60,40,20,.16) 100%),
-    var(--glass-bg);
+  padding: 16px 12px 100px;
+  display: flex; flex-direction: column; gap: 10px;
+  min-height: 60vh;
+  background: linear-gradient(180deg, rgba(90,60,30,.06) 0%, rgba(60,40,20,.12) 40%, rgba(60,40,20,.16) 100%),
+              var(--glass-bg);
   border-radius: var(--r-lg);
-  padding: 16px 12px 80px;
-  mask-image: linear-gradient(180deg,
-    transparent 0,
-    #000 24px,
-    #000 calc(100% - 100px),
-    transparent 100%);
-  -webkit-mask-image: linear-gradient(180deg,
-    transparent 0,
-    #000 24px,
-    #000 calc(100% - 100px),
-    transparent 100%);
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
 }
-
 .kiva-bubble {
   align-self: flex-start;
   max-width: 82%;
@@ -34,9 +14,7 @@
   border-radius: 18px 18px 18px 6px;
   background: var(--glass-bg);
   border: 1px solid var(--glass-brd);
-  backdrop-filter: blur(12px);
-  display: flex;
-  flex-direction: column;
+  display: flex; flex-direction: column;
 }
 .kiva-bubble.mine {
   align-self: flex-end;
@@ -46,120 +24,21 @@
 }
 .kiva-bubble.chief {
   border-color: rgba(255,210,122,.55);
-  box-shadow: 0 0 18px rgba(255,210,122,.18), inset 0 1px 0 rgba(255,255,255,.1);
+  box-shadow: 0 0 18px rgba(255,210,122,.18);
 }
-.kiva-bubble.system {
-  align-self: center;
-  background: transparent;
-  border: none;
-  color: var(--ink-dim);
-  font-style: italic;
-  font-size: 12px;
-  max-width: 90%;
-  text-align: center;
-  padding: 4px 0;
-}
-.kiva-bubble.war {
-  background: linear-gradient(180deg, rgba(255,90,60,.14), rgba(196,58,5,.08));
-  border-color: rgba(255,90,60,.3);
-}
-.kiva-bubble.relic {
-  background: linear-gradient(180deg, rgba(255,210,122,.12), rgba(196,120,5,.08));
-  border-color: rgba(255,210,122,.3);
-}
-.kiva-bubble.poll {
-  max-width: 92%;
-  align-self: center;
-  width: 100%;
-  background: linear-gradient(180deg, rgba(255,122,24,.12), rgba(0,0,0,.25));
-  border-color: rgba(255,180,100,.4);
-}
-
-.kiva-seal {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  color: var(--gold);
-  font-size: 11px;
-  font-weight: 700;
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(255,210,122,.12);
-  border: 1px solid rgba(255,210,122,.28);
-}
-
-.kiva-curfew {
-  position: sticky;
-  top: 0;
-  z-index: 10;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  border-radius: var(--r-md);
-  background: linear-gradient(180deg, rgba(139,92,246,.22), rgba(76,29,149,.14));
-  border: 1px solid rgba(139,92,246,.45);
-  color: #e0d2ff;
-  font-size: 12.5px;
-  font-weight: 600;
-}
-
 .kiva-composer {
   position: fixed;
-  left: 50%;
-  transform: translateX(-50%);
+  left: 50%; transform: translateX(-50%);
   bottom: calc(var(--safe-bot) + 10px);
   z-index: 40;
   width: calc(100% - 24px);
   max-width: calc(var(--maxw) - 24px);
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px;
-  border-radius: var(--r-xl);
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px; border-radius: var(--r-xl);
 }
 .kiva-input {
-  flex: 1;
-  min-width: 0;
-  background: transparent;
-  border: none;
-  color: var(--ink);
-  font-size: 14.5px;
-  padding: 6px 4px;
-  outline: none;
-}
-
-.emoji-cell {
-  aspect-ratio: 1 / 1;
-  display: grid;
-  place-items: center;
-  border-radius: 12px;
-  background: rgba(255,255,255,.05);
-  border: 1px solid var(--glass-brd);
-}
-
-/* poll styling */
-.kiva-poll {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-top: 4px;
-}
-.kiva-poll-opt {
-  position: relative;
-  padding: 8px 10px;
-  border-radius: 10px;
-  overflow: hidden;
-  border: 1px solid var(--glass-brd);
-  background: rgba(255,255,255,.04);
-  text-align: left;
-  cursor: pointer;
-}
-.kiva-poll-opt.voted {
-  border-color: var(--ember-400);
-}
-.kiva-poll-fill {
-  position: absolute;
-  inset: 0;
-  background: rgba(255,122,24,.18);
+  flex: 1; min-width: 0;
+  background: transparent; border: none;
+  color: var(--ink); font-size: 14.5px;
+  padding: 6px 4px; outline: none;
 }

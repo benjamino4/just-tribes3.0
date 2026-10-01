@@ -1,0 +1,23 @@
+.cascade-scene { position: relative; width: 100%; height: 100%; min-height: 400px; }
+.cascade-fire {
+  position: absolute;
+  width: 60px; height: 60px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, #2a1a10, #160d08);
+  border: 2px solid #3a2413;
+  display: grid; place-items: center;
+  transition: transform .15s ease, box-shadow .15s ease;
+}
+.cascade-fire[data-active="true"] {
+  background: radial-gradient(circle at 40% 35%, #ffd07a, #ff7a1a);
+  border-color: #ffd07a;
+  box-shadow: 0 0 30px rgba(255,140,40,.7);
+  transform: scale(1.15);
+}
+.cascade-glyph { font-size: 24px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
+.cascade-status {
+  position: absolute; bottom: 0; left: 0; right: 0;
+  text-align: center; font-size: 14px;
+  color: var(--bone-200);
+}
+.cascade-status .bad { color: var(--blood-400); }

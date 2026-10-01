@@ -1,0 +1,5 @@
+.seat-circle {
+  position: relative;
+  display: block;
+  filter: drop-shadow(0 0 30px rgba(239,193,104,0.15));
+}

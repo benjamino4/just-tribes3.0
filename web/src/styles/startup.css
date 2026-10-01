@@ -1,0 +1,43 @@
+.startup-scene {
+  position: fixed; inset: 0; z-index: 1000;
+  display: grid; place-items: center;
+  background: radial-gradient(circle at 50% 60%, #1a0d06 0%, #060508 70%);
+  overflow: hidden;
+}
+.startup-void {
+  position: absolute; inset: 0;
+  background: radial-gradient(circle at 50% 50%, transparent 0%, rgba(0,0,0,0.6) 100%);
+  pointer-events: none;
+}
+.startup-ember {
+  position: absolute;
+  width: 20px; height: 20px; border-radius: 50%;
+  background: radial-gradient(circle, #ffe2a1, #ff8324 60%, #8f3402);
+  box-shadow:
+    0 0 20px #ff8324,
+    0 0 60px #ff9f45,
+    0 0 120px rgba(242,106,16,0.5);
+}
+.startup-title {
+  position: relative; z-index: 2;
+  font-size: 52px;
+  color: var(--bone-50);
+  text-shadow:
+    0 0 30px rgba(255,131,36,0.8),
+    0 0 80px rgba(242,106,16,0.5);
+  font-weight: 900;
+}
+.startup-verse {
+  position: absolute; bottom: 32%;
+  font-size: 15px;
+  color: var(--bone-200);
+  font-style: italic;
+  letter-spacing: 0.04em;
+  z-index: 2;
+}
+:root[data-perf="potato"] .startup-ember { animation: none; }
+
+@keyframes cfShrink {
+  0% { transform: scale(1); opacity: 1; }
+  100% { transform: scale(0.5); opacity: 0.4; }
+}

@@ -1,9 +1,8 @@
 {
   "name": "tribes-server",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "private": true,
   "type": "module",
-  "description": "TRIBES backend \u2014 Express + Postgres. Stone-age tribe idle game with live Tribe Wars, TON Connect and Telegram Stars.",
   "engines": { "node": ">=20" },
   "scripts": {
     "start": "node src/index.js",

@@ -1,0 +1,28 @@
+.chain-scene { display: flex; flex-direction: column; gap: 20px; align-items: center; }
+.chain-line {
+  display: flex; flex-wrap: wrap; gap: 6px;
+  justify-content: center; padding: 20px;
+  min-height: 120px;
+  background: rgba(0,0,0,.3);
+  border-radius: 16px;
+  width: 100%;
+}
+.chain-torch {
+  width: 40px; height: 40px;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,140,40,.4), transparent 70%);
+  display: grid; place-items: center;
+  animation: chainSettle .35s ease-out;
+}
+@keyframes chainSettle {
+  0% { transform: scale(0.4) rotate(-30deg); opacity: 0; }
+  60% { transform: scale(1.1) rotate(6deg); opacity: 1; }
+  100% { transform: scale(1) rotate(0); opacity: 1; }
+}
+.chain-actions { display: flex; gap: 10px; }
+.chain-btn {
+  width: 60px; height: 60px; border-radius: 14px;
+  background: rgba(255,243,208,.05);
+  border: 1px solid var(--glass-brd);
+  display: grid; place-items: center;
+}

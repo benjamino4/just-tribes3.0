@@ -1,27 +1,22 @@
-// TRIBES-FILE: server/src/kiva.js
-// PHASE: 5 — Council & Kiva
-// Tribe chat with SSE broadcast, polls, seals, chief boons, curfew.
-
 import { q } from './db.js';
 import { verifyInitData } from './auth.js';
+import { CFG } from './config.js';
 
-const KIVA_MAX = 500;
-const subscribers = new Map();   // tribeId -> Set<res>
+const MAX_MESSAGES = Number(CFG.kiva_max_messages) || 500;
+const subscribers = new Map();
 
-/* ---------- writers ---------- */
 export async function postMessage(tribeId, userId, body, kind = 'chat', poll = null) {
-  const clean = poll ? null : String(body || '').replace(/\s+/g, ' ').trim().slice(0, 280);
+  const maxLen = Number(CFG.kiva_message_max_length) || 280;
+  const clean = poll ? null : String(body || '').replace(/\s+/g, ' ').trim().slice(0, maxLen);
   if (!poll && !clean) throw new Error('empty message');
 
-  // curfew check: if a curfew is active, only the poll author may post
   if (kind === 'chat') {
     const curfew = (await q(
       `SELECT started_by, ends_at FROM kiva_curfews
-        WHERE tribe_id=$1 AND ends_at > now()`,
-      [tribeId]
+        WHERE tribe_id=$1 AND ends_at > now()`, [tribeId]
     )).rows[0];
     if (curfew && Number(curfew.started_by) !== Number(userId)) {
-      throw new Error('A Chief\'s Curfew is in effect — only the Chief may speak.');
+      throw new Error('A Curfew is in effect — only the Chief may speak.');
     }
   }
 
@@ -32,15 +27,12 @@ export async function postMessage(tribeId, userId, body, kind = 'chat', poll = n
     [tribeId, userId, clean, kind, poll ? JSON.stringify(poll) : null]
   );
 
-  // retention
   await q(
     `DELETE FROM kiva_messages
-      WHERE tribe_id=$1
-        AND id < (SELECT COALESCE(MIN(id),0) FROM (
-             SELECT id FROM kiva_messages WHERE tribe_id=$1
-             ORDER BY id DESC LIMIT $2
-           ) s)`,
-    [tribeId, KIVA_MAX]
+      WHERE tribe_id=$1 AND id < (SELECT COALESCE(MIN(id),0) FROM (
+        SELECT id FROM kiva_messages WHERE tribe_id=$1
+        ORDER BY id DESC LIMIT $2) s)`,
+    [tribeId, MAX_MESSAGES]
   );
 
   const msg = r.rows[0];
@@ -50,49 +42,33 @@ export async function postMessage(tribeId, userId, body, kind = 'chat', poll = n
 
 export async function setSeal(tribeId, messageId, userId, sealed) {
   const msg = (await q(
-    'SELECT id, pinned FROM kiva_messages WHERE id=$1 AND tribe_id=$2',
-    [messageId, tribeId]
+    'SELECT id, pinned FROM kiva_messages WHERE id=$1 AND tribe_id=$2', [messageId, tribeId]
   )).rows[0];
   if (!msg) throw new Error('no such message');
-
   await q(
-    `UPDATE kiva_messages
-        SET pinned=$1, sealed_at=$2, sealed_by=$3
+    `UPDATE kiva_messages SET pinned=$1, sealed_at=$2, sealed_by=$3
       WHERE id=$4 AND tribe_id=$5`,
     [!!sealed, sealed ? new Date() : null, sealed ? userId : null, messageId, tribeId]
   );
-
-  const row = (await q(
-    'SELECT id, pinned, sealed_at, sealed_by FROM kiva_messages WHERE id=$1',
-    [messageId]
-  )).rows[0];
+  const row = (await q('SELECT id, pinned, sealed_at, sealed_by FROM kiva_messages WHERE id=$1',
+    [messageId])).rows[0];
   broadcast(tribeId, { type: 'seal', id: row.id, pinned: row.pinned });
   return row;
 }
 
 export async function votePoll(tribeId, messageId, userId, optionIndex) {
-  const msg = (await q(
-    'SELECT id, poll_data FROM kiva_messages WHERE id=$1 AND tribe_id=$2',
-    [messageId, tribeId]
-  )).rows[0];
+  const msg = (await q('SELECT id, poll_data FROM kiva_messages WHERE id=$1 AND tribe_id=$2',
+    [messageId, tribeId])).rows[0];
   if (!msg || !msg.poll_data) throw new Error('no such poll');
   const poll = msg.poll_data;
   const idx = Number(optionIndex);
-  if (!Array.isArray(poll.opts) || idx < 0 || idx >= poll.opts.length) {
-    throw new Error('bad option');
-  }
-
-  poll.opts[idx].v = (poll.opts[idx].v || 0) + 1;
-  // track voter to prevent double-vote via a separate lightweight field
+  if (!Array.isArray(poll.opts) || idx < 0 || idx >= poll.opts.length) throw new Error('bad option');
   poll.voters = poll.voters || {};
   if (poll.voters[userId] != null) throw new Error('you already voted');
+  poll.opts[idx].v = (poll.opts[idx].v || 0) + 1;
   poll.voters[userId] = idx;
-
-  await q(
-    'UPDATE kiva_messages SET poll_data=$1::jsonb WHERE id=$2',
-    [JSON.stringify(poll), messageId]
-  );
-
+  await q('UPDATE kiva_messages SET poll_data=$1::jsonb WHERE id=$2',
+    [JSON.stringify(poll), messageId]);
   broadcast(tribeId, { type: 'poll', id: messageId, poll });
   return poll;
 }
@@ -113,8 +89,7 @@ export async function startCurfew(tribeId, userId, hours) {
 
 export async function endCurfew(tribeId, userId) {
   const row = (await q(
-    'SELECT started_by FROM kiva_curfews WHERE tribe_id=$1 AND ends_at > now()',
-    [tribeId]
+    'SELECT started_by FROM kiva_curfews WHERE tribe_id=$1 AND ends_at > now()', [tribeId]
   )).rows[0];
   if (!row) throw new Error('no active curfew');
   if (Number(row.started_by) !== Number(userId)) throw new Error('only the caller can lift it');
@@ -125,19 +100,16 @@ export async function endCurfew(tribeId, userId) {
 
 export async function activeCurfew(tribeId) {
   return (await q(
-    `SELECT started_by, ends_at FROM kiva_curfews
-      WHERE tribe_id=$1 AND ends_at > now()`,
+    `SELECT started_by, ends_at FROM kiva_curfews WHERE tribe_id=$1 AND ends_at > now()`,
     [tribeId]
   )).rows[0] || null;
 }
 
-/* ---------- readers ---------- */
 export async function listMessages(tribeId, sinceId = 0, limit = 50) {
   return (await q(
     `SELECT m.id, m.user_id, m.body, m.kind, m.pinned, m.poll_data, m.created_at,
             u.username, u.first_name, u.name_color, u.avatar_glow, u.role
-       FROM kiva_messages m
-       JOIN users u ON u.id = m.user_id
+       FROM kiva_messages m JOIN users u ON u.id = m.user_id
       WHERE m.tribe_id=$1 AND m.id > $2
       ORDER BY m.id ASC LIMIT $3`,
     [tribeId, sinceId, Math.min(limit, 200)]
@@ -149,11 +121,9 @@ export async function latestMessages(tribeId, limit = 50) {
     `SELECT * FROM (
        SELECT m.id, m.user_id, m.body, m.kind, m.pinned, m.poll_data, m.created_at,
               u.username, u.first_name, u.name_color, u.avatar_glow, u.role
-         FROM kiva_messages m
-         JOIN users u ON u.id = m.user_id
-        WHERE m.tribe_id=$1
-        ORDER BY m.id DESC LIMIT $2
-     ) s ORDER BY id ASC`,
+         FROM kiva_messages m JOIN users u ON u.id = m.user_id
+        WHERE m.tribe_id=$1 ORDER BY m.id DESC LIMIT $2) s
+     ORDER BY id ASC`,
     [tribeId, Math.min(limit, 100)]
   );
   return r.rows;
@@ -171,8 +141,7 @@ export async function markRead(tribeId, userId, lastSeenId) {
 
 export async function unreadCount(tribeId, userId) {
   const r = (await q(
-    `SELECT COUNT(*)::int AS n
-       FROM kiva_messages m
+    `SELECT COUNT(*)::int AS n FROM kiva_messages m
        LEFT JOIN kiva_reads r ON r.tribe_id=m.tribe_id AND r.user_id=$2
       WHERE m.tribe_id=$1 AND m.id > COALESCE(r.last_seen_id, 0) AND m.user_id <> $2`,
     [tribeId, userId]
@@ -180,7 +149,6 @@ export async function unreadCount(tribeId, userId) {
   return r ? r.n : 0;
 }
 
-/* ---------- SSE ---------- */
 export function subscribe(tribeId, res) {
   const key = Number(tribeId);
   if (!subscribers.has(key)) subscribers.set(key, new Set());
@@ -207,7 +175,6 @@ export function kivaSse(req, res) {
   const tgUser = verifyInitData(initData);
   const allowGuest = process.env.ALLOW_GUEST === '1';
   let userId = null;
-
   if (tgUser) userId = tgUser.id;
   else if (allowGuest && guestId && /^g\d{6,}$/.test(guestId)) {
     userId = Number(guestId.slice(1)) % 2147483647 + 1000000000;
@@ -217,10 +184,7 @@ export function kivaSse(req, res) {
   q('SELECT tribe_id FROM users WHERE id=$1', [userId])
     .then((r) => {
       const actual = r.rows[0]?.tribe_id;
-      if (!actual || Number(actual) !== tribeId) {
-        res.status(403).end();
-        return;
-      }
+      if (!actual || Number(actual) !== tribeId) { res.status(403).end(); return; }
       res.writeHead(200, {
         'Content-Type': 'text/event-stream',
         'Cache-Control': 'no-cache, no-transform',
@@ -238,56 +202,3 @@ setInterval(() => {
     for (const res of set) { try { res.write(': ping\n\n'); } catch {} }
   }
 }, 25000).unref();
-
-/* ---------- chief boons ---------- */
-export async function listBoons(user, tribeId) {
-  const userBoons = (await q(
-    `SELECT boon_slug, active, expires_at FROM user_boons WHERE user_id=$1`,
-    [user.id]
-  )).rows;
-  const tribeBoons = (await q(
-    `SELECT boon_slug, active, expires_at FROM tribe_boons WHERE tribe_id=$1`,
-    [tribeId]
-  )).rows;
-  const map = {};
-  for (const b of userBoons)  map[b.boon_slug] = { ...b, scope: 'user' };
-  for (const b of tribeBoons) map[b.boon_slug] = { ...b, scope: 'tribe' };
-  return map;
-}
-
-export async function grantBoon(user, tribeId, slug, scope) {
-  if (scope === 'tribe') {
-    await q(
-      `INSERT INTO tribe_boons (tribe_id, boon_slug, active, expires_at)
-       VALUES ($1,$2,true, now() + interval '24 hours')
-       ON CONFLICT (tribe_id, boon_slug) DO UPDATE
-         SET active=true, expires_at=EXCLUDED.expires_at, purchased_at=now()`,
-      [tribeId, slug]
-    );
-  } else {
-    await q(
-      `INSERT INTO user_boons (user_id, boon_slug, active, expires_at)
-       VALUES ($1,$2,true, now() + interval '24 hours')
-       ON CONFLICT (user_id, boon_slug) DO UPDATE
-         SET active=true, expires_at=EXCLUDED.expires_at, purchased_at=now()`,
-      [user.id, slug]
-    );
-  }
-}
-
-export async function hasBoon(userId, tribeId, slug) {
-  const u = await q(
-    `SELECT 1 FROM user_boons
-      WHERE user_id=$1 AND boon_slug=$2 AND active=true
-        AND (expires_at IS NULL OR expires_at > now())`,
-    [userId, slug]
-  );
-  if (u.rowCount) return true;
-  const t = await q(
-    `SELECT 1 FROM tribe_boons
-      WHERE tribe_id=$1 AND boon_slug=$2 AND active=true
-        AND (expires_at IS NULL OR expires_at > now())`,
-    [tribeId, slug]
-  );
-  return t.rowCount > 0;
-}

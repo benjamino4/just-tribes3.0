@@ -1,0 +1,4 @@
+/* Reduced tier overrides */
+:root[data-fx="reduced"] .living-fire canvas { image-rendering: pixelated; }
+:root[data-perf="potato"] .ticker-host { display: none; }
+:root[data-perf="potato"] .startup-ember { box-shadow: 0 0 20px #ff8324; }

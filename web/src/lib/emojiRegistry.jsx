@@ -1,36 +1,26 @@
-// =====================================================================
-// Emoji registry — merges the built-in client-side map with the
-// server's custom defs. Provides <EmojiProvider> + useEmojiRegistry().
-// =====================================================================
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { apiGet } from './api.js';
-import { EMOJI } from '../data/emojis.js';
+
+const FALLBACK = { custom: {}, sets: [], free: [], ready: false };
 
 const Ctx = createContext({
-  custom: {},
-  sets: [],
-  free: [],
-  ready: false,
+  ...FALLBACK,
   reload: async () => {},
-  resolve: (key) => EMOJI[key] || EMOJI['spark_orbit'],
+  resolve: () => null
 });
 
 export function EmojiProvider({ children }) {
-  const [state, setState] = useState({
-    custom: {},
-    sets: [],
-    free: [],
-    ready: false,
-  });
+  const [state, setState] = useState(FALLBACK);
 
   const load = useCallback(async () => {
     try {
       const r = await apiGet('/api/emoji/state');
+      const body = r.data || r;
       setState({
-        custom: r.custom || {},
-        sets: r.sets || [],
-        free: r.free || [],
-        ready: true,
+        custom: body.custom || {},
+        sets: body.sets || [],
+        free: body.free || [],
+        ready: true
       });
     } catch {
       setState((s) => ({ ...s, ready: true }));
@@ -41,16 +31,11 @@ export function EmojiProvider({ children }) {
 
   const resolve = useCallback((key) => {
     if (!key) return null;
-    const c = state.custom[key];
-    if (c) return c;
-    return EMOJI[key] || null;
+    return state.custom[key] || null;
   }, [state.custom]);
 
   const value = useMemo(() => ({ ...state, reload: load, resolve }), [state, load, resolve]);
-
   return <Ctx.Provider value={value}>{children}</Ctx.Provider>;
 }
 
-export function useEmojiRegistry() {
-  return useContext(Ctx);
-}
+export function useEmojiRegistry() { return useContext(Ctx); }

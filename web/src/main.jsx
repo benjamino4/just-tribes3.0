@@ -1,49 +1,57 @@
-// =====================================================================
-// web/src/main.jsx — entry
-// =====================================================================
 import React from 'react';
 import { createRoot } from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App.jsx';
 import { AppProvider } from './lib/store.jsx';
 import { EmojiProvider } from './lib/emojiRegistry.jsx';
+import { EventProvider } from './lib/EventProvider.jsx';
 import { HintProvider } from './components/Hint.jsx';
 import { initTelegram } from './lib/telegram.js';
+import { initPerf } from './lib/perf.js';
+
 import './styles/tokens.css';
 import './styles/base.css';
 import './styles/components.css';
-import './styles/relics.css';
+import './styles/island.css';
+import './styles/ticker.css';
+import './styles/startup.css';
+import './styles/benchmark.css';
+import './styles/help.css';
+import './styles/arena.css';
+import './styles/tribe.css';
 import './styles/kiva.css';
-import './styles/war.css';
-import './styles/warband.css';
+import './styles/vault.css';
 import './styles/store.css';
 import './styles/animations.css';
+import './styles/reduced.css';
+import './styles/war/_front.css';
+import './styles/war/_silhouette.css';
+import './styles/war/_score.css';
+import './styles/war/_transition.css';
+import './styles/games/_tokens.css';
+import './styles/games/_frame.css';
+import './styles/games/reflex.css';
+import './styles/games/cascade.css';
+import './styles/games/memory.css';
+import './styles/games/rune.css';
+import './styles/games/hands.css';
+import './styles/games/bid.css';
+import './styles/games/chain.css';
+import './styles/games/masks.css';
 
 initTelegram();
-
-try {
-  const mem = navigator.deviceMemory && navigator.deviceMemory <= 4;
-  const cpu = navigator.hardwareConcurrency && navigator.hardwareConcurrency <= 4;
-  if (mem && cpu) document.documentElement.setAttribute('data-fx', 'reduced');
-} catch {}
-
-try {
-  const raw = localStorage.getItem('tribes.settings');
-  const s = raw ? JSON.parse(raw) : { animations: true, haptics: true, sound: false };
-  document.documentElement.setAttribute('data-fx', s.animations ? 'full' : 'reduced');
-  window.__hapticsEnabled = s.haptics;
-  window.__soundEnabled = s.sound;
-  window.__animEnabled = s.animations;
-} catch {}
+initPerf();
 
 createRoot(document.getElementById('root')).render(
   <React.StrictMode>
     <BrowserRouter>
       <AppProvider>
         <EmojiProvider>
-          <HintProvider>
-            <App />
-          </HintProvider>
+          <EventProvider>
+            <HintProvider>
+              <App />
+            </HintProvider>
+          </EventProvider>
         </EmojiProvider>
       </AppProvider>
     </BrowserRouter>

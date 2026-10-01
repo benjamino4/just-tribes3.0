@@ -1,24 +1,5 @@
-# deps
 node_modules/
-**/node_modules/
-
-# env
-.env
-.env.*
-!.env.example
-
-# build
 server/public/
-web/dist/
-web/.vite/
 *.log
-
-# os
+.env
 .DS_Store
-Thumbs.db
-
-# editors
-.vscode/
-.idea/
-*.swp
-*.swo

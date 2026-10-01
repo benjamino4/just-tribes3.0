@@ -1,21 +1,11 @@
-// =====================================================================
-// Button — Obsidian Glass v3
-// 4 variants (primary / gold / ghost / danger). Press ripple from
-// click coords. Haptic on click.
-// =====================================================================
 import { useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useMotionConfig } from '../lib/motion.js';
 import { haptic } from '../lib/haptics.js';
 
 export default function Button({
-  children,
-  variant = '',
-  size = '',
-  block,
-  haptic: hKind = 'medium',
-  onClick,
-  ...rest
+  children, variant = '', size = '', block,
+  haptic: hKind = 'medium', onClick, ...rest
 }) {
   const M = useMotionConfig();
   const ref = useRef(null);
@@ -40,8 +30,6 @@ export default function Button({
       transition={M.tactile}
       onClick={handleClick}
       {...rest}
-    >
-      {children}
-    </motion.button>
+    >{children}</motion.button>
   );
 }

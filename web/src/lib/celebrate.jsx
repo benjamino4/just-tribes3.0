@@ -1,6 +1,3 @@
-// =====================================================================
-// celebrate() — global celebration cinematic.
-// =====================================================================
 import { createRoot } from 'react-dom/client';
 import { EmojiProvider } from './emojiRegistry.jsx';
 import Celebration from '../components/Celebration.jsx';
@@ -9,10 +6,7 @@ let host = null;
 let currentRoot = null;
 let queue = [];
 
-export function celebrate(opts) {
-  queue.push(opts);
-  drain();
-}
+export function celebrate(opts) { queue.push(opts); drain(); }
 
 function drain() {
   if (currentRoot || !queue.length) return;

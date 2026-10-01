@@ -1,8 +1,3 @@
-// TRIBES-FILE: server/src/ton.js
-// PHASE: 8 — Payments + Polish
-// TON Connect intents + on-chain verification via toncenter.
-// Amount carries a nanoton tag so we can match the tx.
-
 import crypto from 'crypto';
 import { q } from './db.js';
 import { feedWrite } from './feed.js';
@@ -18,8 +13,7 @@ export const TON_ITEMS = {
   flame:     { ton: 2.5,  grant: { stars: 605 } },
   blaze:     { ton: 5,    grant: { stars: 1440 } },
   inferno:   { ton: 13,   grant: { stars: 4320 } },
-  sundisc:   { ton: 2.6,  grant: { relic: 'sundisc' } },
-  moonshard: { ton: 2.1,  grant: { relic: 'moonshard' } },
+  moon_shard: { ton: 2.1, grant: { relic: 'moon_shard' } }
 };
 
 export function tonConfigured() { return !!RECV; }
@@ -56,56 +50,34 @@ async function findIncoming(amountNano) {
 }
 
 export async function verifyPayment(userId, nonce) {
-  const p = (await q(
-    'SELECT * FROM payments WHERE charge_id=$1 AND user_id=$2',
-    [nonce, userId]
-  )).rows[0];
+  const p = (await q('SELECT * FROM payments WHERE charge_id=$1 AND user_id=$2', [nonce, userId])).rows[0];
   if (!p) return { ok: false, reason: 'no_intent' };
   if (p.status === 'paid') return { ok: true, verified: true, already: true };
-
   const it = TON_ITEMS[p.payload];
   if (!it) return { ok: false, reason: 'bad_item' };
-
   const paid = await findIncoming(p.amount);
   if (!paid) return { ok: false, verified: false };
-
   await q("UPDATE payments SET status='paid' WHERE id=$1", [p.id]);
-
-  if (it.grant?.stars) {
-    await q('UPDATE users SET stars=stars+$1 WHERE id=$2', [it.grant.stars, userId]);
-  }
-
-  await q(
-    "INSERT INTO ledger(user_id,kind,detail,stars) VALUES ($1,'ton_purchase',$2,$3)",
-    [userId, 'TON purchase: ' + p.payload, it.grant?.stars || 0]
-  );
-
+  if (it.grant?.stars) await q('UPDATE users SET stars=stars+$1 WHERE id=$2', [it.grant.stars, userId]);
+  await q("INSERT INTO ledger(user_id,kind,detail,stars) VALUES ($1,'ton_purchase',$2,$3)",
+    [userId, 'TON purchase: ' + p.payload, it.grant?.stars || 0]);
   await notify({
     userId, type: 'payment',
     title: 'TON payment verified',
     body: `${p.payload} · ${it.ton} TON`,
-    severity: 'success',
-    action_kind: 'post',
+    severity: 'success', action_kind: 'post'
   });
-
   feedWrite({
-    type: 'payment',
-    icon: 'res-stars',
-    severity: 'success',
+    type: 'payment', icon: 'res-stars', severity: 'success',
     text: `TON purchase: ${p.payload} · ${it.ton} TON`,
-    detail: { userId, itemId: p.payload, ton: it.ton },
-    actor: userId,
+    detail: { userId, itemId: p.payload, ton: it.ton }, actor: userId
   });
-
   return { ok: true, verified: true };
 }
 
 export async function linkWallet(userId, address) {
   await q(
-    `UPDATE users
-        SET ton_address=$1,
-            wallet_verified_at=COALESCE(wallet_verified_at, now())
-      WHERE id=$2`,
+    `UPDATE users SET ton_address=$1, wallet_verified_at=COALESCE(wallet_verified_at, now()) WHERE id=$2`,
     [address, userId]
   );
 }

@@ -1,8 +1,3 @@
-// =====================================================================
-// TabBar — Obsidian Glass v3
-// 5 tabs. Moving gold-ember pill. Icon glow. Optional badge dots.
-// Haptic thump on switch.
-// =====================================================================
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Icon from './Icon.jsx';
@@ -11,23 +6,20 @@ import { haptic } from '../lib/haptics.js';
 import { useApp } from '../lib/store.jsx';
 
 const TABS = [
-  { to: '/',           icon: 'hearth', label: 'Hearth', badgeKey: null },
-  { to: '/longhouse',  icon: 'tribe',  label: 'Tribe',  badgeKey: 'kivaUnread' },
-  { to: '/standings',  icon: 'ranks',  label: 'Ranks',  badgeKey: null },
-  { to: '/settlement', icon: 'lands',  label: 'Settle', badgeKey: null },
-  { to: '/post',       icon: 'store',  label: 'Post',   badgeKey: null },
+  { to: '/',       icon: 'hearth', label: 'Hearth' },
+  { to: '/arena',  icon: 'swords', label: 'Arena' },
+  { to: '/tribe',  icon: 'tribe',  label: 'Tribe' },
+  { to: '/vault',  icon: 'relic',  label: 'Vault' }
 ];
 
 export default function TabBar() {
   const location = useLocation();
   const M = useMotionConfig();
-  const { data } = useApp();
 
   return (
     <nav className="tabbar" aria-label="Primary">
       {TABS.map((t) => {
         const active = t.to === '/' ? location.pathname === '/' : location.pathname.startsWith(t.to);
-        const badge = t.badgeKey ? Number(data?.[t.badgeKey] || 0) : 0;
         return (
           <NavLink
             key={t.to}
@@ -47,7 +39,6 @@ export default function TabBar() {
             )}
             <span className="tab-icon-wrap">
               <Icon name={t.icon} size={22} className="glyph" />
-              {badge > 0 && <span className="tab-badge" aria-hidden="true" />}
             </span>
             <span className="tab-label">{t.label}</span>
           </NavLink>

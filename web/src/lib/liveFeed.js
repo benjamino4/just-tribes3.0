@@ -1,0 +1,1 @@
+export { useEvents as useLiveFeed } from './EventProvider.jsx';

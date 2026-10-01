@@ -1,177 +1,130 @@
-/* =====================================================================
-   TRIBES — runtime config.
-   DEFAULTS is the source of truth; DB rows in `config` override on boot
-   and every admin edit re-saves and hot-swaps CFG in memory.
-===================================================================== */
-
 export const DEFAULTS = {
-  // ---------- economy ----------
-  ashMinutes: 30,
-  ashCap: 3,
-  ashUnit: 90,
-  foundEmber: 25000,
+  // Labels
+  sparks_label: 'Sparks',
+  kinship_label: 'Kinship',
+  stars_label: 'Stars',
+
+  // Economy
+  ash_minutes: 30,
+  ash_cap: 3,
+  ash_unit: 90,
+  found_sparks: 25000,
   checkin_base: 250,
-  checkin_streakStep: 40,
-  checkin_streakMax: 1000,
-  renown_checkin: 15,
-  renown_ash: 8,
-  renown_share: 12,
-  renown_donateDiv: 50,
+  checkin_streak_step: 40,
+  checkin_streak_max: 1000,
+  kinship_checkin: 15,
+  kinship_ash: 8,
+  kinship_share: 12,
+  kinship_donate_div: 50,
 
-  // ---------- switches ----------
+  // Switches
   maintenance: 0,
-  allowWar: 1,
-  allowStore: 1,
-  allowGuest: 0,
+  allow_arena: 1,
+  allow_store: 1,
+  allow_guest: 0,
+  allow_war: 1,
 
-  // ---------- trials / tasks ----------
+  // Trials
   trials_reset_at: '',
   tasks_per_day: 3,
 
-  // ---------- spin ----------
+  // Spin
   spin_cooldown_hours: 24,
   spin_free_per_day: 1,
   spin_max_paid_per_day: 3,
   spin_stars_per_paid: 25,
 
-  // ---------- streaks ----------
+  // Streaks
   streak_insurance_price: 20,
   streak_insurance_per_month: 3,
 
-  // ---------- first pack ----------
+  // First pack
   first_pack_enabled: 1,
-  first_pack_ember: 2500,
-  first_pack_renown: 25,
+  first_pack_sparks: 2500,
+  first_pack_kinship: 25,
   first_pack_relic_slug: 'firestone',
   first_pack_window_hours: 24,
 
-  // ---------- referrals ----------
+  // Referrals
   referral_reward: 500,
 
-  // ---------- pack defaults ----------
-  pack_pity_epic: 6,
-  pack_draw_cost_default: 400,
+  // Rank
+  rank_starting_rating: 1000,
+  rank_win_delta: 25,
+  rank_loss_delta: 20,
+  rank_decay_days: 7,
+  rank_decay_amount: 15,
 
-  // ---------- emoji sets (point 6) ----------
-  emoji_free_default: JSON.stringify(['🔥','🙌','⚔️','👍','😂']),
-  emoji_sets: JSON.stringify([
-    { id: 'spirits',  name: 'Spirits of the Flame',  price: 120,  emojis: ['flame_flicker','spark_orbit','skull_pulse','moon_phase','bolt_strike'] },
-    { id: 'ancestors',name: "Ancestors' Blessings",  price: 260,  emojis: ['eye_blink','eagle_flap','wolf_gaze','rune_draw','halo_glow'] },
-    { id: 'rites',    name: 'Blood Rites',           price: 420,  emojis: ['dagger_drip','blood_seal','wound_open','crack_spread','ember_trail'] },
-    { id: 'winter',   name: "Winter's Grasp",        price: 420,  emojis: ['ice_crystal','frost_breath','snowfall','freeze_shatter','aurora_wave'] },
-  ]),
+  // Seats
+  seat_recalc_day: 0,        // 0 = Sunday
+  seat_recalc_hour: 20,      // UTC hour
 
-  // ---------- Kiva (points 5, 8, 9) ----------
-  kiva_max_messages: 500,
-  kiva_seal_price: 60,
-  kiva_boons: JSON.stringify([
-    { id: 'heralds_voice', name: "Herald's Voice", price: 100, desc: 'Your messages glow gold for 24h.' },
-    { id: 'echo_stone',    name: 'Echo Stone',     price: 250, desc: 'Tribe-wide: retain the last 500 messages.' },
-    { id: 'ember_ink',     name: 'Ember Ink',      price: 150, desc: 'Animated ember trail on your text.' },
-    { id: 'whisper_veil',  name: 'Whisper Veil',   price: 180, desc: 'Send one anonymous message per day.' },
-    { id: 'rally_horn',    name: 'Rally Horn',     price: 200, desc: 'Announce your next war action to the tribe.' },
-  ]),
-
-  // ---------- war (points 11, 17) ----------
-  war_cap_hours: 72,
+  // War
+  war_duration_minutes: 30,
+  war_cooldown_minutes: 60,
   war_front_count: 3,
-  war_front_names: JSON.stringify(['North', 'Center', 'South']),
-  war_stake_min: 15,
-  war_stake_max: 40,
-  war_stake_by_level: JSON.stringify([15,15,15,20,20,20,30,30,30,40]),
-  war_defender_bonus_pct: 10,
-  war_matchmaking_level_cap: 2,
-  war_terrain_bonus_pct: 35,
-  war_terrain_penalty_pct: 20,
-  war_hint_enabled: 1,
-  war_vengeance_tokens: 3,
-  war_vengeance_bonus_pct: 25,
-  war_vengeance_ttl_h: 168,
-  war_blood_alliance_enabled: 1,
-  war_momentum_interval_h: 6,
-  war_rout_threshold: 4,
-  war_rout_bonus_pct: 20,
-  war_legendary_chance: 0.6,
-  war_legendary_duration_min: 60,
-  war_legendary_multiplier: 3.0,
-  war_spoils_pyre_pct: 50,
-  war_spoils_contrib_pct: 30,
-  war_spoils_chest_pct: 20,
-  war_spoils_top_count: 5,
-  war_spoils_warband_ember: 500,
-  war_relic_drop_enabled: 1,
-  war_relic_drop_count: 3,
-  war_relic_drop_rarity_max: 'epic',
-  war_rivalry_threshold: 3,
+  war_score_per_win: 1,
+  war_bonus_streak_3: 2,
+  war_final_5_seconds: 300,
+  war_tiebreaker_seconds: 60,
+  war_max_concurrent_per_tribe: 1,
 
-  war_stances: JSON.stringify([
-    { id:'assault',  name:'Assault',  desc:'+30% first 12h, -20% last 12h', first:1.3, last:0.8, durMult:1.0 },
-    { id:'siege',    name:'Siege',    desc:'-20% first 24h, +50% last 24h', first:0.8, last:1.5, durMult:1.0 },
-    { id:'skirmish', name:'Skirmish', desc:'No modifiers, half duration',   first:1.0, last:1.0, durMult:0.5 },
-  ]),
+  // Forgotten
+  forgotten_enabled: 1,
+  forgotten_escalation_rate: 0.15,
 
-  war_cries: JSON.stringify([
-    { id:'thunder',  name:'Thunder Drum',  cost:5000,  effect:'tribe_buff',    magnitude:0.05, duration_h:6 },
-    { id:'blood',    name:'Blood Oath',    cost:15000, effect:'double_next',   magnitude:2.0,  count:10 },
-    { id:'ancestor', name:'Ancestor Call', cost:30000, effect:'instant_score', magnitude:500 },
-  ]),
+  // Duels
+  duel_ranked_enabled: 1,
+  duel_staked_enabled: 1,
+  duel_stake_min: 50,
+  duel_stake_max: 5000,
+  duel_burn_pct: 5,
 
-  // ---------- seasons ----------
-  season_length_weeks: 6,
-  season_auto_rollover: 0,
-  season_titles_count: 3,
-  season_pass_stars_price: 800,
+  // Game weights (per archetype)
+  game_weight_reaction: 30,
+  game_weight_memory: 25,
+  game_weight_choice: 20,
+  game_weight_sequence: 15,
+  game_weight_deduction: 10,
 
-  // ---------- spies ----------
-  spy_cost_ember: 2000,
-  spy_duration_min: 30,
-  spy_base_catch: 0.20,
-  spy_counter_step: 0.20,
-  spy_counter_cost: 1500,
-  spy_counter_hours: 12,
+  // Terrain biases (weights per archetype per terrain)
+  terrain_plains:    JSON.stringify({ reaction: 60, choice: 25, memory: 15, sequence: 0,  deduction: 0 }),
+  terrain_forest:    JSON.stringify({ memory: 40, choice: 30, sequence: 20, reaction: 10, deduction: 0 }),
+  terrain_ruins:     JSON.stringify({ deduction: 35, choice: 30, memory: 20, reaction: 15, sequence: 0 }),
+  terrain_ashlands:  JSON.stringify({ reaction: 60, sequence: 25, choice: 10, deduction: 5,  memory: 0 }),
+  terrain_hills:     JSON.stringify({ sequence: 40, choice: 25, reaction: 20, memory: 15, deduction: 0 }),
+  terrain_swamp:     JSON.stringify({ deduction: 45, memory: 30, choice: 15, reaction: 10, sequence: 0 }),
 
-  // ---------- tribe levels ----------
+  // Kiva
+  kiva_max_messages: 500,
+  kiva_message_max_length: 280,
+
+  // Emoji
+  emoji_free_default: JSON.stringify(['reaction-fire','reaction-clap','reaction-swords','reaction-thumbsup','reaction-joy']),
+
+  // Performance
+  perf_benchmark_enabled: 1,
+  perf_default_tier: 'balanced',
+  perf_auto_downgrade_battery_pct: 20,
+
+  // Tribe
   tribe_level_caps:  JSON.stringify([5, 8, 12, 18, 25, 35, 50, 70, 90, 120]),
   tribe_level_costs: JSON.stringify([0, 25000, 60000, 140000, 300000, 600000, 1200000, 2400000, 4800000, 9600000]),
   tribe_level_names: JSON.stringify(['Band','Camp','Village','Settlement','Stronghold','Fortress','Domain','Realm','Empire','Kingdom']),
 
-  // ---------- warband & leadership (v4: Rise of the Eternal Flame) ----------
-  warband_seats: 20,
-  seat_inactive_days: 7,
-  seat_gate_streak_days: 5,
-  seat_gate_activity_points: 12,
-  seat_gate_window_days: 7,
-  seat_activity_weights: JSON.stringify({ war: 3, trial: 2, donate: 1, checkin: 1 }),
-
-  chief_inactive_days: 7,
-  chief_impeach_pass_pct: 60,
-
-  warlord_term_days: 14,
-  warlord_tourney_players: 20,
-  warlord_tourney_round_minutes: 60,
-  warlord_final_rps_best_of: 5,
-  war_requires_chief_and_warlord: 1,
-
-  // ---------- bot practice (daily Trials mini-game) ----------
-  bot_practice_per_day: 1,
-  bot_practice_reward_ember: 100,
-  bot_practice_game: 'reflex',
-
-  // ---------- store / tribe customization (v4 monetization) ----------
-  // Prices are in the internal Stars balance (topped up via Telegram Stars
-  // / TON). ~130 Stars ≈ US$2 at typical Star pricing.
-  pin_message_stars: 130,             // Chief pins a Kiva message (≈$2)
-  tribe_name_perk_stars: 400,         // one-time: unlock custom tribe name
-  tribe_icon_perk_stars: 500,         // one-time: unlock custom tribe icon
-  tribe_banner_perk_stars: 260,       // one-time: unlock premium banner styling
+  // Store
+  pin_message_stars: 130,
+  tribe_name_perk_stars: 400,
+  tribe_icon_perk_stars: 500,
+  tribe_banner_perk_stars: 260,
   tribe_name_max_len: 24,
-  tribe_icon_max_kb: 130,             // reject icon data URLs larger than this
+  tribe_icon_max_kb: 130,
   tribe_name_fonts: JSON.stringify([
-    { id: 'default', name: 'Standard',  css: 'var(--font-display)' },
+    { id: 'default', name: 'Standard', css: 'var(--font-display)' },
     { id: 'runic',   name: 'Runecarve', css: '"Cinzel", Georgia, serif' },
     { id: 'blade',   name: 'Bladeforge', css: '"Oswald", Impact, sans-serif' },
     { id: 'ash',     name: 'Ashen Hand', css: '"Caveat", cursive' },
-    { id: 'monol',   name: 'Monolith',  css: '"Bebas Neue", Arial Narrow, sans-serif' },
+    { id: 'monol',   name: 'Monolith',  css: '"Bebas Neue", Arial Narrow, sans-serif' }
   ]),
   tribe_name_styles: JSON.stringify([
     { id: 'plain',  name: 'Plain' },
@@ -179,20 +132,9 @@ export const DEFAULTS = {
     { id: 'gold',   name: 'Gilded',      color: '#ffcf7a' },
     { id: 'frost',  name: 'Frostbrand',  color: '#8ddcff' },
     { id: 'blood',  name: 'Bloodrune',   color: '#e05545' },
-    { id: 'void',   name: 'Voidfire',    color: '#b58cff' },
-  ]),
+    { id: 'void',   name: 'Voidfire',    color: '#b58cff' }
+  ])
 };
-
-export const PALETTES = {
-  ember: { accent:'#ff7a18', accent2:'#ff9d3c', gold:'#ffcf7a' },
-  jade:  { accent:'#2adc8c', accent2:'#4fe6a4', gold:'#c9f5d9' },
-  frost: { accent:'#5ac8ff', accent2:'#8ddcff', gold:'#d6f0ff' },
-  blood: { accent:'#c0392b', accent2:'#e05545', gold:'#ffc0b3' },
-  gold:  { accent:'#e3a008', accent2:'#ffc93c', gold:'#ffe9a8' },
-  void:  { accent:'#9a6bff', accent2:'#b58cff', gold:'#e0d2ff' },
-};
-
-export const BANNERS = ['sun','moon','wolf','bear','spear','shield','tree','flame'];
 
 export function parseJSON(v, fallback) {
   if (typeof v !== 'string') return v ?? fallback;
@@ -201,30 +143,23 @@ export function parseJSON(v, fallback) {
 
 export const CFG = { ...DEFAULTS };
 
-/* Load DB overrides on boot. `q` is our pg helper. */
 export async function loadConfig(q) {
   try {
     const r = await q('SELECT k, v FROM config');
     for (const row of r.rows) {
-      if (!(row.k in DEFAULTS)) {
-        console.warn('[config] unknown key in DB, ignored:', row.k);
-        continue;
-      }
+      if (!(row.k in DEFAULTS)) continue;
       const def = DEFAULTS[row.k];
       const n = Number(row.v);
       if (typeof def === 'number' && row.v !== '' && !isNaN(n)) CFG[row.k] = n;
       else CFG[row.k] = row.v;
     }
-  } catch (e) {
-    console.warn('[config] load skipped:', e.message);
-  }
+  } catch (e) { console.warn('[config] load skipped:', e.message); }
   return CFG;
 }
 
 export async function setConfig(q, k, v) {
   if (!(k in DEFAULTS)) throw new Error('unknown key: ' + k);
   const def = DEFAULTS[k];
-
   if (typeof def === 'number' && String(v).trim() === '') {
     await q('DELETE FROM config WHERE k=$1', [k]);
     CFG[k] = def;
@@ -241,13 +176,6 @@ export async function setConfig(q, k, v) {
   const n = Number(v);
   CFG[k] = (typeof def === 'number' && !isNaN(n)) ? n : v;
   return CFG[k];
-}
-
-export async function resetConfig(q) {
-  await q('DELETE FROM config');
-  for (const k of Object.keys(CFG)) delete CFG[k];
-  Object.assign(CFG, DEFAULTS);
-  return CFG;
 }
 
 export function cfgJSON(key, fallback) {

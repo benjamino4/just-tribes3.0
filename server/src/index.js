@@ -1,7 +1,3 @@
-// TRIBES-FILE: server/src/index.js
-// PHASE: 7 — Meta & Admin
-// Mounts kiva SSE, admin SSE, admin REST, notif SSE. All SSE before json.
-
 import './env.js';
 import express from 'express';
 import path from 'path';
@@ -10,56 +6,56 @@ import { initDb, pool, q } from './db.js';
 import { loadConfig, CFG } from './config.js';
 import { router } from './routes.js';
 import { kivaSse } from './kiva.js';
-import { adminRouter, adminSse, broadcastAdmin } from './admin.js';
 import { adminBotWebhook, setupAdminBot } from './admin_bot.js';
 import { startFlusher, flushQueue } from './push.js';
 import { warTick } from './war.js';
-import * as Notif from './notifications.js';
+import { subscribe as eventSubscribe } from './events.js';
+import { verifyInitData } from './auth.js';
+import { recalcAllSeats, decayInactiveRanks } from './rank.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, '..', 'public');
 const app = express();
 app.disable('x-powered-by');
 
-/* ---------- SSE routes (before json) ---------- */
+/* SSE */
 app.get('/api/kiva/stream', (req, res) => kivaSse(req, res));
-app.get('/api/admin/stream', (req, res) => adminSse(req, res));
-app.get('/api/notifications/stream', (req, res) => {
-  // auth via initData query param
-  import('./auth.js').then(({ verifyInitData }) => {
-    const u = verifyInitData(req.query.initData || '');
-    if (!u) return res.status(401).end();
-    res.writeHead(200, {
-      'Content-Type': 'text/event-stream',
-      'Cache-Control': 'no-cache, no-transform',
-      'Connection': 'keep-alive',
-      'X-Accel-Buffering': 'no',
-    });
-    res.write('retry: 5000\n\n');
-    Notif.subscribe(u.id, res);
-  }).catch(() => res.status(500).end());
+
+app.get('/api/events/stream', (req, res) => {
+  const initData = req.query.initData || '';
+  const u = verifyInitData(initData);
+  if (!u) return res.status(401).end();
+  res.writeHead(200, {
+    'Content-Type': 'text/event-stream',
+    'Cache-Control': 'no-cache, no-transform',
+    'Connection': 'keep-alive',
+    'X-Accel-Buffering': 'no'
+  });
+  res.write('retry: 5000\n\n');
+  eventSubscribe(u.id, res);
 });
 
-/* ---------- JSON body ---------- */
-app.use(express.json({ limit: '256kb' }));
+/* Body */
+app.use(express.json({ limit: '400kb' }));
 app.use((req, res, next) => { res.removeHeader('X-Frame-Options'); next(); });
 
-/* ---------- health ---------- */
+/* Health */
 app.get('/api/health', async (req, res) => {
   let db = false;
   try { if (pool) { await pool.query('SELECT 1'); db = true; } } catch {}
   res.json({
     ok: true, db,
     bot: !!process.env.BOT_TOKEN,
-    admin: !!process.env.ADMIN_TOKEN || !!process.env.ADMIN_IDS,
+    admin: !!process.env.ADMIN_BOT_TOKEN && !!process.env.ADMIN_WEBHOOK_SECRET,
     ton: !!process.env.TON_RECEIVE_ADDRESS,
+    pyscore: !!process.env.PYSCORE_URL,
     maintenance: Number(CFG.maintenance) ? 1 : 0,
-    phase: 7,
-    ts: Date.now(),
+    version: '5.0',
+    ts: Date.now()
   });
 });
 
-/* ---------- cron tick (secret-gated) ---------- */
+/* Cron */
 app.get('/api/cron/tick', async (req, res) => {
   const secret = process.env.CRON_SECRET || '';
   if (secret) {
@@ -70,17 +66,29 @@ app.get('/api/cron/tick', async (req, res) => {
   try {
     out.push = await flushQueue(60);
     out.war = await warTick();
-    await q("UPDATE bonfire_events SET end_at = LEAST(end_at, now()) WHERE end_at < now()");
-    await q("DELETE FROM users WHERE tribe_id IS NULL AND ember < 100 AND created_at < now() - interval '30 days'");
     await q("DELETE FROM push_queue WHERE sent_at IS NOT NULL AND sent_at < now() - interval '7 days'");
+    await q("DELETE FROM live_feed WHERE created_at < now() - interval '30 days'");
+    await q("DELETE FROM notifications WHERE seen_at IS NOT NULL AND seen_at < now() - interval '30 days'");
   } catch (e) { out.error = e.message; }
   res.json(out);
 });
 
-/* ---------- Telegram webhooks (secret-checked) ---------- */
+/* Weekly seats (Sunday) */
+app.get('/api/cron/seats', async (req, res) => {
+  const secret = process.env.CRON_SECRET || '';
+  if (secret) {
+    const t = req.get('X-Cron-Secret') || req.query.secret || '';
+    if (t !== secret) return res.status(401).json({ error: 'unauthorized' });
+  }
+  await recalcAllSeats();
+  await decayInactiveRanks();
+  res.json({ ok: true });
+});
+
+/* Telegram webhooks */
 function checkTgSecret(req, secretEnv) {
   const secret = process.env[secretEnv] || '';
-  if (!secret) return true;
+  if (!secret) return false;   // fail closed
   const t = req.get('X-Telegram-Bot-Api-Secret-Token') || '';
   return t === secret;
 }
@@ -101,16 +109,16 @@ app.post('/api/admin/webhook', async (req, res) => {
   res.json({ ok: true });
 });
 
+/* Emoji routers */
 import { emojiRouter } from './routes/emoji.js';
 import { adminEmojiRouter } from './routes/admin_emoji.js';
-// ... (add these imports at the top with the other imports)
-
 app.use('/api/emoji', emojiRouter);
 app.use('/api/admin/emoji', adminEmojiRouter);
-/* ---------- admin REST ---------- */
-app.use('/api/admin', adminRouter);
 
-/* ---------- TON Connect manifest ---------- */
+/* Main API */
+app.use('/api', router);
+
+/* TON manifest */
 app.get('/tonconnect-manifest.json', (req, res) => {
   const xfProto = (req.get('x-forwarded-proto') || '').split(',')[0].trim();
   const host = req.get('host') || '';
@@ -120,14 +128,11 @@ app.get('/tonconnect-manifest.json', (req, res) => {
     url: origin, name: 'TRIBES',
     iconUrl: origin + '/icon.png',
     termsOfUseUrl: origin + '/',
-    privacyPolicyUrl: origin + '/',
+    privacyPolicyUrl: origin + '/'
   });
 });
 
-/* ---------- main API ---------- */
-app.use('/api', router);
-
-/* ---------- static ---------- */
+/* Static */
 app.use(express.static(PUBLIC, {
   extensions: ['html'],
   setHeaders(res, filePath) {
@@ -138,7 +143,7 @@ app.use(express.static(PUBLIC, {
     } else {
       res.setHeader('Cache-Control', 'public, max-age=3600');
     }
-  },
+  }
 }));
 
 app.get('*', (req, res) => {
@@ -148,10 +153,9 @@ app.get('*', (req, res) => {
 
 app.use((err, req, res, next) => {
   console.error('[api error]', err.message);
-  res.status(500).json({ error: 'server error', detail: err.message });
+  res.status(500).json({ error: 'server error' });
 });
 
-/* ---------- boot ---------- */
 const PORT = process.env.PORT || 3000;
 export { app };
 
@@ -159,17 +163,14 @@ if (process.env.TRIBES_TEST !== '1') {
   (async () => {
     try {
       console.log('[boot] starting');
-      console.log('[boot] DATABASE_URL:', process.env.DATABASE_URL ? 'configured' : 'MISSING');
       await initDb();
       await loadConfig(q);
       startFlusher(Number(process.env.PUSH_FLUSH_SECONDS) || 20);
       console.log('[boot] ready');
-    } catch (e) {
-      console.error('[boot] FAILED:', e.message);
-      console.error(e.stack);
-    } finally {
+    } catch (e) { console.error('[boot] FAILED:', e.message); }
+    finally {
       app.listen(PORT, () => {
-        console.log(`TRIBES server on :${PORT}`);
+        console.log(`TRIBES on :${PORT}`);
         setupAdminBot(process.env.RENDER_EXTERNAL_URL || process.env.APP_URL || '');
       });
     }

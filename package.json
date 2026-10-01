@@ -1,9 +1,8 @@
 {
   "name": "tribes",
-  "version": "4.0.0",
+  "version": "5.0.0",
   "private": true,
   "type": "module",
-  "description": "TRIBES — Rise of the Tribes. Stone-age tribe idle game. Telegram Mini App. Hybrid React + vanilla, Node/Postgres backend, single Render service.",
   "engines": { "node": ">=20" },
   "workspaces": ["server", "web"],
   "scripts": {

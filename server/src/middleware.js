@@ -1,11 +1,6 @@
-// TRIBES-FILE: server/src/middleware.js
-// PHASE: 2 — Identity & shell
-// Auth middleware + in-memory rate limiter used by routes.js.
-
 import { resolveUser } from './auth.js';
 import { CFG } from './config.js';
 
-/* ---------- rate limit ---------- */
 const buckets = new Map();
 
 export function rateLimit(key, perMin) {
@@ -26,11 +21,9 @@ setInterval(() => {
   for (const [k, b] of buckets) if (now > b.resetAt) buckets.delete(k);
 }, 60000).unref();
 
-/* ---------- auth ---------- */
 export async function authMiddleware(req, res, next) {
   try {
     const r = await resolveUser(req);
-
     if (!r) {
       return res.status(401).json({
         error: 'unauthorized',
@@ -44,7 +37,6 @@ export async function authMiddleware(req, res, next) {
         deepLink: 'tg://settings',
       });
     }
-
     const u = r.user;
     if (u.banned) {
       return res.status(403).json({
@@ -55,10 +47,7 @@ export async function authMiddleware(req, res, next) {
     if (Number(CFG.maintenance) && req.method !== 'GET') {
       return res.status(503).json({ error: 'maintenance' });
     }
-
     req.user = u;
     next();
-  } catch (e) {
-    next(e);
-  }
+  } catch (e) { next(e); }
 }

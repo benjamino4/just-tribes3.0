@@ -1,0 +1,7 @@
+.war-front {
+  position: relative;
+  overflow: hidden;
+  border-radius: var(--r-lg);
+  padding: 16px;
+  border: 1px solid var(--glass-brd);
+}
