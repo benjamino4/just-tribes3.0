@@ -4,6 +4,7 @@ import { scoreGame, pickGameForArchetypeWeights } from './games/index.js';
 import { applyRankAfterMatch } from './rank.js';
 import { emit } from './events.js';
 import { addKinship } from './economy.js';
+import { getOrCreateArenaBot, botScoreFor, recordHumanScore, isBot } from './botplayer.js';
 
 export async function findRankedMatch(user, gameSlug = null) {
   const game = gameSlug || pickGameForArchetypeWeights({
@@ -17,12 +18,34 @@ export async function findRankedMatch(user, gameSlug = null) {
   const opponent = (await q(
     `SELECT id, first_name, username, rank_rating FROM users
       WHERE id <> $1 AND banned = false
+        AND COALESCE(is_bot, false) = false
         AND last_checkin > now() - interval '2 days'
       ORDER BY ABS(rank_rating - (SELECT rank_rating FROM users WHERE id=$1)) ASC
       LIMIT 1`, [user.id]
   )).rows[0];
 
-  if (!opponent) return { opponent: null, game };
+  // No live human in range → drop in a learning ember-spirit bot so the player
+  // always gets a ranked fight.
+  if (!opponent) {
+    const bot = await getOrCreateArenaBot(user.rank_rating || 1000);
+    const duel = (await q(
+      `INSERT INTO duels (kind, opener_id, accepter_id, game_slug, status)
+       VALUES ('ranked', $1, $2, $3, 'active') RETURNING id`,
+      [user.id, bot.id, game]
+    )).rows[0];
+    return {
+      duel_id: duel.id,
+      game,
+      opponent: {
+        id: bot.id,
+        first_name: bot.first_name,
+        username: bot.username,
+        rank_rating: Number(bot.rank_rating || 1000),
+        is_bot: true,
+      },
+      is_bot: true,
+    };
+  }
 
   const duel = (await q(
     `INSERT INTO duels (kind, opener_id, accepter_id, game_slug, status)
@@ -40,7 +63,27 @@ export async function resolveRankedDuel(user, duelId, payload) {
   if (duel.status !== 'active') return { ok: true, status: duel.status };
 
   const score = scoreGame(duel.game_slug, payload);
-  const threshold = 50 + Math.floor(Math.random() * 20);
+
+  // Every real human result teaches the bot skill model for this game.
+  try { await recordHumanScore(duel.game_slug, score); } catch { /* non-fatal */ }
+
+  // Against a bot the opponent actually "plays": its score is drawn from the
+  // learned human distribution and the rating gap. Against a human we keep the
+  // original random threshold so existing head-to-head behaviour is unchanged.
+  let threshold;
+  let botTurn = null;
+  if (await isBot(duel.accepter_id)) {
+    const human = (await q('SELECT rank_rating FROM users WHERE id=$1', [duel.opener_id])).rows[0];
+    const bot = (await q('SELECT rank_rating FROM users WHERE id=$1', [duel.accepter_id])).rows[0];
+    botTurn = await botScoreFor(
+      duel.game_slug,
+      bot?.rank_rating || 1000,
+      human?.rank_rating || 1000
+    );
+    threshold = botTurn.score;
+  } else {
+    threshold = 50 + Math.floor(Math.random() * 20);
+  }
   const won = score >= threshold;
   const winnerId = won ? duel.opener_id : duel.accepter_id;
   const loserId = won ? duel.accepter_id : duel.opener_id;
@@ -67,7 +110,7 @@ export async function resolveRankedDuel(user, duelId, payload) {
     icon: 'bolt', severity: 'warn'
   });
 
-  return { ok: true, score, won, threshold };
+  return { ok: true, score, won, threshold, opponent_score: threshold, bot: botTurn };
 }
 
 export async function findStakedMatch(user, stakeSparks, gameSlug = null) {
