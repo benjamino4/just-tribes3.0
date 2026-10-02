@@ -16,7 +16,7 @@ import * as Arena from './arena.js';
 import * as War from './war.js';
 import * as Gift from './giftcodes.js';
 import * as Notif from './notifications.js';
-import { list as listPacks } from './relics.js';
+import { packs as listPacks } from './relics.js';
 
 export const router = express.Router();
 router.use(authMiddleware);
