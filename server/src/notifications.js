@@ -1,3 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/notifications.js
+// PURPOSE: Thin wrapper over events.js for the notification list.
+//          Provide list, unread, markSeen.
+// DEPENDS ON: db.js, events.js, push.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 import { enqueue as pushEnqueue } from './push.js';
 
@@ -11,23 +17,21 @@ export const ICON = {
 export async function notify({ userId, type, title, body = null, severity = 'info',
   action_kind = null, action_data = null, push = false }) {
   const icon = ICON[type] || ICON.system;
+  let id = null;
   try {
-    await q(
+    const r = await q(
       `INSERT INTO notifications (user_id, type, icon, severity, title, body, action_kind, action_data)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
       [userId, type, icon, severity, title, body, action_kind,
        action_data ? JSON.stringify(action_data) : null]
     );
+    id = r.rows[0].id;
   } catch (e) { console.warn('[notif] insert', e.message); }
   if (push) {
     const text = `🔔 ${title}${body ? '\n' + body : ''}`;
     try { await pushEnqueue(userId, text); } catch {}
   }
-}
-
-export async function notifyTribe(tribeId, opts) {
-  const ids = (await q('SELECT id FROM users WHERE tribe_id=$1 AND banned=false', [tribeId])).rows;
-  for (const r of ids) await notify({ ...opts, userId: r.id });
+  return { id };
 }
 
 export async function list(userId, { sinceId = 0, limit = 40, unreadOnly = false } = {}) {

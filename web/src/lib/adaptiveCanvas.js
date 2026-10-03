@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/adaptiveCanvas.js
+// PURPOSE: Canvas wrapper that adjusts DPR based on frame budget.
+// DEPENDS ON: perf.js
+// ═══════════════════════════════════════════════════════════════════
 import { getDPR } from './perf.js';
 
 export class AdaptiveCanvas {
@@ -9,6 +14,8 @@ export class AdaptiveCanvas {
     this.maxDpr = getDPR();
     this.dpr = this.maxDpr;
     this._lastFrameStart = 0;
+    this.w = 0;
+    this.h = 0;
   }
 
   resize(w, h) {

@@ -1,9 +1,15 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/TopBar.jsx
+// PURPOSE: Crest, Sparks, Kinship, rank medallion, settings.
+// DEPENDS ON: store.jsx, Icon, RankMedallion
+// ═══════════════════════════════════════════════════════════════════
 import { motion } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
 import { useApp } from '../lib/store.jsx';
 import { fmt } from '../lib/format.js';
 import { haptic } from '../lib/haptics.js';
 import Icon from './Icon.jsx';
+import RankMedallion from './RankMedallion.jsx';
 import { useMotionConfig } from '../lib/motion.js';
 
 export default function TopBar() {
@@ -32,7 +38,7 @@ export default function TopBar() {
           className="chip ember"
           title="Sparks"
         >
-          <Icon name="ember" size={15} style={{ color: 'var(--ember-400)' }} />
+          <Icon name="ember" size={15} style={{ color: 'var(--ember-300)' }} />
           <b className="tabular">{fmt(user.sparks || 0)}</b>
         </motion.span>
 
@@ -40,6 +46,8 @@ export default function TopBar() {
           <Icon name="crown" size={14} style={{ color: 'var(--gold-300)' }} />
           <b className="tabular">{fmt(user.kinship || 0)}</b>
         </span>
+
+        <RankMedallion user={user} />
 
         <button
           className="chip"

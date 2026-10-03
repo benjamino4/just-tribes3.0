@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/WarPullSequence.jsx
+// PURPOSE: The 5-beat war pull. Fires once per war on return.
+// DEPENDS ON: framer-motion, haptics, Icon
+// ═══════════════════════════════════════════════════════════════════
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -65,7 +70,7 @@ export default function WarPullSequence({ war, onDone }) {
             transition={{ duration: 1.6, repeat: Infinity }}
             style={{ marginBottom: 20 }}
           >
-            <Icon name="swords" size={64} style={{ color: 'var(--ember-400)' }} />
+            <Icon name="swords" size={64} style={{ color: 'var(--ember-300)' }} />
           </motion.div>
 
           <h1 className="display" style={{ fontSize: 32, color: '#fff', letterSpacing: '.04em' }}>
@@ -96,8 +101,8 @@ export default function WarPullSequence({ war, onDone }) {
               onClick={enter}
               style={{
                 padding: '12px 32px', borderRadius: 999,
-                background: 'linear-gradient(180deg, var(--ember-400), var(--ember-600))',
-                border: '1px solid rgba(255,131,36,.55)',
+                background: 'linear-gradient(180deg, var(--ember-300), var(--ember-500))',
+                border: '1px solid rgba(255,199,138,.55)',
                 color: '#1a0b02', fontWeight: 800,
                 boxShadow: 'var(--sh-ember)'
               }}

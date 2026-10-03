@@ -1,7 +1,10 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/World.jsx
+// PURPOSE: Ambient background. Responds to war state with a red tint.
+// DEPENDS ON: store.jsx
+// ═══════════════════════════════════════════════════════════════════
 import { useEffect, useRef } from 'react';
 import { useApp } from '../lib/store.jsx';
-import { subscribe as rafSubscribe } from '../lib/raf.js';
-import { getPerf } from '../lib/perf.js';
 
 export default function World() {
   const ref = useRef(null);

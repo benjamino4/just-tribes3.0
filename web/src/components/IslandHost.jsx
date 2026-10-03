@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/IslandHost.jsx
+// PURPOSE: Dynamic Island notifications. Stacked. Tribal aesthetic.
+// DEPENDS ON: EventProvider, Icon, haptics, api
+// ═══════════════════════════════════════════════════════════════════
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useNavigate } from 'react-router-dom';
@@ -15,11 +20,11 @@ const ICON_MAP = {
 };
 
 const TONES = {
-  info:    { border: 'rgba(239,193,104,0.5)',  glow: 'rgba(239,193,104,0.28)', tint: '#efc168' },
-  success: { border: 'rgba(138,176,106,0.5)',  glow: 'rgba(138,176,106,0.28)', tint: '#8ab06a' },
-  warn:    { border: 'rgba(216,150,74,0.55)',  glow: 'rgba(216,150,74,0.32)',  tint: '#d8964a' },
-  danger:  { border: 'rgba(208,72,58,0.55)',   glow: 'rgba(208,72,58,0.32)',   tint: '#d0483a' },
-  war:     { border: 'rgba(208,72,58,0.7)',    glow: 'rgba(208,72,58,0.4)',    tint: '#d0483a' },
+  info:    { border: 'rgba(126,163,196,0.5)',  glow: 'rgba(126,163,196,0.28)', tint: '#7ea3c4' },
+  success: { border: 'rgba(127,201,167,0.5)',  glow: 'rgba(127,201,167,0.28)', tint: '#7fc9a7' },
+  warn:    { border: 'rgba(224,180,106,0.55)', glow: 'rgba(224,180,106,0.32)', tint: '#e0b46a' },
+  danger:  { border: 'rgba(201,130,130,0.55)', glow: 'rgba(201,130,130,0.32)', tint: '#c98282' },
+  war:     { border: 'rgba(201,130,130,0.7)',  glow: 'rgba(201,130,130,0.4)',  tint: '#c98282' },
   tribe:   { border: 'rgba(162,108,209,0.55)', glow: 'rgba(162,108,209,0.32)', tint: '#a26cd1' }
 };
 
@@ -35,15 +40,11 @@ export default function IslandHost() {
     setQueue((q) => [...q, evt]);
   }), [subscribe]);
 
-  useEffect(() => {
-    setVisible(queue.slice(0, 3));
-  }, [queue]);
+  useEffect(() => { setVisible(queue.slice(0, 3)); }, [queue]);
 
   useEffect(() => {
     if (!visible.length) return;
-    const t = setTimeout(() => {
-      setQueue((q) => q.slice(1));
-    }, 8000);
+    const t = setTimeout(() => { setQueue((q) => q.slice(1)); }, 8000);
     return () => clearTimeout(t);
   }, [visible]);
 
@@ -117,7 +118,7 @@ function islandStyle(evt, depth) {
     padding: '10px 14px',
     maxWidth: 'min(92vw, 420px)',
     borderRadius: 24,
-    background: 'rgba(17, 16, 24, 0.94)',
+    background: 'rgba(17, 20, 26, 0.94)',
     border: `1px solid ${T.border}`,
     backdropFilter: 'blur(20px) saturate(140%)',
     WebkitBackdropFilter: 'blur(20px) saturate(140%)',
@@ -147,6 +148,7 @@ function routeFor(evt) {
     case 'hearth': return '/';
     case 'inbox': return '/';
     case 'post': return '/vault/store';
+    case 'profile': return '/profile';
     default: return null;
   }
 }

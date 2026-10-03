@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/routes/emoji.js
+// PURPOSE: Emoji state, unlock.
+// DEPENDS ON: db.js, auth.js, lib/builtinEmojis.js
+// ═══════════════════════════════════════════════════════════════════
 import express from 'express';
 import { q } from '../db.js';
 import { verifyInitData } from '../auth.js';
@@ -31,9 +36,7 @@ router.get('/state', requireUser, async (req, res) => {
     const ownedSetSlugs = new Set(ownedSets.rows.map((r) => r.set_slug));
 
     const custom = {};
-    // Server defs first
     for (const r of defs.rows) custom[r.key] = r.image_url || r.svg;
-    // Merge builtin floor — builtins are never optional
     for (const b of BUILTIN_SEED) {
       if (!custom[b.key]) custom[b.key] = b.svg;
     }

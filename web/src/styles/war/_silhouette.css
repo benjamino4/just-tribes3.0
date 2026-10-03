@@ -1,7 +1,0 @@
-/* Silhouette styling for war combatants */
-.silhouette {
-  width: 24px; height: 32px;
-  background: #0a0608;
-  border-radius: 12px 12px 0 0;
-  position: absolute;
-}

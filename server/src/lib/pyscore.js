@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/lib/pyscore.js
+// PURPOSE: Bridge to Python sidecar with byte-identical Node fallback.
+// DEPENDS ON: nothing
+// ═══════════════════════════════════════════════════════════════════
 function clamp(n) { return Math.max(0, Math.min(100, Number(n) || 0)); }
 
 export function reflexScoreLocal(times) {

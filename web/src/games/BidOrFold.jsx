@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/games/BidOrFold.jsx
+// PURPOSE: Both bid 0-3 coins. Higher bid wins the pot. Push luck.
+// DEPENDS ON: GameFrame, haptics
+// ═══════════════════════════════════════════════════════════════════
 import { useState } from 'react';
 import GameFrame from '../components/GameFrame.jsx';
 import { haptic } from '../lib/haptics.js';
@@ -27,29 +32,20 @@ export default function BidOrFold({ onDone, onExit }) {
   }
 
   return (
-    <GameFrame title="Bid or Fold" onExit={onExit} material="clay">
+    <GameFrame title="Bid or Fold" onExit={onExit} material="clay" accent="#c08a4a">
       <div className="bid-scene">
         <div className="bid-bowl">
           <span className="bid-pot">{pot}</span>
         </div>
-
         {lastBid && (
           <div className="bid-reveal">
             You bid {lastBid.player} · They bid {lastBid.opp}
           </div>
         )}
-
         <div className="bid-row">
-          <div className="col center">
-            <span className="tiny">You</span>
-            <b style={{ fontSize: 24 }}>{myCoins}</b>
-          </div>
-          <div className="col center">
-            <span className="tiny">Them</span>
-            <b style={{ fontSize: 24 }}>{oppCoins}</b>
-          </div>
+          <div className="col center"><span className="tiny">You</span><b style={{ fontSize: 24 }}>{myCoins}</b></div>
+          <div className="col center"><span className="tiny">Them</span><b style={{ fontSize: 24 }}>{oppCoins}</b></div>
         </div>
-
         <div className="bid-actions">
           {[0, 1, 2, 3].map((n) => (
             <button key={n} className="bid-btn" disabled={n > myCoins || done} onClick={() => bid(n)}>
@@ -57,10 +53,7 @@ export default function BidOrFold({ onDone, onExit }) {
             </button>
           ))}
         </div>
-
-        <p className="tiny" style={{ textAlign: 'center', marginTop: 12 }}>
-          Bid more than them or fold. First to 5 in the pot.
-        </p>
+        <p className="tiny" style={{ textAlign: 'center', marginTop: 12 }}>Bid more than them or fold. First to 5 in the pot.</p>
       </div>
     </GameFrame>
   );

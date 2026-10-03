@@ -1,8 +1,13 @@
+# ═══════════════════════════════════════════════════════════════════
+# FILE: render.yaml
+# PURPOSE: Render.com deployment blueprint.
+# DEPENDS ON: nothing
+# ═══════════════════════════════════════════════════════════════════
 services:
   - type: web
     name: tribes
     runtime: node
-    plan: free
+    plan: starter
     region: oregon
     buildCommand: npm run build
     startCommand: npm start
@@ -18,6 +23,8 @@ services:
       - { key: ADMIN_WEBHOOK_SECRET, sync: false }
       - { key: TG_WEBHOOK_SECRET, sync: false }
       - { key: CRON_SECRET, sync: false }
+      - { key: RENDER_API_KEY, sync: false }
+      - { key: RENDER_SERVICE_ID, sync: false }
       - { key: APP_URL, sync: false }
       - { key: TON_RECEIVE_ADDRESS, sync: false }
       - { key: TONCENTER_API_KEY, sync: false }

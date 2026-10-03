@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/Button.jsx
+// PURPOSE: The primary button. Carved stone feel.
+// DEPENDS ON: motion.js, haptics.js
+// ═══════════════════════════════════════════════════════════════════
 import { useRef, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { useMotionConfig } from '../lib/motion.js';
@@ -11,13 +16,6 @@ export default function Button({
   const ref = useRef(null);
 
   const handleClick = useCallback((e) => {
-    if (ref.current) {
-      const rect = ref.current.getBoundingClientRect();
-      const x = ((e.clientX ?? rect.left + rect.width / 2) - rect.left) / rect.width;
-      const y = ((e.clientY ?? rect.top + rect.height / 2) - rect.top) / rect.height;
-      ref.current.style.setProperty('--press-x', `${x * 100}%`);
-      ref.current.style.setProperty('--press-y', `${y * 100}%`);
-    }
     haptic(hKind);
     onClick?.(e);
   }, [hKind, onClick]);

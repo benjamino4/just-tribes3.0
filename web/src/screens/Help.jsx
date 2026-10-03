@@ -1,13 +1,17 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/screens/Help.jsx
+// PURPOSE: Help center list. Grouped by section.
+// DEPENDS ON: api
+// ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useMotionConfig, V } from '../lib/motion.js';
+import { V } from '../lib/motion.js';
 import { apiGet } from '../lib/api.js';
 import Icon from '../components/Icon.jsx';
 
 export default function Help() {
   const nav = useNavigate();
-  const M = useMotionConfig();
   const [articles, setArticles] = useState([]);
 
   useEffect(() => {

@@ -1,8 +1,13 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/screens/VaultStore.jsx
+// PURPOSE: Trading Post. Telegram Stars purchases.
+// DEPENDS ON: api, store, Button
+// ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
-import { useMotionConfig, V } from '../lib/motion.js';
+import { V } from '../lib/motion.js';
 import { fmt } from '../lib/format.js';
 import { Endpoints } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
@@ -13,7 +18,6 @@ import { toast } from '../components/Toast.jsx';
 export default function VaultStore() {
   const nav = useNavigate();
   const { data, reload } = useApp();
-  const M = useMotionConfig();
   const user = data?.user || {};
   const [catalog, setCatalog] = useState(null);
 
@@ -59,8 +63,7 @@ export default function VaultStore() {
               <span className="tiny">{it.desc}</span>
             </div>
             <Button variant="primary" onClick={() => buy(it.id)}>
-              <Icon name="star" size={13} style={{ color: '#1a0b02' }} />
-              {it.stars}
+              <Icon name="star" size={13} /> {it.stars}
             </Button>
           </div>
         </div>

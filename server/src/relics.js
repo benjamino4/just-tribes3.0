@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/relics.js
+// PURPOSE: Relic catalog, ownership, equip, packs, one-sentence effects.
+// DEPENDS ON: db.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 
 export const TIERS = ['common', 'rare', 'epic', 'legendary'];

@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/lib/builtinEmojis.js
+// PURPOSE: Built-in animated SVG emoji set. Floor, never optional.
+// DEPENDS ON: nothing
+// ═══════════════════════════════════════════════════════════════════
 const svg = (content) => `<svg viewBox="0 0 24 24">${content}</svg>`;
 
 const EMOJI = {
@@ -13,7 +18,7 @@ const EMOJI = {
   'reaction-swords': svg('<g stroke="#cfd0d8" stroke-width="2" stroke-linecap="round" fill="none"><path d="M3 21 14 10 15 6 19 3 18 7 7 18z"/><path d="M21 21 10 10 9 6 5 3 6 7 17 18z"/></g>'),
   'reaction-thumbsup': svg('<path fill="#ffcf8f" d="M8 10v9h8a3 3 0 0 0 2.8-2l1.2-5a2 2 0 0 0-2-2.5h-4l.8-4A2.5 2.5 0 0 0 12 3z"/><rect x="4" y="10" width="3" height="9" fill="#ff8324"/>'),
   'reaction-joy': svg('<circle cx="12" cy="12" r="10" fill="#ffcf8f"/><path d="M7 15c1 2 3 2.5 5 2.5s4-.5 5-2.5" stroke="#1a0b02" stroke-width="1.6" fill="none" stroke-linecap="round"/><circle cx="9" cy="10" r="1.4" fill="#1a0b02"/><circle cx="15" cy="10" r="1.4" fill="#1a0b02"/>'),
-  'flame_flicker': svg('<defs><linearGradient id="ff1" x1="0" y1="1" x2="0" y2="0"><stop offset="0" stop-color="#8f3402"/><stop offset=".5" stop-color="#f26a10"/><stop offset="1" stop-color="#fff2e0"/></linearGradient></defs><g><animateTransform attributeName="transform" type="scale" values="1;1.08;1" dur="1.2s" repeatCount="indefinite" additive="sum"/><path fill="url(#ff1)" d="M12 2c1.5 3.5-.5 4.5-.5 6.5A3 3 0 0 0 15 11c0-2 .8-3 .8-3 2.2 2 3.2 4.4 3.2 6.6a7 7 0 1 1-14 0c0-3.3 2-5.5 3.4-7.6C9.6 5.6 11.7 4.5 12 2z"/></g>'),
+  'flame_flicker': svg('<g><animateTransform attributeName="transform" type="scale" values="1;1.08;1" dur="1.2s" repeatCount="indefinite" additive="sum"/><path fill="#ff8324" d="M12 2c1.5 3.5-.5 4.5-.5 6.5A3 3 0 0 0 15 11c0-2 .8-3 .8-3 2.2 2 3.2 4.4 3.2 6.6a7 7 0 1 1-14 0c0-3.3 2-5.5 3.4-7.6C9.6 5.6 11.7 4.5 12 2z"/></g>'),
   'spark_orbit': svg('<g><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="3s" repeatCount="indefinite"/><circle cx="12" cy="4" r="2" fill="#efc168"/><circle cx="20" cy="12" r="1.6" fill="#ffcf8f"/><circle cx="12" cy="20" r="2" fill="#ff8324"/><circle cx="4" cy="12" r="1.6" fill="#ffcf8f"/></g>'),
   'skull_pulse': svg('<g><animate attributeName="opacity" values=".7;1;.7" dur="1.8s" repeatCount="indefinite"/><path fill="#f0e6cf" d="M12 2a9 9 0 0 0-9 9c0 3 1.2 5 3 6.2V21h3v-2.5h2V21h4v-2.5h2V21h3v-3.8c1.8-1.2 3-3.2 3-6.2a9 9 0 0 0-9-9z"/><circle cx="8" cy="11" r="2" fill="#0b0a10"/><circle cx="16" cy="11" r="2" fill="#0b0a10"/></g>'),
   'moon_phase': svg('<g><animateTransform attributeName="transform" type="rotate" from="0 12 12" to="360 12 12" dur="10s" repeatCount="indefinite"/><circle cx="12" cy="12" r="9" fill="#f0e6cf"/><circle cx="16" cy="11" r="8" fill="rgba(0,0,0,.62)"/></g>'),

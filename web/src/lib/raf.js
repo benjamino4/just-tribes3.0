@@ -1,3 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/raf.js
+// PURPOSE: The one and only requestAnimationFrame loop.
+//          Subscribers add/remove. Loop sleeps when nobody subscribes.
+// DEPENDS ON: nothing
+// ═══════════════════════════════════════════════════════════════════
 let running = false;
 let rafId = 0;
 const subscribers = new Set();

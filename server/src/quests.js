@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/quests.js
+// PURPOSE: Daily quest pool, progress, claim.
+// DEPENDS ON: db.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 
 function todayKey() { return new Date().toISOString().slice(0, 10); }

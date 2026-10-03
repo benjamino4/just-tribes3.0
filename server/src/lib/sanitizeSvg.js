@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/lib/sanitizeSvg.js
+// PURPOSE: Sanitize SVG uploads. Strip dangerous elements.
+// DEPENDS ON: nothing
+// ═══════════════════════════════════════════════════════════════════
 function stripDangerous(svg) {
   return svg
     .replace(/<\s*script[\s\S]*?<\s*\/\s*script\s*>/gi, '')

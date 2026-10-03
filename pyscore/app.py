@@ -1,11 +1,16 @@
-# TRIBES v5.0 — scoring microservice
+# ═══════════════════════════════════════════════════════════════════
+# FILE: pyscore/app.py
+# PURPOSE: Authoritative scoring service. One endpoint per archetype.
+#          Mirrors lib/pyscore.js exactly. Never returns 500.
+# DEPENDS ON: requirements.txt
+# ═══════════════════════════════════════════════════════════════════
 from __future__ import annotations
-from typing import List, Optional
+from typing import List
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field, field_validator
 
-MAX_BODY_BYTES = 32 * 1024
+MAX_BODY = 32 * 1024
 MAX_ROUNDS = 400
 MAX_MS = 60_000
 
@@ -15,9 +20,9 @@ app = FastAPI(title="TRIBES pyscore", version="5.0", docs_url=None, redoc_url=No
 @app.middleware("http")
 async def limit_body(request: Request, call_next):
     cl = request.headers.get("content-length")
-    if cl is not None:
+    if cl:
         try:
-            if int(cl) > MAX_BODY_BYTES:
+            if int(cl) > MAX_BODY:
                 return JSONResponse({"error": "payload too large"}, status_code=413)
         except ValueError:
             return JSONResponse({"error": "bad content-length"}, status_code=400)
@@ -68,14 +73,14 @@ class DeductionIn(BaseModel):
     model_config = {"extra": "ignore"}
 
 
-def reaction_score(times: List[float]) -> int:
+def reaction_score(times):
     if not times:
         return 0
     avg = sum(times) / len(times)
     return max(0, min(100, round(120 - (avg - 200) / 6)))
 
 
-def memory_score(correct: int, total: int, max_len: int) -> int:
+def memory_score(correct, total, max_len):
     if total <= 0:
         return 0
     acc = correct / max(1, total)
@@ -83,19 +88,19 @@ def memory_score(correct: int, total: int, max_len: int) -> int:
     return max(0, min(100, round(acc * 70 + depth * 30)))
 
 
-def choice_score(wins: int, losses: int) -> int:
+def choice_score(wins, losses):
     g = wins + losses
     if g <= 0:
         return 0
     return max(0, min(100, round(wins / g * 100)))
 
 
-def sequence_score(chain_len: int, won: bool) -> int:
+def sequence_score(chain_len, won):
     base = min(100, chain_len * 8)
     return 100 if won else min(80, base)
 
 
-def deduction_score(won: int, lost: int) -> int:
+def deduction_score(won, lost):
     g = won + lost
     if g <= 0:
         return 0

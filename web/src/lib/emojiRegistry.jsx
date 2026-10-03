@@ -1,3 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/emojiRegistry.jsx
+// PURPOSE: Emoji definitions. Builtins + server defs. Server never
+//          replaces builtins. Always a floor.
+// DEPENDS ON: api.js
+// ═══════════════════════════════════════════════════════════════════
 import { createContext, useContext, useEffect, useState, useCallback, useMemo } from 'react';
 import { apiGet } from './api.js';
 

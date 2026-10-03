@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/giftcodes.js
+// PURPOSE: Gift code create/redeem. Bundle payloads.
+// DEPENDS ON: db.js, events.js, relics.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 import { emit } from './events.js';
 import { grant as grantRelic } from './relics.js';
@@ -20,11 +25,7 @@ export async function preview(userId, rawCode) {
     'SELECT times FROM code_redemptions WHERE code=$1 AND user_id=$2', [code, userId]
   )).rows[0];
   if (mine && Number(mine.times) >= (row.per_user_limit || 1)) return { valid: false, reason: 'already_used' };
-  return {
-    valid: true, code,
-    name: row.note || 'Gift',
-    kind: row.kind, payload: row.payload
-  };
+  return { valid: true, code, name: row.note || 'Gift', kind: row.kind, payload: row.payload };
 }
 
 async function applyPayload(user, kind, payload) {
@@ -97,32 +98,4 @@ export async function redeem(user, rawCode) {
     icon: 'gift', severity: 'success', action_kind: 'hearth'
   });
   return { ok: true, code, summary };
-}
-
-export async function adminCreate(adminId, data) {
-  const code = normalizeCode(data.code || ('GIFT-' + Math.random().toString(36).slice(2, 8).toUpperCase()));
-  if (code.length < 4) throw new Error('code must be 4+ characters');
-  const kind = String(data.kind || 'sparks');
-  const payload = data.payload || (kind === 'sparks' ? { amount: Number(data.amount) || 0 } : {});
-  await q(
-    `INSERT INTO codes (code, kind, amount, payload, max_uses, per_user_limit, note,
-                        expires_at, starts_at, scope, scope_tribe_id, active, created_by)
-     VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
-    [code, kind, Number(data.amount) || 0, JSON.stringify(payload),
-     Number(data.max_uses) || 0, Number(data.per_user_limit) || 1,
-     data.note || null, data.expires_at || null, data.starts_at || null,
-     data.scope || 'global', data.scope_tribe_id || null,
-     data.active !== false, adminId || null]
-  );
-  return { code };
-}
-
-export async function adminRevoke(code) {
-  await q('UPDATE codes SET active=false WHERE code=$1', [code]);
-  return { ok: true };
-}
-
-export async function adminDelete(code) {
-  await q('DELETE FROM codes WHERE code=$1', [code]);
-  return { ok: true };
 }

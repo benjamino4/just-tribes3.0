@@ -1,6 +1,55 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/arena.css
+PURPOSE: Arena layout. 12 game cards, war fronts.
+DEPENDS ON: tokens.css
+═══════════════════════════════════════════════════════════════════ */
+.arena-game-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 8px 0;
+}
+.arena-game-card {
+  position: relative;
+  padding: 16px 12px;
+  border-radius: 18px;
+  background: radial-gradient(140% 100% at 50% 0%, var(--accent-soft, transparent), transparent 60%),
+              linear-gradient(180deg, rgba(30,36,46,0.55), rgba(15,20,28,0.72));
+  border: 1px solid var(--glass-brd);
+  color: var(--slate-100);
+  text-align: center;
+  min-height: 90px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  overflow: hidden;
+}
+.arena-game-card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 50%; transform: translateX(-50%);
+  width: 32px; height: 2px;
+  background: var(--accent, var(--ember-200));
+  border-radius: 2px;
+}
+.arena-game-dot {
+  width: 8px; height: 8px;
+  border-radius: 50%;
+  background: var(--accent, var(--ember-200));
+  box-shadow: 0 0 12px var(--accent, var(--ember-200));
+  margin-bottom: 4px;
+}
+.arena-game-card b { font-size: 12px; line-height: 1.2; }
+.arena-game-card:active { transform: scale(0.96); }
+
 .war-front {
   display: flex; flex-direction: column;
-  transition: transform 0.2s var(--ease-ember), box-shadow 0.2s ease;
+  padding: 16px;
+  border-radius: var(--r-lg);
+  border: 1px solid var(--glass-brd);
+  transition: transform 0.2s var(--ease-ember);
 }
 .war-front:active { transform: scale(0.98); }
 .war-front.terrain-plains   { background: linear-gradient(180deg, #3a3a24, #1c1c10); }

@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/verse.js
+// PURPOSE: Generate contextual startup verses. Never the same twice.
+// DEPENDS ON: nothing
+// ═══════════════════════════════════════════════════════════════════
 const VERBS = ['Feed', 'Wake', 'Raise', 'Stoke', 'Tend', 'Guard', 'Forge', 'Hold', 'Hunt', 'Rise',
   'Gather', 'Sing', 'Burn', 'Wait', 'Follow', 'Lead', 'Remember', 'Forget'];
 const NOUNS = ['fire', 'tribe', 'ash', 'kin', 'banner', 'blade', 'stone', 'mountain', 'river',
@@ -14,7 +19,7 @@ function template() {
   const r = Math.random();
   if (r < 0.25) return () => `${cap(pick(VERBS))} the ${pick(NOUNS)}.`;
   if (r < 0.45) return () => `${cap(pick(ADJS))} ${pick(NOUNS)}, ${pick(ADJS)} ${pick(NOUNS)}.`;
-  if (r < 0.65) return () => `The ${pick(NOUNS)} ${pick(VERBS).toLowerCase()}s.`;
+  if (r < 0.65) return () => `The ${pick(NOUNS)} ${pick(['remembers', 'waits', 'calls', 'burns'])}.`;
   if (r < 0.80) return () => `${cap(pick(VERBS))} from the ${pick(NOUNS)}.`;
   if (r < 0.90) return () => `${cap(pick(NOUNS))} is ${pick(ADJS)}.`;
   return () => `${cap(pick(VERBS))} bright, fade slow.`;

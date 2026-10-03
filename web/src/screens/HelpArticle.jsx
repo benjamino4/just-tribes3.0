@@ -1,14 +1,18 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/screens/HelpArticle.jsx
+// PURPOSE: One help article.
+// DEPENDS ON: api
+// ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { useMotionConfig, V } from '../lib/motion.js';
+import { V } from '../lib/motion.js';
 import { apiGet } from '../lib/api.js';
 import Icon from '../components/Icon.jsx';
 
 export default function HelpArticle() {
   const { slug } = useParams();
   const nav = useNavigate();
-  const M = useMotionConfig();
   const [article, setArticle] = useState(null);
 
   useEffect(() => {

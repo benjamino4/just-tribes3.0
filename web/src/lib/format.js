@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/format.js
+// PURPOSE: Number formatting. Compact for large values.
+// DEPENDS ON: nothing
+// ═══════════════════════════════════════════════════════════════════
 export function fmt(n) {
   n = Number(n) || 0;
   const sign = n < 0 ? '-' : '';

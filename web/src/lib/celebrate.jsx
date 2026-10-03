@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/celebrate.jsx
+// PURPOSE: Global celebration mount. Queue-based. One at a time.
+// DEPENDS ON: EmojiProvider, Celebration component
+// ═══════════════════════════════════════════════════════════════════
 import { createRoot } from 'react-dom/client';
 import { EmojiProvider } from './emojiRegistry.jsx';
 import Celebration from '../components/Celebration.jsx';

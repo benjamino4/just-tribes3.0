@@ -1,12 +1,52 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/arena.js
+// PURPOSE: The PvP hub. Ranked duels, staked duels. Real player first,
+//          Forgotten One fallback. Live match state.
+// DEPENDS ON: db.js, config.js, games/index.js, rank.js, events.js,
+//             economy.js, forgotten.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 import { CFG } from './config.js';
-import { scoreGame, pickGameForArchetypeWeights } from './games/index.js';
+import { scoreGame, pickGameForArchetypeWeights, GAMES } from './games/index.js';
 import { applyRankAfterMatch } from './rank.js';
 import { emit } from './events.js';
 import { addKinship } from './economy.js';
-import { getOrCreateArenaBot, botScoreFor, recordHumanScore, isBot } from './botplayer.js';
+import * as Forgotten from './forgotten.js';
+
+async function findRealOpponentWithTimeout(user, ms) {
+  const start = Date.now();
+  while (Date.now() - start < ms) {
+    const r = await q(
+      `SELECT id, first_name, username, rank_rating FROM users
+        WHERE id <> $1 AND banned = false
+          AND last_seen_at > now() - interval '2 minutes'
+          AND ABS(rank_rating - $2) < 250
+        ORDER BY random() LIMIT 1`,
+      [user.id, user.rank_rating]
+    );
+    if (r.rows[0]) return r.rows[0];
+    await new Promise((res) => setTimeout(res, 1500));
+  }
+  return null;
+}
+
+async function getRecentOpponentPlays(userId, n = 5) {
+  const rows = (await q(
+    `SELECT opponent_plays FROM forgotten_matches
+      WHERE opponent_user_id=$1 AND archetype='choice'
+      ORDER BY played_at DESC LIMIT $2`,
+    [userId, n]
+  )).rows;
+  const plays = [];
+  for (const r of rows) {
+    if (Array.isArray(r.opponent_plays)) plays.push(...r.opponent_plays.slice(0, 3));
+  }
+  return plays.slice(0, n * 3);
+}
 
 export async function findRankedMatch(user, gameSlug = null) {
+  if (!Number(CFG.duel_ranked_enabled)) throw new Error('ranked disabled');
+
   const game = gameSlug || pickGameForArchetypeWeights({
     reaction: Number(CFG.game_weight_reaction) || 30,
     memory: Number(CFG.game_weight_memory) || 25,
@@ -15,106 +55,144 @@ export async function findRankedMatch(user, gameSlug = null) {
     deduction: Number(CFG.game_weight_deduction) || 10
   });
 
-  const opponent = (await q(
-    `SELECT id, first_name, username, rank_rating FROM users
-      WHERE id <> $1 AND banned = false
-        AND COALESCE(is_bot, false) = false
-        AND last_checkin > now() - interval '2 days'
-      ORDER BY ABS(rank_rating - (SELECT rank_rating FROM users WHERE id=$1)) ASC
-      LIMIT 1`, [user.id]
-  )).rows[0];
+  const waitMs = Number(CFG.duel_real_player_wait_ms) || 15000;
+  const realOpponent = await findRealOpponentWithTimeout(user, waitMs);
 
-  // No live human in range → drop in a learning ember-spirit bot so the player
-  // always gets a ranked fight.
-  if (!opponent) {
-    const bot = await getOrCreateArenaBot(user.rank_rating || 1000);
-    const duel = (await q(
+  if (realOpponent) {
+    const duel = await q(
       `INSERT INTO duels (kind, opener_id, accepter_id, game_slug, status)
        VALUES ('ranked', $1, $2, $3, 'active') RETURNING id`,
-      [user.id, bot.id, game]
-    )).rows[0];
+      [user.id, realOpponent.id, game]
+    );
     return {
-      duel_id: duel.id,
+      duel_id: duel.rows[0].id,
       game,
       opponent: {
-        id: bot.id,
-        first_name: bot.first_name,
-        username: bot.username,
-        rank_rating: Number(bot.rank_rating || 1000),
-        is_bot: true,
+        id: realOpponent.id,
+        name: realOpponent.first_name || realOpponent.username,
+        rank_rating: realOpponent.rank_rating,
+        forgotten: false
       },
-      is_bot: true,
+      opponent_type: 'player'
     };
   }
 
-  const duel = (await q(
-    `INSERT INTO duels (kind, opener_id, accepter_id, game_slug, status)
-     VALUES ('ranked', $1, $2, $3, 'active') RETURNING id`,
-    [user.id, opponent.id, game]
-  )).rows[0];
+  if (!Number(CFG.forgotten_enabled)) throw new Error('no opponent available');
 
-  return { duel_id: duel.id, game, opponent };
+  const fo = await Forgotten.findOpponent(user.rank_rating, { spread: 200 });
+  if (!fo) throw new Error('no opponent available');
+
+  const signature = String(user.id);
+  const opponentPlays = await getRecentOpponentPlays(user.id, 5);
+  const decision = Forgotten.decidePlay(fo.style_profile, game, GAMES[game].archetype, signature);
+
+  const duel = await q(
+    `INSERT INTO duels (kind, opener_id, forgotten_opponent_id, game_slug, status, opponent_decision)
+     VALUES ('ranked', $1, $2, $3, 'active', $4) RETURNING id`,
+    [user.id, fo.id, game, JSON.stringify(decision)]
+  );
+
+  return {
+    duel_id: duel.rows[0].id,
+    game,
+    opponent: {
+      id: -fo.id,
+      name: fo.name,
+      rank_rating: fo.rank_rating,
+      forgotten: true,
+      personality_hint: hintFor(fo.personality)
+    },
+    opponent_type: 'forgotten',
+    forgotten_id: fo.id,
+    decision
+  };
 }
 
 export async function resolveRankedDuel(user, duelId, payload) {
   const duel = (await q('SELECT * FROM duels WHERE id=$1', [duelId])).rows[0];
   if (!duel) throw new Error('no such duel');
   if (Number(duel.opener_id) !== Number(user.id)) throw new Error('not your duel');
-  if (duel.status !== 'active') return { ok: true, status: duel.status };
+  if (duel.status !== 'active') return { ok: true, status: duel.status, already: true };
 
-  const score = scoreGame(duel.game_slug, payload);
+  const playerScore = scoreGame(duel.game_slug, payload);
 
-  // Every real human result teaches the bot skill model for this game.
-  try { await recordHumanScore(duel.game_slug, score); } catch { /* non-fatal */ }
-
-  // Against a bot the opponent actually "plays": its score is drawn from the
-  // learned human distribution and the rating gap. Against a human we keep the
-  // original random threshold so existing head-to-head behaviour is unchanged.
-  let threshold;
-  let botTurn = null;
-  if (await isBot(duel.accepter_id)) {
-    const human = (await q('SELECT rank_rating FROM users WHERE id=$1', [duel.opener_id])).rows[0];
-    const bot = (await q('SELECT rank_rating FROM users WHERE id=$1', [duel.accepter_id])).rows[0];
-    botTurn = await botScoreFor(
-      duel.game_slug,
-      bot?.rank_rating || 1000,
-      human?.rank_rating || 1000
-    );
-    threshold = botTurn.score;
+  let opponentScore, opponentId = null, forgottenId = null;
+  if (duel.forgotten_opponent_id) {
+    forgottenId = duel.forgotten_opponent_id;
+    const fo = await Forgotten.getById(forgottenId);
+    const dec = duel.opponent_decision || {};
+    // Score the Forgotten One's decision through the same scorer
+    switch (GAMES[duel.game_slug].archetype) {
+      case 'reaction':   opponentScore = scoreGame(duel.game_slug, { times: dec.times || [] }); break;
+      case 'memory':     opponentScore = scoreGame(duel.game_slug, dec); break;
+      case 'choice':     opponentScore = scoreGame(duel.game_slug, { wins: dec.wins || 0, losses: dec.losses || 0 }); break;
+      case 'sequence':   opponentScore = scoreGame(duel.game_slug, { chain_len: dec.chain_len || 0, won: !!dec.won }); break;
+      case 'deduction':  opponentScore = scoreGame(duel.game_slug, { rounds_won: dec.rounds_won || 0, rounds_lost: dec.rounds_lost || 0 }); break;
+      default:           opponentScore = Math.round(40 + Math.random() * 40);
+    }
   } else {
-    threshold = 50 + Math.floor(Math.random() * 20);
+    // Real player: server already had their score submitted separately. Here the opener's request wins if score above threshold.
+    // Simplified: use threshold comparison.
+    opponentScore = Math.round(45 + Math.random() * 30);
+    opponentId = duel.accepter_id;
   }
-  const won = score >= threshold;
-  const winnerId = won ? duel.opener_id : duel.accepter_id;
-  const loserId = won ? duel.accepter_id : duel.opener_id;
+
+  const playerWon = playerScore >= opponentScore;
+  const winnerId = playerWon ? user.id : (opponentId || -forgottenId);
+  const loserId = playerWon ? (opponentId || -forgottenId) : user.id;
 
   await q(
     `UPDATE duels SET status='resolved', winner_id=$1, loser_id=$2, resolved_at=now() WHERE id=$3`,
     [winnerId, loserId, duelId]
   );
-  await applyRankAfterMatch(winnerId, loserId, 'ranked');
+
+  // Rank adjustment — Forgotten Ones use negative IDs so applyRankAfterMatch needs real IDs only
+  const realWinner = playerWon ? user.id : null;
+  const realLoser = playerWon ? null : user.id;
+
+  if (realWinner) {
+    await applyRankAfterMatch(realWinner, opponentId || user.id, 'ranked');
+  } else if (realLoser) {
+    await applyRankAfterMatch(opponentId || user.id, realLoser, 'ranked');
+  }
 
   const kinshipWin = Number(CFG.rank_win_delta) || 25;
   const kinshipLoss = Math.floor(kinshipWin / 5);
-  await addKinship({ id: winnerId }, kinshipWin);
-  await addKinship({ id: loserId }, kinshipLoss);
+
+  await q(
+    `UPDATE users SET kinship = kinship + $1 WHERE id = $2`,
+    [playerWon ? kinshipWin : kinshipLoss, user.id]
+  );
+
+  // Learn for Forgotten Ones
+  if (forgottenId) {
+    try {
+      await Forgotten.recordMatch({
+        forgottenId,
+        opponentUserId: user.id,
+        gameSlug: duel.game_slug,
+        archetype: GAMES[duel.game_slug].archetype,
+        won: !playerWon,
+        matchData: { times: payload?.times || [] }
+      });
+    } catch (e) { console.warn('[arena] learn fail', e.message); }
+  }
 
   await emit({
-    userId: winnerId, tier: 'toast', kind: 'duel_win',
-    title: 'Victory', body: `+${kinshipWin} Kinship`,
-    icon: 'check', severity: 'success'
-  });
-  await emit({
-    userId: loserId, tier: 'toast', kind: 'duel_loss',
-    title: 'Defeat', body: `+${kinshipLoss} Kinship`,
-    icon: 'bolt', severity: 'warn'
+    userId: user.id,
+    tier: 'toast',
+    kind: playerWon ? 'duel_win' : 'duel_loss',
+    title: playerWon ? 'Victory' : 'Defeat',
+    body: `${playerScore} — ${opponentScore}`,
+    icon: playerWon ? 'check' : 'bolt',
+    severity: playerWon ? 'success' : 'warn'
   });
 
-  return { ok: true, score, won, threshold, opponent_score: threshold, bot: botTurn };
+  return { ok: true, playerScore, opponentScore, won: playerWon };
 }
 
 export async function findStakedMatch(user, stakeSparks, gameSlug = null) {
-  if (!Number(CFG.duel_staked_enabled)) throw new Error('staked duels disabled');
+  if (!Number(CFG.duel_staked_enabled)) throw new Error('staked disabled');
   const stake = Math.floor(Number(stakeSparks) || 0);
   const min = Number(CFG.duel_stake_min) || 50;
   const max = Number(CFG.duel_stake_max) || 5000;
@@ -122,11 +200,7 @@ export async function findStakedMatch(user, stakeSparks, gameSlug = null) {
   if (Number(user.sparks) < stake) { const e = new Error('not enough Sparks'); e.need = stake; throw e; }
 
   const game = gameSlug || pickGameForArchetypeWeights({
-    reaction: Number(CFG.game_weight_reaction) || 30,
-    memory: Number(CFG.game_weight_memory) || 25,
-    choice: Number(CFG.game_weight_choice) || 20,
-    sequence: Number(CFG.game_weight_sequence) || 15,
-    deduction: Number(CFG.game_weight_deduction) || 10
+    reaction: 30, memory: 25, choice: 20, sequence: 15, deduction: 10
   });
 
   await q('UPDATE users SET sparks = sparks - $1 WHERE id=$2', [stake, user.id]);
@@ -135,59 +209,42 @@ export async function findStakedMatch(user, stakeSparks, gameSlug = null) {
      VALUES ('staked', $1, $2, $3, 'open') RETURNING id`,
     [user.id, game, stake]
   )).rows[0];
-
   return { duel_id: duel.id, game, stake };
-}
-
-export async function acceptStakedMatch(user, duelId) {
-  const duel = (await q('SELECT * FROM duels WHERE id=$1 AND status=$2', [duelId, 'open'])).rows[0];
-  if (!duel) throw new Error('duel unavailable');
-  if (Number(duel.opener_id) === Number(user.id)) throw new Error('cannot accept your own duel');
-  if (Number(user.sparks) < Number(duel.stake_sparks)) {
-    const e = new Error('not enough Sparks'); e.need = duel.stake_sparks; throw e;
-  }
-  await q('UPDATE users SET sparks = sparks - $1 WHERE id=$2', [duel.stake_sparks, user.id]);
-  await q('UPDATE duels SET accepter_id=$1, status=$2 WHERE id=$3',
-    [user.id, 'active', duelId]);
-  return { ok: true, duel: { ...duel, accepter_id: user.id, status: 'active' } };
 }
 
 export async function resolveStakedMatch(user, duelId, payload) {
   const duel = (await q('SELECT * FROM duels WHERE id=$1', [duelId])).rows[0];
   if (!duel) throw new Error('no such duel');
-  if (Number(duel.opener_id) !== Number(user.id) && Number(duel.accepter_id) !== Number(user.id)) {
-    throw new Error('not your duel');
-  }
-  if (duel.status !== 'active') return { ok: true, status: duel.status };
+  if (duel.status !== 'active' && duel.status !== 'open') return { ok: true, status: duel.status };
 
-  const score = scoreGame(duel.game_slug, payload);
-  const threshold = 50 + Math.floor(Math.random() * 20);
-  const openerWon = score >= threshold;
-  const winnerId = openerWon ? duel.opener_id : duel.accepter_id;
-  const loserId = openerWon ? duel.accepter_id : duel.opener_id;
+  const playerScore = scoreGame(duel.game_slug, payload);
+  const opponentScore = Math.round(45 + Math.random() * 30);
+  const playerWon = playerScore >= opponentScore;
+
   const stake = Number(duel.stake_sparks) || 0;
   const burn = Math.floor(stake * (Number(CFG.duel_burn_pct) || 5) / 100);
   const payout = stake * 2 - burn;
 
-  await q('UPDATE users SET sparks = sparks + $1 WHERE id=$2', [payout, winnerId]);
+  if (playerWon) {
+    await q('UPDATE users SET sparks = sparks + $1 WHERE id=$2', [payout, user.id]);
+  }
+
   await q(
     `UPDATE duels SET status='resolved', winner_id=$1, loser_id=$2, resolved_at=now() WHERE id=$3`,
-    [winnerId, loserId, duelId]
+    [playerWon ? user.id : 0, playerWon ? 0 : user.id, duelId]
   );
-  await applyRankAfterMatch(winnerId, loserId, 'staked');
 
   await emit({
-    userId: winnerId, tier: 'toast', kind: 'duel_win',
-    title: 'Victory', body: `+${payout} Sparks`,
-    icon: 'check', severity: 'success'
-  });
-  await emit({
-    userId: loserId, tier: 'toast', kind: 'duel_loss',
-    title: 'Defeat', body: `-${stake} Sparks`,
-    icon: 'bolt', severity: 'danger'
+    userId: user.id,
+    tier: 'toast',
+    kind: playerWon ? 'duel_win' : 'duel_loss',
+    title: playerWon ? 'Victory' : 'Defeat',
+    body: playerWon ? `+${payout} Sparks` : `-${stake} Sparks`,
+    icon: playerWon ? 'check' : 'bolt',
+    severity: playerWon ? 'success' : 'danger'
   });
 
-  return { ok: true, score, won: openerWon, payout, burn };
+  return { ok: true, playerScore, opponentScore, won: playerWon, payout, burn };
 }
 
 export async function recentMatches(userId, limit = 10) {
@@ -195,6 +252,18 @@ export async function recentMatches(userId, limit = 10) {
     `SELECT id, game_slug, winner_id, loser_id, stake_sparks, kind, resolved_at
        FROM duels
       WHERE (opener_id=$1 OR accepter_id=$1) AND status='resolved'
-      ORDER BY resolved_at DESC LIMIT $2`, [userId, limit]
+      ORDER BY resolved_at DESC LIMIT $2`,
+    [userId, limit]
   )).rows;
+}
+
+function hintFor(personality) {
+  switch (personality) {
+    case 'aggressive': return 'plays fast';
+    case 'cautious':   return 'waits';
+    case 'erratic':    return 'unpredictable';
+    case 'methodical': return 'studies you';
+    case 'mimic':      return 'mirrors';
+  }
+  return null;
 }

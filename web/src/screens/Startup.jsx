@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/screens/Startup.jsx
+// PURPOSE: The living title. Verse. Ember → fire → Hearth continuity.
+// DEPENDS ON: verse.js, motion
+// ═══════════════════════════════════════════════════════════════════
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { generateVerse } from '../lib/verse.js';

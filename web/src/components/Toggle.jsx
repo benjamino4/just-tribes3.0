@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/Toggle.jsx
+// PURPOSE: Settings toggle. Springy knob.
+// DEPENDS ON: motion.js, haptics.js
+// ═══════════════════════════════════════════════════════════════════
 import { motion } from 'framer-motion';
 import { useMotionConfig } from '../lib/motion.js';
 import { haptic } from '../lib/haptics.js';
@@ -16,10 +21,10 @@ export default function Toggle({ on, onChange, tone = 'var(--ember-400)', label,
         role="switch" aria-checked={on}
         onClick={() => set(!on)}
         animate={{
-          backgroundColor: on ? 'rgba(242,106,16,0.18)' : 'rgba(6,5,8,0.62)',
+          backgroundColor: on ? 'rgba(255,199,138,0.18)' : 'rgba(6,5,8,0.62)',
           boxShadow: on
-            ? `0 0 0 1px ${tone}, 0 0 20px ${tone}55, inset 0 1px 0 rgba(255,243,208,0.16)`
-            : '0 0 0 1px rgba(216,201,166,0.12), inset 0 1px 2px rgba(0,0,0,0.6)'
+            ? `0 0 0 1px ${tone}, 0 0 20px ${tone}55`
+            : '0 0 0 1px rgba(216,201,166,0.12)'
         }}
         transition={M.feather}
         style={{
@@ -35,18 +40,9 @@ export default function Toggle({ on, onChange, tone = 'var(--ember-400)', label,
             background: on
               ? `radial-gradient(circle at 30% 25%, #fff4e6, ${tone})`
               : 'radial-gradient(circle at 30% 25%, #f0e6cf, #b0a080)',
-            boxShadow: on
-              ? `0 3px 10px ${tone}88`
-              : '0 2px 6px rgba(0,0,0,0.6)',
-            display: 'grid', placeItems: 'center'
+            boxShadow: on ? `0 3px 10px ${tone}88` : '0 2px 6px rgba(0,0,0,0.6)'
           }}
-        >
-          <motion.span
-            animate={{ scale: on ? 1 : 0.55, opacity: on ? 1 : 0.32 }}
-            transition={M.feather}
-            style={{ width: 6, height: 6, borderRadius: 99, background: on ? '#1f1403' : '#4a4235' }}
-          />
-        </motion.span>
+        />
       </motion.button>
     </div>
   );

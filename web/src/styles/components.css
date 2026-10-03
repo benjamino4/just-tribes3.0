@@ -1,7 +1,12 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/components.css
+PURPOSE: Glass, buttons, chips, topbar, tabbar. Shared primitives.
+DEPENDS ON: tokens.css
+═══════════════════════════════════════════════════════════════════ */
 .glass {
   position: relative;
-  background: radial-gradient(140% 90% at 50% 115%, rgba(242,106,16,0.08), transparent 55%),
-              linear-gradient(180deg, rgba(31,29,40,0.10), rgba(6,5,8,0.20)),
+  background: radial-gradient(140% 90% at 50% 115%, rgba(232,133,58,0.06), transparent 55%),
+              linear-gradient(180deg, rgba(30,36,46,0.10), rgba(10,14,20,0.20)),
               var(--glass-bg);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(130%);
           backdrop-filter: blur(var(--glass-blur)) saturate(130%);
@@ -11,7 +16,7 @@
   transition: transform var(--dur-2) var(--ease-ember);
 }
 .glass.hero {
-  background: radial-gradient(140% 95% at 50% 120%, rgba(242,106,16,0.14), transparent 58%), var(--glass-bg-hero);
+  background: radial-gradient(140% 95% at 50% 120%, rgba(232,133,58,0.10), transparent 58%), var(--glass-bg-hero);
 }
 .glass.strong { background: var(--glass-bg-strong); }
 .card { padding: 16px; }
@@ -29,12 +34,12 @@
 }
 .btn.block { width: 100%; }
 .btn.primary {
-  background: linear-gradient(180deg, var(--ember-400), var(--ember-600));
-  border-color: rgba(255,131,36,0.55);
+  background: linear-gradient(180deg, var(--ember-300), var(--ember-500));
+  border-color: rgba(255,199,138,0.55);
   color: #1a0b02;
   box-shadow: var(--sh-ember), var(--sh-inset-hi);
 }
-.btn.ghost { background: rgba(255, 243, 208, 0.04); border-color: rgba(216, 201, 166, 0.16); }
+.btn.ghost { background: rgba(232,238,245,0.04); border-color: rgba(142,154,170,0.16); }
 .btn:disabled { opacity: 0.5; pointer-events: none; }
 .btn.lg { padding: 15px 24px; font-size: 16px; }
 
@@ -46,27 +51,27 @@
   font-weight: 700; font-size: 13px;
   color: var(--ink);
 }
-.chip.gold { border-color: rgba(239,193,104,0.42); }
-.chip.ember { border-color: rgba(255,131,36,0.42); }
+.chip.gold { border-color: rgba(232,133,58,0.42); }
+.chip.ember { border-color: rgba(232,133,58,0.42); }
 
 .topbar {
   position: absolute; top: 0; left: 0; right: 0; z-index: 20;
   height: calc(var(--safe-top) + var(--topbar-h));
   padding: var(--safe-top) 14px 0;
   display: flex; align-items: center; justify-content: space-between; gap: 10px;
-  background: linear-gradient(180deg, rgba(11,10,16,0.88) 0%, rgba(11,10,16,0.55) 55%, transparent 100%);
+  background: linear-gradient(180deg, rgba(15,20,28,0.88) 0%, rgba(15,20,28,0.55) 55%, transparent 100%);
 }
 .crest-chip {
   padding: 6px 14px 6px 6px; border-radius: var(--r-pill);
-  background: rgba(31, 29, 40, 0.72);
+  background: rgba(30,36,46,0.72);
   border: 1px solid var(--glass-brd);
   display: flex; align-items: center; gap: 8px;
 }
 .crest-art {
   width: 32px; height: 32px; border-radius: 10px;
   display: grid; place-items: center;
-  background: radial-gradient(circle at 30% 25%, var(--gold-200), var(--ember-600) 70%, var(--ember-700));
-  box-shadow: inset 0 1px 0 rgba(255, 243, 208, 0.4);
+  background: radial-gradient(circle at 30% 25%, var(--ember-100), var(--ember-500) 70%, var(--ember-500));
+  box-shadow: inset 0 1px 0 rgba(232,238,245, 0.4);
 }
 .crest-meta { display: flex; flex-direction: column; line-height: 1.1; text-align: left; }
 .crest-meta b { font-size: 13px; }
@@ -94,18 +99,19 @@
   transition: color var(--dur-2) var(--ease-soft);
   font-size: 10px; font-weight: 700; text-transform: uppercase;
 }
-.tab[data-active="true"] { color: var(--bone-50); }
+.tab[data-active="true"] { color: var(--slate-50); }
 .tab-pill {
   position: absolute; z-index: 1; top: 6px; bottom: 6px;
   border-radius: calc(var(--r-2xl) - 6px);
-  background: radial-gradient(120% 100% at 50% 120%, rgba(242,106,16,0.22), transparent 60%),
-              linear-gradient(180deg, rgba(255,243,208,0.08), rgba(255,243,208,0.02));
-  border: 1px solid rgba(239,193,104,0.32);
+  background: radial-gradient(120% 100% at 50% 120%, rgba(232,133,58,0.18), transparent 60%),
+              linear-gradient(180deg, rgba(232,238,245,0.08), rgba(232,238,245,0.02));
+  border: 1px solid rgba(232,133,58,0.32);
 }
 .tab-icon-wrap { position: relative; width: 26px; height: 26px; display: grid; place-items: center; }
 .tab-label { font-size: 9.5px; letter-spacing: 0.08em; opacity: 0.85; }
 
-.bar { height: 10px; border-radius: 999px; background: rgba(6,5,8,0.55); overflow: hidden; position: relative; }
-.bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--ember-600), var(--ember-400)); transition: width var(--dur-2) var(--ease-ember); }
+.bar { height: 10px; border-radius: 999px; background: rgba(10,14,20,0.55); overflow: hidden; position: relative; }
+.bar > i { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, var(--ember-400), var(--ember-300)); transition: width var(--dur-2) var(--ease-ember); }
 
-.emoji-cell { aspect-ratio: 1 / 1; display: grid; place-items: center; border-radius: 12px; background: rgba(255,255,255,.05); border: 1px solid var(--glass-brd); }
+.emoji-cell { aspect-ratio: 1 / 1; display: grid; place-items: center; border-radius: 12px; background: rgba(232,238,245,.05); border: 1px solid var(--glass-brd); }
+.rank-medallion { display: inline-flex; }

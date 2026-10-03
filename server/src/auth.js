@@ -1,3 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/auth.js
+// PURPOSE: Telegram initData HMAC verification. Guest fallback.
+//          Constant-time compare. 24h freshness.
+// DEPENDS ON: db.js
+// ═══════════════════════════════════════════════════════════════════
 import crypto from 'crypto';
 import { q } from './db.js';
 
@@ -21,6 +27,13 @@ export function verifyInitData(initData) {
   const authDate = Number(params.get('auth_date') || 0);
   if (authDate && (Date.now() / 1000 - authDate) > 86400) return null;
   try { return JSON.parse(params.get('user') || 'null'); } catch { return null; }
+}
+
+export function safeEq(a, b) {
+  const ba = Buffer.from(String(a || ''));
+  const bb = Buffer.from(String(b || ''));
+  if (ba.length !== bb.length) return false;
+  try { return crypto.timingSafeEqual(ba, bb); } catch { return false; }
 }
 
 export async function resolveUser(req) {
@@ -48,7 +61,8 @@ export async function resolveUser(req) {
        SET username = EXCLUDED.username,
            first_name = EXCLUDED.first_name,
            photo_url = EXCLUDED.photo_url,
-           is_guest = EXCLUDED.is_guest
+           is_guest = EXCLUDED.is_guest,
+           last_seen_at = now()
      RETURNING *`,
     [tgUser.id, tgUser.username || null, tgUser.first_name || 'Kin',
      tgUser.photo_url || null, !!tgUser.is_guest]

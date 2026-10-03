@@ -1,3 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/benchmark.js
+// PURPOSE: Five live tests that measure real device performance.
+//          Returns a score and a tier.
+// DEPENDS ON: refresh.js
+// ═══════════════════════════════════════════════════════════════════
 import { measureRefreshRate } from './refresh.js';
 
 function clamp(n, lo, hi) { return Math.max(lo, Math.min(hi, n)); }
@@ -12,7 +18,6 @@ async function testCompositor(targetFps) {
     return d;
   });
   document.body.appendChild(container);
-
   let frames = 0, running = true;
   const start = performance.now();
   function tick() {

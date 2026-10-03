@@ -1,4 +1,9 @@
-import { useState, useEffect } from 'react';
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/GiftBox.jsx
+// PURPOSE: Floating gift box. FAB that opens a redeem-code flow.
+// DEPENDS ON: store, haptics, celebrate, Toast
+// ═══════════════════════════════════════════════════════════════════
+import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
 import { haptic } from '../lib/haptics.js';
@@ -61,8 +66,8 @@ export default function GiftBox() {
             onClick={() => setOpen(false)}
             style={{
               position: 'fixed', inset: 0, zIndex: 190,
-              background: 'rgba(6,5,8,0.75)',
-              backdropFilter: 'blur(8px)',
+              background: 'rgba(6,5,8,0.78)',
+              backdropFilter: 'blur(10px)',
               display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24
             }}
           >
@@ -96,9 +101,9 @@ export default function GiftBox() {
                 disabled={busy || code.trim().length < 4}
                 style={{
                   marginTop: 16, width: '100%', padding: 14, borderRadius: 999,
-                  background: 'linear-gradient(180deg, var(--ember-400), var(--ember-600))',
+                  background: 'linear-gradient(180deg, var(--ember-300), var(--ember-500))',
                   color: '#1a0b02', fontWeight: 700, fontSize: 15,
-                  border: '1px solid rgba(255,131,36,0.55)',
+                  border: '1px solid rgba(255,199,138,0.55)',
                   opacity: (busy || code.trim().length < 4) ? 0.5 : 1
                 }}
               >{busy ? 'Claiming…' : 'Redeem'}</button>

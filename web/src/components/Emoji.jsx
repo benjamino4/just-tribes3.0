@@ -1,11 +1,20 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/Emoji.jsx
+// PURPOSE: Render emoji by name. SVG or image. EmojiText parses :key:.
+// DEPENDS ON: emojiRegistry.jsx, data/emojis.js
+// ═══════════════════════════════════════════════════════════════════
 import { useMemo } from 'react';
 import { useEmojiRegistry } from '../lib/emojiRegistry.jsx';
+import { BUILTIN_EMOJIS } from '../data/emojis.js';
 
 const FALLBACK = `<svg viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="#efc168" stroke-width="1.5"/><circle cx="12" cy="12" r="3" fill="#efc168"/></svg>`;
 
 export default function Emoji({ name, size = 24, className, style, alt }) {
   const { resolve } = useEmojiRegistry();
-  const html = useMemo(() => resolve(name) || FALLBACK, [name, resolve]);
+  const html = useMemo(
+    () => resolve(name) || BUILTIN_EMOJIS[name] || FALLBACK,
+    [name, resolve]
+  );
   const isImg = /^data:image\//i.test(html) || /^https?:\/\//i.test(html);
 
   return (

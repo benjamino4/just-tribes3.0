@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/Toast.jsx
+// PURPOSE: Bottom ephemeral pill. One at a time. 2.8s fade.
+// DEPENDS ON: motion.js, haptics.js, Icon
+// ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMotionConfig } from '../lib/motion.js';
@@ -24,10 +29,10 @@ function useStore() {
 }
 
 const TONES = {
-  good: { color: 'var(--moss-400)', icon: 'check' },
-  bad:  { color: 'var(--blood-400)', icon: 'bolt' },
-  info: { color: 'var(--lapis-400)', icon: 'info' },
-  warn: { color: 'var(--ochre-400)', icon: 'warn' }
+  good: { color: 'var(--jade-200)', icon: 'check' },
+  bad:  { color: 'var(--rose-200)', icon: 'bolt' },
+  info: { color: 'var(--lapis-200)', icon: 'info' },
+  warn: { color: 'var(--amber-200)', icon: 'warn' }
 };
 
 export function ToastHost() {

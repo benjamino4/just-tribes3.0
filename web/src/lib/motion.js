@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/motion.js
+// PURPOSE: Motion presets. Springs and variant definitions.
+// DEPENDS ON: framer-motion
+// ═══════════════════════════════════════════════════════════════════
 import { useReducedMotion } from 'framer-motion';
 
 export const SPRING = {

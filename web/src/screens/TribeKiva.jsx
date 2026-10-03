@@ -1,8 +1,13 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/screens/TribeKiva.jsx
+// PURPOSE: Tribe chat. SSE-driven. Emoji picker. Composer.
+// DEPENDS ON: api, telegram, Emoji, EmojiPicker, Toast
+// ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
-import { useMotionConfig, V } from '../lib/motion.js';
+import { V } from '../lib/motion.js';
 import { apiGet, apiPost } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
 import { initData } from '../lib/telegram.js';
@@ -14,7 +19,6 @@ import { toast } from '../components/Toast.jsx';
 export default function TribeKiva() {
   const nav = useNavigate();
   const { data } = useApp();
-  const M = useMotionConfig();
   const tribe = data?.tribe;
   const user = data?.user || {};
 
@@ -82,7 +86,7 @@ export default function TribeKiva() {
     return (
       <div className="glass card" style={{ textAlign: 'center', padding: 28 }}>
         <h2 className="display" style={{ fontSize: 20 }}>Join a tribe first</h2>
-        <Button variant="primary" style={{ marginTop: 12 }} onClick={() => nav('/tribe')}>Back</Button>
+        <button className="btn primary" style={{ marginTop: 12 }} onClick={() => nav('/tribe')}>Back</button>
       </div>
     );
   }
@@ -99,7 +103,7 @@ export default function TribeKiva() {
       </div>
 
       {loadError && (
-        <div className="glass card" style={{ borderColor: 'var(--blood-400)', textAlign: 'center', padding: 20 }}>
+        <div className="glass card" style={{ borderColor: 'var(--rose-200)', textAlign: 'center', padding: 20 }}>
           <b>Could not open the Kiva</b>
           <p className="tiny" style={{ marginTop: 6 }}>{loadError}</p>
         </div>
@@ -109,7 +113,7 @@ export default function TribeKiva() {
         {messages.map((m) => (
           <div key={m.id} className={`kiva-bubble${Number(m.user_id) === Number(user.id) ? ' mine' : ''}${m.role === 'Chief' ? ' chief' : ''}`}>
             {Number(m.user_id) !== Number(user.id) && (
-              <b style={{ fontSize: 12.5, color: 'var(--ember-200)' }}>{m.first_name || m.username || 'Kin'}</b>
+              <b style={{ fontSize: 12.5, color: 'var(--ember-100)' }}>{m.first_name || m.username || 'Kin'}</b>
             )}
             {m.body && (
               <span style={{ fontSize: 14.5, lineHeight: 1.45 }}>
@@ -140,7 +144,7 @@ export default function TribeKiva() {
           disabled={!draft.trim()}
           style={{
             padding: '10px 16px', borderRadius: 999,
-            background: 'linear-gradient(180deg, var(--ember-400), var(--ember-600))',
+            background: 'linear-gradient(180deg, var(--ember-300), var(--ember-500))',
             color: '#1a0b02', fontWeight: 700,
             opacity: !draft.trim() ? 0.5 : 1
           }}

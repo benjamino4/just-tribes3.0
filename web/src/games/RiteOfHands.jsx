@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/games/RiteOfHands.jsx
+// PURPOSE: RPS with pattern reading. Best of 5. Shows last 5 throws.
+// DEPENDS ON: GameFrame, haptics
+// ═══════════════════════════════════════════════════════════════════
 import { useState, useRef } from 'react';
 import GameFrame from '../components/GameFrame.jsx';
 import { haptic } from '../lib/haptics.js';
@@ -23,8 +28,7 @@ export default function RiteOfHands({ onDone, onExit }) {
     haptic('select');
     const bot = Math.floor(Math.random() * 3);
     setReveal({ player: idx, bot });
-    const newHistory = [...history, bot].slice(-5);
-    setHistory(newHistory);
+    setHistory((h) => [...h, bot].slice(-5));
 
     if (idx === bot) setMsg('Draw — go again');
     else if (beats(idx, bot)) {
@@ -38,22 +42,22 @@ export default function RiteOfHands({ onDone, onExit }) {
     }
 
     if (ref.current.pw >= 3 || ref.current.bw >= 3) {
-      const total = ref.current.pw + ref.current.bw;
-      setTimeout(() => onDone?.(ref.current.pw >= 3 ? 100 : 30, { wins: ref.current.pw, losses: ref.current.bw }), 600);
+      setTimeout(() => onDone?.(ref.current.pw >= 3 ? 100 : 30, {
+        wins: ref.current.pw, losses: ref.current.bw
+      }), 600);
     }
 
     setTimeout(() => setReveal(null), 400);
   }
 
   return (
-    <GameFrame title="Rite of Hands" onExit={onExit} material="metal">
+    <GameFrame title="Rite of Hands" onExit={onExit} material="metal" accent="#cfd0d8">
       <div className="hands-scene">
         <div className="hands-history">
           {history.map((b, i) => (
             <span key={i} className="hands-ghost">{THROWS[b].glyph}</span>
           ))}
         </div>
-
         <div className="hands-arena">
           {reveal ? (
             <>
@@ -69,7 +73,6 @@ export default function RiteOfHands({ onDone, onExit }) {
             </>
           )}
         </div>
-
         <div className="hands-picks">
           {THROWS.map((t) => (
             <button key={t.id} className="hands-pick" onClick={() => play(t.id)}>
@@ -77,7 +80,6 @@ export default function RiteOfHands({ onDone, onExit }) {
             </button>
           ))}
         </div>
-
         <p className="tiny" style={{ textAlign: 'center' }}>
           You {playerWins} — {botWins} Bot · {msg}
         </p>

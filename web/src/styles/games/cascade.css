@@ -1,23 +1,40 @@
-.cascade-scene { position: relative; width: 100%; height: 100%; min-height: 400px; }
-.cascade-fire {
-  position: absolute;
-  width: 60px; height: 60px;
-  border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, #2a1a10, #160d08);
-  border: 2px solid #3a2413;
-  display: grid; place-items: center;
-  transition: transform .15s ease, box-shadow .15s ease;
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/games/cascade.css
+PURPOSE: Ember Cascade falling grid.
+DEPENDS ON: games/_frame.css
+═══════════════════════════════════════════════════════════════════ */
+.cascade-hud { display: flex; justify-content: space-between; margin-bottom: 12px; }
+.cascade-scene-grid {
+  display: grid;
+  gap: 2px;
+  background: rgba(0,0,0,0.4);
+  padding: 4px;
+  border-radius: 12px;
+  margin: 0 auto;
+  max-width: 300px;
+  width: 100%;
 }
-.cascade-fire[data-active="true"] {
-  background: radial-gradient(circle at 40% 35%, #ffd07a, #ff7a1a);
-  border-color: #ffd07a;
-  box-shadow: 0 0 30px rgba(255,140,40,.7);
-  transform: scale(1.15);
+.cascade-cell {
+  aspect-ratio: 1;
+  border-radius: 3px;
+  background: rgba(232,238,245,.03);
 }
-.cascade-glyph { font-size: 24px; filter: drop-shadow(0 2px 4px rgba(0,0,0,.5)); }
-.cascade-status {
-  position: absolute; bottom: 0; left: 0; right: 0;
-  text-align: center; font-size: 14px;
-  color: var(--bone-200);
+.cascade-cell[data-on="1"] {
+  background: linear-gradient(180deg, var(--ember-200), var(--ember-400));
+  box-shadow: inset 0 1px 0 rgba(255,231,194,.4);
 }
-.cascade-status .bad { color: var(--blood-400); }
+.cascade-controls {
+  display: flex;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 16px;
+}
+.cascade-btn {
+  width: 52px; height: 52px;
+  border-radius: 14px;
+  background: rgba(232,238,245,.06);
+  border: 1px solid var(--glass-brd);
+  font-size: 20px;
+  color: var(--slate-100);
+  font-weight: 700;
+}

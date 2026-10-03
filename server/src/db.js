@@ -1,3 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/db.js
+// PURPOSE: Postgres pool, base schema, migration runner with ledger.
+//          Idempotent. Self-healing against legacy schemas.
+// DEPENDS ON: env.js
+// ═══════════════════════════════════════════════════════════════════
 import pg from 'pg';
 import fs from 'fs/promises';
 import path from 'path';
@@ -23,7 +29,7 @@ function buildPool() {
     ssl: url.startsWith('postgres://localhost') || url.startsWith('postgresql://localhost')
       ? false : { rejectUnauthorized: false },
     connectionTimeoutMillis: 15000,
-    max: 8,
+    max: 12,
     idleTimeoutMillis: 30000,
     keepAlive: true,
   });
@@ -37,14 +43,29 @@ export async function q(text, params) {
 }
 
 const SCHEMA = `
-CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT);
+CREATE TABLE IF NOT EXISTS config (k TEXT PRIMARY KEY, v TEXT, category TEXT DEFAULT 'misc', label TEXT, type TEXT DEFAULT 'number');
 
 CREATE TABLE IF NOT EXISTS audit (
-  id BIGSERIAL PRIMARY KEY,
-  admin_id TEXT, action TEXT NOT NULL, detail TEXT,
+  id BIGSERIAL PRIMARY KEY, admin_id TEXT, action TEXT NOT NULL,
+  target TEXT, detail TEXT, before_json JSONB, after_json JSONB,
+  reversible BOOLEAN DEFAULT true, reverted_at TIMESTAMPTZ, reverted_by TEXT,
   ip TEXT, created_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS audit_recent_idx ON audit (created_at DESC);
+CREATE INDEX IF NOT EXISTS audit_admin_idx ON audit (admin_id, created_at DESC);
+
+CREATE TABLE IF NOT EXISTS file_versions (
+  id BIGSERIAL PRIMARY KEY, file_path TEXT NOT NULL, content TEXT NOT NULL,
+  edited_by BIGINT, edited_at TIMESTAMPTZ DEFAULT now(), note TEXT
+);
+CREATE INDEX IF NOT EXISTS file_versions_path_idx ON file_versions (file_path, edited_at DESC);
+
+CREATE TABLE IF NOT EXISTS pending_edits (
+  id BIGSERIAL PRIMARY KEY, admin_id BIGINT NOT NULL, file_path TEXT NOT NULL,
+  old_content TEXT, new_content TEXT NOT NULL,
+  status TEXT DEFAULT 'pending', note TEXT,
+  created_at TIMESTAMPTZ DEFAULT now(), applied_at TIMESTAMPTZ
+);
 
 CREATE TABLE IF NOT EXISTS users (
   id BIGINT PRIMARY KEY,
@@ -60,29 +81,22 @@ CREATE TABLE IF NOT EXISTS users (
   name_color TEXT, avatar_glow TEXT, avatar_id BIGINT,
   trials_state JSONB DEFAULT '{}'::jsonb,
   is_guest BOOLEAN DEFAULT false,
-  banned BOOLEAN DEFAULT false, ban_reason TEXT,
-  blessed BOOLEAN DEFAULT false,
-  wallet_verified_at TIMESTAMPTZ,
-  allocation BIGINT DEFAULT 0,
+  banned BOOLEAN DEFAULT false, ban_reason TEXT, blessed BOOLEAN DEFAULT false,
+  wallet_verified_at TIMESTAMPTZ, allocation BIGINT DEFAULT 0,
   referral_code TEXT UNIQUE, referred_by BIGINT,
-  rank_rating INT DEFAULT 1000,
-  rank_games INT DEFAULT 0,
-  rank_wins INT DEFAULT 0,
+  rank_rating INT DEFAULT 1000, rank_games INT DEFAULT 0, rank_wins INT DEFAULT 0,
   perf_tier TEXT DEFAULT 'balanced',
-  is_bot BOOLEAN DEFAULT false,
-  bot_persona TEXT,
+  last_seen_at TIMESTAMPTZ DEFAULT now(),
   created_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS users_tribe_idx ON users (tribe_id);
-CREATE INDEX IF NOT EXISTS users_bot_idx ON users (is_bot);
-CREATE INDEX IF NOT EXISTS users_kinship_idx ON users (kinship DESC);
 CREATE INDEX IF NOT EXISTS users_rank_idx ON users (rank_rating DESC);
+CREATE INDEX IF NOT EXISTS users_kinship_idx ON users (kinship DESC);
 CREATE INDEX IF NOT EXISTS users_banned_idx ON users (banned);
 
 CREATE TABLE IF NOT EXISTS tribes (
-  id BIGSERIAL PRIMARY KEY,
-  name TEXT UNIQUE NOT NULL,
-  name_id BIGINT, hue INT DEFAULT 0, motto TEXT DEFAULT '',
+  id BIGSERIAL PRIMARY KEY, name TEXT UNIQUE NOT NULL, name_id BIGINT,
+  hue INT DEFAULT 0, motto TEXT DEFAULT '',
   crest TEXT DEFAULT 'totem', banner TEXT DEFAULT 'sun', palette TEXT DEFAULT 'ember',
   level INT DEFAULT 1, treasury BIGINT DEFAULT 0, created_by BIGINT,
   members INT DEFAULT 0,
@@ -91,10 +105,9 @@ CREATE TABLE IF NOT EXISTS tribes (
   ash_total BIGINT DEFAULT 0, quests_total BIGINT DEFAULT 0,
   checkins_total BIGINT DEFAULT 0, relics_total BIGINT DEFAULT 0,
   shares_total BIGINT DEFAULT 0, wins INT DEFAULT 0, losses INT DEFAULT 0,
-  icon_url TEXT, name_font TEXT DEFAULT 'default',
-  name_style TEXT DEFAULT 'plain', banner_style TEXT DEFAULT 'plain',
-  perk_name BOOLEAN DEFAULT false, perk_icon BOOLEAN DEFAULT false,
-  perk_banner BOOLEAN DEFAULT false,
+  icon_url TEXT, name_font TEXT DEFAULT 'default', name_style TEXT DEFAULT 'plain',
+  banner_style TEXT DEFAULT 'plain',
+  perk_name BOOLEAN DEFAULT false, perk_icon BOOLEAN DEFAULT false, perk_banner BOOLEAN DEFAULT false,
   forgotten BOOLEAN DEFAULT false,
   war_cooldown_until TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
@@ -109,10 +122,39 @@ CREATE UNIQUE INDEX IF NOT EXISTS tribe_names_lower_uq ON tribe_names (lower(nam
 CREATE UNIQUE INDEX IF NOT EXISTS tribe_names_claim_uq
   ON tribe_names (claimed_by_tribe_id) WHERE claimed_by_tribe_id IS NOT NULL;
 
-CREATE TABLE IF NOT EXISTS notifications (
+CREATE TABLE IF NOT EXISTS forgotten_ones (
+  id BIGSERIAL PRIMARY KEY, name TEXT NOT NULL, tribe_id BIGINT,
+  rank_rating INT DEFAULT 1000, rank_games INT DEFAULT 0, rank_wins INT DEFAULT 0,
+  personality TEXT DEFAULT 'methodical',
+  style_profile JSONB DEFAULT '{}'::jsonb,
+  active BOOLEAN DEFAULT true,
+  preferred_archetype TEXT DEFAULT 'reaction',
+  displacements INT DEFAULT 0,
+  last_substituted_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  last_active_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS forgotten_rank_idx ON forgotten_ones (rank_rating DESC);
+CREATE INDEX IF NOT EXISTS forgotten_active_idx ON forgotten_ones (active, tribe_id);
+CREATE INDEX IF NOT EXISTS forgotten_ones_matchmaking_idx
+  ON forgotten_ones (active, rank_rating DESC) WHERE active = true;
+CREATE INDEX IF NOT EXISTS forgotten_archetype_idx
+  ON forgotten_ones (preferred_archetype) WHERE active = true;
+
+CREATE TABLE IF NOT EXISTS forgotten_matches (
   id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT NOT NULL, type TEXT NOT NULL,
-  icon TEXT DEFAULT 'spark', severity TEXT DEFAULT 'info',
+  forgotten_id BIGINT NOT NULL REFERENCES forgotten_ones(id) ON DELETE CASCADE,
+  opponent_user_id BIGINT, opponent_forgotten_id BIGINT,
+  game_slug TEXT NOT NULL, archetype TEXT NOT NULL,
+  won BOOLEAN NOT NULL, opponent_plays JSONB, match_data JSONB,
+  played_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS forgotten_matches_id_idx ON forgotten_matches (forgotten_id, played_at DESC);
+CREATE INDEX IF NOT EXISTS forgotten_matches_opp_idx ON forgotten_matches (opponent_user_id, played_at DESC);
+
+CREATE TABLE IF NOT EXISTS notifications (
+  id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL,
+  type TEXT NOT NULL, icon TEXT DEFAULT 'spark', severity TEXT DEFAULT 'info',
   title TEXT NOT NULL, body TEXT, action_kind TEXT, action_data JSONB,
   seen_at TIMESTAMPTZ, created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -120,20 +162,17 @@ CREATE INDEX IF NOT EXISTS notif_user_unread_idx
   ON notifications (user_id, created_at DESC) WHERE seen_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS live_feed (
-  id BIGSERIAL PRIMARY KEY,
-  tribe_id BIGINT, kind TEXT NOT NULL,
-  actor_id BIGINT, target_id BIGINT,
-  data JSONB, created_at TIMESTAMPTZ DEFAULT now()
+  id BIGSERIAL PRIMARY KEY, tribe_id BIGINT, kind TEXT NOT NULL,
+  actor_id BIGINT, target_id BIGINT, data JSONB,
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS live_feed_tribe_idx ON live_feed (tribe_id, id DESC);
 
 CREATE TABLE IF NOT EXISTS wars (
   id BIGSERIAL PRIMARY KEY,
   attacker_id BIGINT, defender_id BIGINT,
-  status TEXT DEFAULT 'active',
-  mode TEXT DEFAULT 'standard',
-  goal BIGINT DEFAULT 0, metric TEXT DEFAULT 'score',
-  stake_pct INT DEFAULT 20, reward_sparks BIGINT DEFAULT 0,
+  status TEXT DEFAULT 'active', mode TEXT DEFAULT 'standard',
+  round_number INT DEFAULT 1,
   attacker_score BIGINT DEFAULT 0, defender_score BIGINT DEFAULT 0,
   winner_id BIGINT, tribute BIGINT DEFAULT 0,
   start_at TIMESTAMPTZ DEFAULT now(), end_at TIMESTAMPTZ NOT NULL,
@@ -154,64 +193,60 @@ CREATE TABLE IF NOT EXISTS war_matches (
   id BIGSERIAL PRIMARY KEY,
   war_id BIGINT NOT NULL, front_idx INT NOT NULL,
   game_slug TEXT NOT NULL,
-  attacker_id BIGINT, defender_id BIGINT,
-  winner_id BIGINT,
+  attacker_id BIGINT, defender_id BIGINT, winner_id BIGINT,
+  attacker_score BIGINT DEFAULT 0, defender_score BIGINT DEFAULT 0,
   duration_ms INT DEFAULT 0,
   recorded_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS war_matches_war_idx ON war_matches (war_id, recorded_at DESC);
 
+CREATE TABLE IF NOT EXISTS war_substitutions (
+  id BIGSERIAL PRIMARY KEY,
+  war_id BIGINT NOT NULL, user_id BIGINT NOT NULL, forgotten_id BIGINT NOT NULL,
+  front_idx INT, started_at TIMESTAMPTZ DEFAULT now(), ended_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS war_subs_active_idx ON war_substitutions (war_id, ended_at);
+
 CREATE TABLE IF NOT EXISTS duels (
   id BIGSERIAL PRIMARY KEY,
   kind TEXT NOT NULL DEFAULT 'ranked',
-  opener_id BIGINT NOT NULL, accepter_id BIGINT,
-  game_slug TEXT,
-  stake_sparks BIGINT DEFAULT 0,
-  status TEXT DEFAULT 'open',
-  winner_id BIGINT, loser_id BIGINT,
-  created_at TIMESTAMPTZ DEFAULT now(),
-  resolved_at TIMESTAMPTZ
+  opener_id BIGINT NOT NULL, accepter_id BIGINT, forgotten_opponent_id BIGINT,
+  game_slug TEXT, stake_sparks BIGINT DEFAULT 0,
+  status TEXT DEFAULT 'open', winner_id BIGINT, loser_id BIGINT,
+  opponent_decision JSONB,
+  created_at TIMESTAMPTZ DEFAULT now(), resolved_at TIMESTAMPTZ
 );
 CREATE INDEX IF NOT EXISTS duels_status_idx ON duels (status, created_at DESC);
-
--- Rolling per-game skill model the Arena bots learn from real human results.
--- Welford online stats (mean/variance) over human scores → bots mimic the
--- live human population and improve as players improve.
-CREATE TABLE IF NOT EXISTS bot_skill (
-  game_slug TEXT PRIMARY KEY,
-  samples BIGINT DEFAULT 0,
-  mean DOUBLE PRECISION DEFAULT 55,
-  m2 DOUBLE PRECISION DEFAULT 0,
-  updated_at TIMESTAMPTZ DEFAULT now()
-);
+CREATE INDEX IF NOT EXISTS duels_opener_idx ON duels (opener_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS rank_history (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT NOT NULL,
-  rank_before INT, rank_after INT,
-  reason TEXT, at TIMESTAMPTZ DEFAULT now()
+  id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL,
+  rank_before INT, rank_after INT, reason TEXT,
+  at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS rank_hist_user_idx ON rank_history (user_id, at DESC);
 
+CREATE TABLE IF NOT EXISTS rank_tiers (
+  id BIGSERIAL PRIMARY KEY, slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL, title TEXT NOT NULL,
+  min_rating INT NOT NULL, max_rating INT,
+  color_hex TEXT NOT NULL, emoji TEXT,
+  sort_order INT DEFAULT 100, active BOOLEAN DEFAULT true
+);
+
 CREATE TABLE IF NOT EXISTS seat_assignments (
-  id BIGSERIAL PRIMARY KEY,
-  tribe_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
-  position TEXT NOT NULL,
-  assigned_at TIMESTAMPTZ DEFAULT now(),
+  id BIGSERIAL PRIMARY KEY, tribe_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
+  position TEXT NOT NULL, assigned_at TIMESTAMPTZ DEFAULT now(),
   week_key TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS seat_tribe_week_idx ON seat_assignments (tribe_id, week_key);
 
 CREATE TABLE IF NOT EXISTS relics (
-  id BIGSERIAL PRIMARY KEY,
-  slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
-  description TEXT NOT NULL,
-  tier TEXT NOT NULL DEFAULT 'common',
-  category TEXT NOT NULL DEFAULT 'flame',
+  id BIGSERIAL PRIMARY KEY, slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL, description TEXT NOT NULL,
+  tier TEXT NOT NULL DEFAULT 'common', category TEXT NOT NULL DEFAULT 'flame',
   effect_key TEXT, effect_value NUMERIC(10,4) DEFAULT 0,
-  icon_svg TEXT,
-  sort_order INT DEFAULT 100,
-  active BOOLEAN DEFAULT true,
+  icon_svg TEXT, sort_order INT DEFAULT 100, active BOOLEAN DEFAULT true,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS relics_cat_idx ON relics (category, tier);
@@ -223,26 +258,21 @@ CREATE TABLE IF NOT EXISTS user_relics (
 );
 
 CREATE TABLE IF NOT EXISTS relic_slots (
-  user_id BIGINT NOT NULL,
-  category TEXT NOT NULL,
-  relic_id BIGINT,
+  user_id BIGINT NOT NULL, category TEXT NOT NULL, relic_id BIGINT,
   PRIMARY KEY (user_id, category)
 );
 
 CREATE TABLE IF NOT EXISTS relic_packs (
   id BIGSERIAL PRIMARY KEY, slug TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL, description TEXT,
-  price_stars INT DEFAULT 200,
-  pool TEXT NOT NULL,
-  odds_json JSONB NOT NULL,
-  anim_preset TEXT DEFAULT 'ember',
+  price_stars INT DEFAULT 200, pool TEXT NOT NULL,
+  odds_json JSONB NOT NULL, anim_preset TEXT DEFAULT 'ember',
   active BOOLEAN DEFAULT true
 );
 
 CREATE TABLE IF NOT EXISTS relic_events (
   id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL,
-  kind TEXT NOT NULL, relic_id BIGINT, relic_slug TEXT,
-  tier TEXT, detail TEXT,
+  kind TEXT NOT NULL, relic_id BIGINT, relic_slug TEXT, tier TEXT, detail TEXT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS relic_events_user_idx ON relic_events (user_id, created_at DESC);
@@ -275,14 +305,13 @@ CREATE TABLE IF NOT EXISTS trial_defs (
   id BIGSERIAL PRIMARY KEY, slug TEXT UNIQUE NOT NULL,
   name TEXT NOT NULL, glyph TEXT, hint TEXT,
   reward_sparks BIGINT DEFAULT 0, reward_kinship BIGINT DEFAULT 0,
-  cooldown_hours INT DEFAULT 8,
-  archetype_bias TEXT,
+  cooldown_hours INT DEFAULT 8, archetype_bias TEXT,
   active BOOLEAN DEFAULT true, sort_order INT DEFAULT 100
 );
 
 CREATE TABLE IF NOT EXISTS trial_log (
-  id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL,
-  slug TEXT NOT NULL, at TIMESTAMPTZ DEFAULT now()
+  id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, slug TEXT NOT NULL,
+  at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS trial_log_user_idx ON trial_log (user_id, at DESC);
 
@@ -295,9 +324,8 @@ CREATE TABLE IF NOT EXISTS daily_quests (
 );
 
 CREATE TABLE IF NOT EXISTS daily_quest_log (
-  id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL,
-  quest_id BIGINT NOT NULL, day_key TEXT NOT NULL,
-  progress INT DEFAULT 0, claimed_at TIMESTAMPTZ,
+  id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, quest_id BIGINT NOT NULL,
+  day_key TEXT NOT NULL, progress INT DEFAULT 0, claimed_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now(),
   UNIQUE (user_id, quest_id, day_key)
 );
@@ -313,15 +341,13 @@ INSERT INTO spin_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS spin_rewards (
   id BIGSERIAL PRIMARY KEY, slot_index INT NOT NULL UNIQUE,
-  kind TEXT NOT NULL, amount BIGINT DEFAULT 0,
-  weight INT DEFAULT 100, icon TEXT, label TEXT,
-  active BOOLEAN DEFAULT true
+  kind TEXT NOT NULL, amount BIGINT DEFAULT 0, weight INT DEFAULT 100,
+  icon TEXT, label TEXT, active BOOLEAN DEFAULT true
 );
 
 CREATE TABLE IF NOT EXISTS spin_log (
-  id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL,
-  day_key TEXT NOT NULL, paid BOOLEAN DEFAULT false,
-  stars_cost INT DEFAULT 0,
+  id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, day_key TEXT NOT NULL,
+  paid BOOLEAN DEFAULT false, stars_cost INT DEFAULT 0,
   reward_kind TEXT, reward_amount BIGINT,
   created_at TIMESTAMPTZ DEFAULT now()
 );
@@ -329,106 +355,90 @@ CREATE TABLE IF NOT EXISTS spin_log (
 CREATE TABLE IF NOT EXISTS referral_events (
   id BIGSERIAL PRIMARY KEY, referrer_id BIGINT NOT NULL,
   referee_id BIGINT UNIQUE NOT NULL,
-  reward_sparks BIGINT DEFAULT 0,
-  rewarded_at TIMESTAMPTZ DEFAULT now(),
+  reward_sparks BIGINT DEFAULT 0, rewarded_at TIMESTAMPTZ DEFAULT now(),
   note TEXT
+);
+CREATE INDEX IF NOT EXISTS referral_referrer_idx ON referral_events (referrer_id, rewarded_at DESC);
+CREATE INDEX IF NOT EXISTS referral_referee_idx ON referral_events (referee_id);
+
+CREATE TABLE IF NOT EXISTS referral_tiers (
+  id BIGSERIAL PRIMARY KEY, slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL, min_invites INT NOT NULL, max_invites INT,
+  sparks_per BIGINT NOT NULL, kinship_per BIGINT NOT NULL,
+  passive_pct NUMERIC(5,4) DEFAULT 0, star_back_pct NUMERIC(5,4) DEFAULT 0,
+  sort_order INT DEFAULT 100
 );
 
 CREATE TABLE IF NOT EXISTS first_pack_config (
   id INT PRIMARY KEY DEFAULT 1,
   enabled BOOLEAN DEFAULT true,
-  reward_sparks BIGINT DEFAULT 2500,
-  reward_kinship BIGINT DEFAULT 25,
+  reward_sparks BIGINT DEFAULT 2500, reward_kinship BIGINT DEFAULT 25,
   free_relic_slug TEXT DEFAULT 'firestone',
   duration_hours INT DEFAULT 24
 );
 INSERT INTO first_pack_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS first_pack_claims (
-  user_id BIGINT PRIMARY KEY,
-  claimed_at TIMESTAMPTZ DEFAULT now(),
+  user_id BIGINT PRIMARY KEY, claimed_at TIMESTAMPTZ DEFAULT now(),
   reward_paid JSONB
 );
 
 CREATE TABLE IF NOT EXISTS streak_insurance (
   user_id BIGINT PRIMARY KEY,
-  stars_spent INT DEFAULT 0,
-  covers_until DATE,
-  active BOOLEAN DEFAULT false,
+  stars_spent INT DEFAULT 0, covers_until DATE, active BOOLEAN DEFAULT false,
   purchased_at TIMESTAMPTZ DEFAULT now()
 );
 
 CREATE TABLE IF NOT EXISTS streak_insurance_config (
   id INT PRIMARY KEY DEFAULT 1,
-  enabled BOOLEAN DEFAULT true,
-  price_stars INT DEFAULT 20,
-  max_per_month INT DEFAULT 3
+  enabled BOOLEAN DEFAULT true, price_stars INT DEFAULT 20, max_per_month INT DEFAULT 3
 );
 INSERT INTO streak_insurance_config (id) VALUES (1) ON CONFLICT DO NOTHING;
 
 CREATE TABLE IF NOT EXISTS codes (
-  code TEXT PRIMARY KEY,
-  kind TEXT NOT NULL DEFAULT 'sparks',
-  amount BIGINT DEFAULT 0,
-  payload JSONB,
-  max_uses INT DEFAULT 0, uses INT DEFAULT 0,
-  per_user_limit INT DEFAULT 1,
-  note TEXT, scope TEXT DEFAULT 'global',
-  scope_tribe_id BIGINT,
+  code TEXT PRIMARY KEY, kind TEXT NOT NULL DEFAULT 'sparks',
+  amount BIGINT DEFAULT 0, payload JSONB,
+  max_uses INT DEFAULT 0, uses INT DEFAULT 0, per_user_limit INT DEFAULT 1,
+  note TEXT, scope TEXT DEFAULT 'global', scope_tribe_id BIGINT,
   starts_at TIMESTAMPTZ, expires_at TIMESTAMPTZ,
   campaign TEXT, active BOOLEAN DEFAULT true,
   created_by BIGINT, created_at TIMESTAMPTZ DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS codes_active_idx ON codes (active, expires_at) WHERE active = true;
 
 CREATE TABLE IF NOT EXISTS code_redemptions (
-  code TEXT, user_id BIGINT,
-  amount BIGINT DEFAULT 0, times INT DEFAULT 1,
-  at TIMESTAMPTZ DEFAULT now(),
-  PRIMARY KEY (code, user_id)
-);
-
-CREATE TABLE IF NOT EXISTS code_grants (
-  code TEXT, user_id BIGINT,
-  granted_at TIMESTAMPTZ DEFAULT now(),
-  granted_by BIGINT,
-  redeemed_at TIMESTAMPTZ,
-  PRIMARY KEY (code, user_id)
+  code TEXT, user_id BIGINT, amount BIGINT DEFAULT 0, times INT DEFAULT 1,
+  at TIMESTAMPTZ DEFAULT now(), PRIMARY KEY (code, user_id)
 );
 
 CREATE TABLE IF NOT EXISTS payments (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT, kind TEXT NOT NULL,
-  charge_id TEXT UNIQUE,
-  payload TEXT, amount BIGINT, currency TEXT,
-  status TEXT DEFAULT 'pending',
-  created_at TIMESTAMPTZ DEFAULT now()
+  id BIGSERIAL PRIMARY KEY, user_id BIGINT, kind TEXT NOT NULL,
+  charge_id TEXT UNIQUE, payload TEXT, amount BIGINT, currency TEXT,
+  status TEXT DEFAULT 'pending', created_at TIMESTAMPTZ DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS payments_user_idx ON payments (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS ledger (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT, kind TEXT, detail TEXT,
+  id BIGSERIAL PRIMARY KEY, user_id BIGINT, kind TEXT, detail TEXT,
   sparks BIGINT DEFAULT 0, kinship BIGINT DEFAULT 0, stars BIGINT DEFAULT 0,
   created_at TIMESTAMPTZ DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS ledger_user_idx ON ledger (user_id, created_at DESC);
 
 CREATE TABLE IF NOT EXISTS push_queue (
-  id BIGSERIAL PRIMARY KEY,
-  user_id BIGINT NOT NULL, body TEXT NOT NULL,
+  id BIGSERIAL PRIMARY KEY, user_id BIGINT NOT NULL, body TEXT NOT NULL,
   attempts INT DEFAULT 0, last_error TEXT,
-  send_at TIMESTAMPTZ DEFAULT now(),
-  sent_at TIMESTAMPTZ,
+  send_at TIMESTAMPTZ DEFAULT now(), sent_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 CREATE INDEX IF NOT EXISTS push_queue_pending_idx
   ON push_queue (send_at) WHERE sent_at IS NULL;
 
 CREATE TABLE IF NOT EXISTS admin_feed (
-  id BIGSERIAL PRIMARY KEY,
-  ts TIMESTAMPTZ DEFAULT now(),
+  id BIGSERIAL PRIMARY KEY, ts TIMESTAMPTZ DEFAULT now(),
   type TEXT NOT NULL, icon TEXT, severity TEXT DEFAULT 'info',
   text TEXT NOT NULL, detail JSONB, actor TEXT
 );
-CREATE INDEX IF NOT EXISTS admin_feed_id_desc ON admin_feed (id DESC);
 
 CREATE TABLE IF NOT EXISTS emoji_defs (
   id BIGSERIAL PRIMARY KEY,
@@ -456,380 +466,41 @@ CREATE TABLE IF NOT EXISTS user_emoji_sets (
   PRIMARY KEY (user_id, set_slug)
 );
 
-CREATE TABLE IF NOT EXISTS user_emoji_defs (
-  user_id BIGINT, emoji_id BIGINT,
-  source TEXT DEFAULT 'code',
-  granted_at TIMESTAMPTZ DEFAULT now(),
-  PRIMARY KEY (user_id, emoji_id)
+CREATE TABLE IF NOT EXISTS game_defs (
+  id BIGSERIAL PRIMARY KEY, slug TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL, description TEXT,
+  archetype TEXT NOT NULL, engine TEXT NOT NULL,
+  material TEXT NOT NULL DEFAULT 'ember',
+  active BOOLEAN DEFAULT true,
+  min_duration_ms INT DEFAULT 30000, max_duration_ms INT DEFAULT 90000,
+  terrain_pool JSONB DEFAULT '[]'::jsonb,
+  reward_json JSONB DEFAULT '{}'::jsonb,
+  config_json JSONB DEFAULT '{}'::jsonb,
+  sort_order INT DEFAULT 100,
+  created_at TIMESTAMPTZ DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS game_defs_active_idx ON game_defs (active, sort_order);
 
-CREATE TABLE IF NOT EXISTS avatars (
-  id BIGSERIAL PRIMARY KEY,
-  slug TEXT UNIQUE NOT NULL, name TEXT NOT NULL,
-  svg TEXT NOT NULL, active BOOLEAN DEFAULT true,
-  sort_order INT DEFAULT 100
+CREATE TABLE IF NOT EXISTS reward_defs (
+  id BIGSERIAL PRIMARY KEY, slug TEXT UNIQUE NOT NULL,
+  label TEXT NOT NULL, category TEXT NOT NULL,
+  sparks BIGINT DEFAULT 0, kinship BIGINT DEFAULT 0, stars BIGINT DEFAULT 0,
+  json JSONB DEFAULT '{}'::jsonb, active BOOLEAN DEFAULT true,
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
+CREATE INDEX IF NOT EXISTS reward_defs_cat_idx ON reward_defs (category, active);
+
+CREATE TABLE IF NOT EXISTS verse_templates (
+  id BIGSERIAL PRIMARY KEY, pattern TEXT NOT NULL,
+  category TEXT DEFAULT 'any', literal BOOLEAN DEFAULT false,
+  active BOOLEAN DEFAULT true, sort_order INT DEFAULT 100
+);
+CREATE INDEX IF NOT EXISTS verse_templates_cat_idx ON verse_templates (category, active);
 
 CREATE TABLE IF NOT EXISTS schema_migrations (
   filename TEXT PRIMARY KEY,
   applied_at TIMESTAMPTZ DEFAULT now()
 );
-`;
-
-// Self-healing column guard: brings pre-existing (older-schema) tables up to
-// date before indexes run. ALTER ... IF EXISTS / ADD COLUMN IF NOT EXISTS are
-// fully idempotent — no-ops on fresh databases and on already-current tables.
-const ENSURE_COLUMNS = `
-ALTER TABLE IF EXISTS config ADD COLUMN IF NOT EXISTS k TEXT;
-ALTER TABLE IF EXISTS config ADD COLUMN IF NOT EXISTS v TEXT;
-ALTER TABLE IF EXISTS audit ADD COLUMN IF NOT EXISTS admin_id TEXT;
-ALTER TABLE IF EXISTS audit ADD COLUMN IF NOT EXISTS action TEXT;
-ALTER TABLE IF EXISTS audit ADD COLUMN IF NOT EXISTS detail TEXT;
-ALTER TABLE IF EXISTS audit ADD COLUMN IF NOT EXISTS ip TEXT;
-ALTER TABLE IF EXISTS audit ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS id BIGINT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS username TEXT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS first_name TEXT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS photo_url TEXT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS role TEXT DEFAULT 'Toddler';
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS sparks BIGINT DEFAULT 500;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS kinship BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS stars BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS streak INT DEFAULT 0;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS last_checkin TIMESTAMPTZ;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS ash_ready_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS ash_count INT DEFAULT 0;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS ton_address TEXT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS tribe_id BIGINT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS name_color TEXT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS avatar_glow TEXT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS avatar_id BIGINT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS trials_state JSONB DEFAULT '{}'::jsonb;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS is_guest BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS banned BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS ban_reason TEXT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS blessed BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS wallet_verified_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS allocation BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS referral_code TEXT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS referred_by BIGINT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS rank_rating INT DEFAULT 1000;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS rank_games INT DEFAULT 0;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS rank_wins INT DEFAULT 0;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS perf_tier TEXT DEFAULT 'balanced';
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS is_bot BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS bot_persona TEXT;
-ALTER TABLE IF EXISTS users ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS name_id BIGINT;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS hue INT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS motto TEXT DEFAULT '';
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS crest TEXT DEFAULT 'totem';
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS banner TEXT DEFAULT 'sun';
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS palette TEXT DEFAULT 'ember';
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS level INT DEFAULT 1;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS treasury BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS created_by BIGINT;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS members INT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS kinship_total BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS donated_total BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS members_total BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS ash_total BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS quests_total BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS checkins_total BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS relics_total BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS shares_total BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS wins INT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS losses INT DEFAULT 0;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS icon_url TEXT;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS name_font TEXT DEFAULT 'default';
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS name_style TEXT DEFAULT 'plain';
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS banner_style TEXT DEFAULT 'plain';
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS perk_name BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS perk_icon BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS perk_banner BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS forgotten BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS war_cooldown_until TIMESTAMPTZ;
-ALTER TABLE IF EXISTS tribes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS tribe_names ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE IF EXISTS tribe_names ADD COLUMN IF NOT EXISTS is_seed BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS tribe_names ADD COLUMN IF NOT EXISTS claimed_by_tribe_id BIGINT;
-ALTER TABLE IF EXISTS notifications ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS notifications ADD COLUMN IF NOT EXISTS type TEXT;
-ALTER TABLE IF EXISTS notifications ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT 'spark';
-ALTER TABLE IF EXISTS notifications ADD COLUMN IF NOT EXISTS severity TEXT DEFAULT 'info';
-ALTER TABLE IF EXISTS notifications ADD COLUMN IF NOT EXISTS title TEXT;
-ALTER TABLE IF EXISTS notifications ADD COLUMN IF NOT EXISTS body TEXT;
-ALTER TABLE IF EXISTS notifications ADD COLUMN IF NOT EXISTS action_kind TEXT;
-ALTER TABLE IF EXISTS notifications ADD COLUMN IF NOT EXISTS action_data JSONB;
-ALTER TABLE IF EXISTS notifications ADD COLUMN IF NOT EXISTS seen_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS notifications ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS live_feed ADD COLUMN IF NOT EXISTS tribe_id BIGINT;
-ALTER TABLE IF EXISTS live_feed ADD COLUMN IF NOT EXISTS kind TEXT;
-ALTER TABLE IF EXISTS live_feed ADD COLUMN IF NOT EXISTS actor_id BIGINT;
-ALTER TABLE IF EXISTS live_feed ADD COLUMN IF NOT EXISTS target_id BIGINT;
-ALTER TABLE IF EXISTS live_feed ADD COLUMN IF NOT EXISTS data JSONB;
-ALTER TABLE IF EXISTS live_feed ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS attacker_id BIGINT;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS defender_id BIGINT;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'active';
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS mode TEXT DEFAULT 'standard';
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS goal BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS metric TEXT DEFAULT 'score';
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS stake_pct INT DEFAULT 20;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS reward_sparks BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS attacker_score BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS defender_score BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS winner_id BIGINT;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS tribute BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS start_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS end_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS is_forgotten_opponent BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS wars ADD COLUMN IF NOT EXISTS intensity_phase TEXT DEFAULT 'opening';
-ALTER TABLE IF EXISTS war_fronts ADD COLUMN IF NOT EXISTS war_id BIGINT;
-ALTER TABLE IF EXISTS war_fronts ADD COLUMN IF NOT EXISTS idx INT;
-ALTER TABLE IF EXISTS war_fronts ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE IF EXISTS war_fronts ADD COLUMN IF NOT EXISTS terrain TEXT;
-ALTER TABLE IF EXISTS war_fronts ADD COLUMN IF NOT EXISTS attacker_score BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS war_fronts ADD COLUMN IF NOT EXISTS defender_score BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS war_matches ADD COLUMN IF NOT EXISTS war_id BIGINT;
-ALTER TABLE IF EXISTS war_matches ADD COLUMN IF NOT EXISTS front_idx INT;
-ALTER TABLE IF EXISTS war_matches ADD COLUMN IF NOT EXISTS game_slug TEXT;
-ALTER TABLE IF EXISTS war_matches ADD COLUMN IF NOT EXISTS attacker_id BIGINT;
-ALTER TABLE IF EXISTS war_matches ADD COLUMN IF NOT EXISTS defender_id BIGINT;
-ALTER TABLE IF EXISTS war_matches ADD COLUMN IF NOT EXISTS winner_id BIGINT;
-ALTER TABLE IF EXISTS war_matches ADD COLUMN IF NOT EXISTS duration_ms INT DEFAULT 0;
-ALTER TABLE IF EXISTS war_matches ADD COLUMN IF NOT EXISTS recorded_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS duels ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT 'ranked';
-ALTER TABLE IF EXISTS duels ADD COLUMN IF NOT EXISTS opener_id BIGINT;
-ALTER TABLE IF EXISTS duels ADD COLUMN IF NOT EXISTS accepter_id BIGINT;
-ALTER TABLE IF EXISTS duels ADD COLUMN IF NOT EXISTS game_slug TEXT;
-ALTER TABLE IF EXISTS duels ADD COLUMN IF NOT EXISTS stake_sparks BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS duels ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'open';
-ALTER TABLE IF EXISTS duels ADD COLUMN IF NOT EXISTS winner_id BIGINT;
-ALTER TABLE IF EXISTS duels ADD COLUMN IF NOT EXISTS loser_id BIGINT;
-ALTER TABLE IF EXISTS duels ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS duels ADD COLUMN IF NOT EXISTS resolved_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS rank_history ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS rank_history ADD COLUMN IF NOT EXISTS rank_before INT;
-ALTER TABLE IF EXISTS rank_history ADD COLUMN IF NOT EXISTS rank_after INT;
-ALTER TABLE IF EXISTS rank_history ADD COLUMN IF NOT EXISTS reason TEXT;
-ALTER TABLE IF EXISTS rank_history ADD COLUMN IF NOT EXISTS at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS seat_assignments ADD COLUMN IF NOT EXISTS tribe_id BIGINT;
-ALTER TABLE IF EXISTS seat_assignments ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS seat_assignments ADD COLUMN IF NOT EXISTS position TEXT;
-ALTER TABLE IF EXISTS seat_assignments ADD COLUMN IF NOT EXISTS assigned_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS seat_assignments ADD COLUMN IF NOT EXISTS week_key TEXT;
-ALTER TABLE IF EXISTS relics ADD COLUMN IF NOT EXISTS slug TEXT;
-ALTER TABLE IF EXISTS relics ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE IF EXISTS relics ADD COLUMN IF NOT EXISTS description TEXT;
-ALTER TABLE IF EXISTS relics ADD COLUMN IF NOT EXISTS tier TEXT DEFAULT 'common';
-ALTER TABLE IF EXISTS relics ADD COLUMN IF NOT EXISTS category TEXT DEFAULT 'flame';
-ALTER TABLE IF EXISTS relics ADD COLUMN IF NOT EXISTS effect_key TEXT;
-ALTER TABLE IF EXISTS relics ADD COLUMN IF NOT EXISTS effect_value NUMERIC(10,4) DEFAULT 0;
-ALTER TABLE IF EXISTS relics ADD COLUMN IF NOT EXISTS icon_svg TEXT;
-ALTER TABLE IF EXISTS relics ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 100;
-ALTER TABLE IF EXISTS relics ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS relics ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS user_relics ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS user_relics ADD COLUMN IF NOT EXISTS relic_id BIGINT;
-ALTER TABLE IF EXISTS user_relics ADD COLUMN IF NOT EXISTS count INT DEFAULT 1;
-ALTER TABLE IF EXISTS user_relics ADD COLUMN IF NOT EXISTS first_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS relic_slots ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS relic_slots ADD COLUMN IF NOT EXISTS category TEXT;
-ALTER TABLE IF EXISTS relic_slots ADD COLUMN IF NOT EXISTS relic_id BIGINT;
-ALTER TABLE IF EXISTS relic_packs ADD COLUMN IF NOT EXISTS slug TEXT;
-ALTER TABLE IF EXISTS relic_packs ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE IF EXISTS relic_packs ADD COLUMN IF NOT EXISTS description TEXT;
-ALTER TABLE IF EXISTS relic_packs ADD COLUMN IF NOT EXISTS price_stars INT DEFAULT 200;
-ALTER TABLE IF EXISTS relic_packs ADD COLUMN IF NOT EXISTS pool TEXT;
-ALTER TABLE IF EXISTS relic_packs ADD COLUMN IF NOT EXISTS odds_json JSONB;
-ALTER TABLE IF EXISTS relic_packs ADD COLUMN IF NOT EXISTS anim_preset TEXT DEFAULT 'ember';
-ALTER TABLE IF EXISTS relic_packs ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS relic_events ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS relic_events ADD COLUMN IF NOT EXISTS kind TEXT;
-ALTER TABLE IF EXISTS relic_events ADD COLUMN IF NOT EXISTS relic_id BIGINT;
-ALTER TABLE IF EXISTS relic_events ADD COLUMN IF NOT EXISTS relic_slug TEXT;
-ALTER TABLE IF EXISTS relic_events ADD COLUMN IF NOT EXISTS tier TEXT;
-ALTER TABLE IF EXISTS relic_events ADD COLUMN IF NOT EXISTS detail TEXT;
-ALTER TABLE IF EXISTS relic_events ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS kiva_messages ADD COLUMN IF NOT EXISTS tribe_id BIGINT;
-ALTER TABLE IF EXISTS kiva_messages ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS kiva_messages ADD COLUMN IF NOT EXISTS body TEXT;
-ALTER TABLE IF EXISTS kiva_messages ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT 'chat';
-ALTER TABLE IF EXISTS kiva_messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS kiva_messages ADD COLUMN IF NOT EXISTS sealed_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS kiva_messages ADD COLUMN IF NOT EXISTS sealed_by BIGINT;
-ALTER TABLE IF EXISTS kiva_messages ADD COLUMN IF NOT EXISTS poll_data JSONB;
-ALTER TABLE IF EXISTS kiva_messages ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS kiva_reads ADD COLUMN IF NOT EXISTS tribe_id BIGINT;
-ALTER TABLE IF EXISTS kiva_reads ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS kiva_reads ADD COLUMN IF NOT EXISTS last_seen_id BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS kiva_curfews ADD COLUMN IF NOT EXISTS tribe_id BIGINT;
-ALTER TABLE IF EXISTS kiva_curfews ADD COLUMN IF NOT EXISTS started_by BIGINT;
-ALTER TABLE IF EXISTS kiva_curfews ADD COLUMN IF NOT EXISTS started_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS kiva_curfews ADD COLUMN IF NOT EXISTS ends_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS trial_defs ADD COLUMN IF NOT EXISTS slug TEXT;
-ALTER TABLE IF EXISTS trial_defs ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE IF EXISTS trial_defs ADD COLUMN IF NOT EXISTS glyph TEXT;
-ALTER TABLE IF EXISTS trial_defs ADD COLUMN IF NOT EXISTS hint TEXT;
-ALTER TABLE IF EXISTS trial_defs ADD COLUMN IF NOT EXISTS reward_sparks BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS trial_defs ADD COLUMN IF NOT EXISTS reward_kinship BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS trial_defs ADD COLUMN IF NOT EXISTS cooldown_hours INT DEFAULT 8;
-ALTER TABLE IF EXISTS trial_defs ADD COLUMN IF NOT EXISTS archetype_bias TEXT;
-ALTER TABLE IF EXISTS trial_defs ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS trial_defs ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 100;
-ALTER TABLE IF EXISTS trial_log ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS trial_log ADD COLUMN IF NOT EXISTS slug TEXT;
-ALTER TABLE IF EXISTS trial_log ADD COLUMN IF NOT EXISTS at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS daily_quests ADD COLUMN IF NOT EXISTS slug TEXT;
-ALTER TABLE IF EXISTS daily_quests ADD COLUMN IF NOT EXISTS title TEXT;
-ALTER TABLE IF EXISTS daily_quests ADD COLUMN IF NOT EXISTS description TEXT;
-ALTER TABLE IF EXISTS daily_quests ADD COLUMN IF NOT EXISTS icon TEXT DEFAULT 'trials-scroll';
-ALTER TABLE IF EXISTS daily_quests ADD COLUMN IF NOT EXISTS goal_kind TEXT;
-ALTER TABLE IF EXISTS daily_quests ADD COLUMN IF NOT EXISTS goal_amount INT DEFAULT 1;
-ALTER TABLE IF EXISTS daily_quests ADD COLUMN IF NOT EXISTS reward_sparks BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS daily_quests ADD COLUMN IF NOT EXISTS reward_kinship BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS daily_quests ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS daily_quests ADD COLUMN IF NOT EXISTS weight INT DEFAULT 100;
-ALTER TABLE IF EXISTS daily_quest_log ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS daily_quest_log ADD COLUMN IF NOT EXISTS quest_id BIGINT;
-ALTER TABLE IF EXISTS daily_quest_log ADD COLUMN IF NOT EXISTS day_key TEXT;
-ALTER TABLE IF EXISTS daily_quest_log ADD COLUMN IF NOT EXISTS progress INT DEFAULT 0;
-ALTER TABLE IF EXISTS daily_quest_log ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS daily_quest_log ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS spin_config ADD COLUMN IF NOT EXISTS id INT DEFAULT 1;
-ALTER TABLE IF EXISTS spin_config ADD COLUMN IF NOT EXISTS cooldown_hours INT DEFAULT 24;
-ALTER TABLE IF EXISTS spin_config ADD COLUMN IF NOT EXISTS free_spins_per_day INT DEFAULT 1;
-ALTER TABLE IF EXISTS spin_config ADD COLUMN IF NOT EXISTS max_paid_per_day INT DEFAULT 3;
-ALTER TABLE IF EXISTS spin_config ADD COLUMN IF NOT EXISTS stars_per_spin INT DEFAULT 25;
-ALTER TABLE IF EXISTS spin_rewards ADD COLUMN IF NOT EXISTS slot_index INT;
-ALTER TABLE IF EXISTS spin_rewards ADD COLUMN IF NOT EXISTS kind TEXT;
-ALTER TABLE IF EXISTS spin_rewards ADD COLUMN IF NOT EXISTS amount BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS spin_rewards ADD COLUMN IF NOT EXISTS weight INT DEFAULT 100;
-ALTER TABLE IF EXISTS spin_rewards ADD COLUMN IF NOT EXISTS icon TEXT;
-ALTER TABLE IF EXISTS spin_rewards ADD COLUMN IF NOT EXISTS label TEXT;
-ALTER TABLE IF EXISTS spin_rewards ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS spin_log ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS spin_log ADD COLUMN IF NOT EXISTS day_key TEXT;
-ALTER TABLE IF EXISTS spin_log ADD COLUMN IF NOT EXISTS paid BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS spin_log ADD COLUMN IF NOT EXISTS stars_cost INT DEFAULT 0;
-ALTER TABLE IF EXISTS spin_log ADD COLUMN IF NOT EXISTS reward_kind TEXT;
-ALTER TABLE IF EXISTS spin_log ADD COLUMN IF NOT EXISTS reward_amount BIGINT;
-ALTER TABLE IF EXISTS spin_log ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS referral_events ADD COLUMN IF NOT EXISTS referrer_id BIGINT;
-ALTER TABLE IF EXISTS referral_events ADD COLUMN IF NOT EXISTS referee_id BIGINT;
-ALTER TABLE IF EXISTS referral_events ADD COLUMN IF NOT EXISTS reward_sparks BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS referral_events ADD COLUMN IF NOT EXISTS rewarded_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS referral_events ADD COLUMN IF NOT EXISTS note TEXT;
-ALTER TABLE IF EXISTS first_pack_config ADD COLUMN IF NOT EXISTS id INT DEFAULT 1;
-ALTER TABLE IF EXISTS first_pack_config ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS first_pack_config ADD COLUMN IF NOT EXISTS reward_sparks BIGINT DEFAULT 2500;
-ALTER TABLE IF EXISTS first_pack_config ADD COLUMN IF NOT EXISTS reward_kinship BIGINT DEFAULT 25;
-ALTER TABLE IF EXISTS first_pack_config ADD COLUMN IF NOT EXISTS free_relic_slug TEXT DEFAULT 'firestone';
-ALTER TABLE IF EXISTS first_pack_config ADD COLUMN IF NOT EXISTS duration_hours INT DEFAULT 24;
-ALTER TABLE IF EXISTS first_pack_claims ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS first_pack_claims ADD COLUMN IF NOT EXISTS claimed_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS first_pack_claims ADD COLUMN IF NOT EXISTS reward_paid JSONB;
-ALTER TABLE IF EXISTS streak_insurance ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS streak_insurance ADD COLUMN IF NOT EXISTS stars_spent INT DEFAULT 0;
-ALTER TABLE IF EXISTS streak_insurance ADD COLUMN IF NOT EXISTS covers_until DATE;
-ALTER TABLE IF EXISTS streak_insurance ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS streak_insurance ADD COLUMN IF NOT EXISTS purchased_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS streak_insurance_config ADD COLUMN IF NOT EXISTS id INT DEFAULT 1;
-ALTER TABLE IF EXISTS streak_insurance_config ADD COLUMN IF NOT EXISTS enabled BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS streak_insurance_config ADD COLUMN IF NOT EXISTS price_stars INT DEFAULT 20;
-ALTER TABLE IF EXISTS streak_insurance_config ADD COLUMN IF NOT EXISTS max_per_month INT DEFAULT 3;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS code TEXT;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS kind TEXT DEFAULT 'sparks';
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS amount BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS payload JSONB;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS max_uses INT DEFAULT 0;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS uses INT DEFAULT 0;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS per_user_limit INT DEFAULT 1;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS note TEXT;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS scope TEXT DEFAULT 'global';
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS scope_tribe_id BIGINT;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS starts_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS expires_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS campaign TEXT;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS created_by BIGINT;
-ALTER TABLE IF EXISTS codes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS code_redemptions ADD COLUMN IF NOT EXISTS code TEXT;
-ALTER TABLE IF EXISTS code_redemptions ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS code_redemptions ADD COLUMN IF NOT EXISTS amount BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS code_redemptions ADD COLUMN IF NOT EXISTS times INT DEFAULT 1;
-ALTER TABLE IF EXISTS code_redemptions ADD COLUMN IF NOT EXISTS at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS code_grants ADD COLUMN IF NOT EXISTS code TEXT;
-ALTER TABLE IF EXISTS code_grants ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS code_grants ADD COLUMN IF NOT EXISTS granted_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS code_grants ADD COLUMN IF NOT EXISTS granted_by BIGINT;
-ALTER TABLE IF EXISTS code_grants ADD COLUMN IF NOT EXISTS redeemed_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS payments ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS payments ADD COLUMN IF NOT EXISTS kind TEXT;
-ALTER TABLE IF EXISTS payments ADD COLUMN IF NOT EXISTS charge_id TEXT;
-ALTER TABLE IF EXISTS payments ADD COLUMN IF NOT EXISTS payload TEXT;
-ALTER TABLE IF EXISTS payments ADD COLUMN IF NOT EXISTS amount BIGINT;
-ALTER TABLE IF EXISTS payments ADD COLUMN IF NOT EXISTS currency TEXT;
-ALTER TABLE IF EXISTS payments ADD COLUMN IF NOT EXISTS status TEXT DEFAULT 'pending';
-ALTER TABLE IF EXISTS payments ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS ledger ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS ledger ADD COLUMN IF NOT EXISTS kind TEXT;
-ALTER TABLE IF EXISTS ledger ADD COLUMN IF NOT EXISTS detail TEXT;
-ALTER TABLE IF EXISTS ledger ADD COLUMN IF NOT EXISTS sparks BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS ledger ADD COLUMN IF NOT EXISTS kinship BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS ledger ADD COLUMN IF NOT EXISTS stars BIGINT DEFAULT 0;
-ALTER TABLE IF EXISTS ledger ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS push_queue ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS push_queue ADD COLUMN IF NOT EXISTS body TEXT;
-ALTER TABLE IF EXISTS push_queue ADD COLUMN IF NOT EXISTS attempts INT DEFAULT 0;
-ALTER TABLE IF EXISTS push_queue ADD COLUMN IF NOT EXISTS last_error TEXT;
-ALTER TABLE IF EXISTS push_queue ADD COLUMN IF NOT EXISTS send_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS push_queue ADD COLUMN IF NOT EXISTS sent_at TIMESTAMPTZ;
-ALTER TABLE IF EXISTS push_queue ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS admin_feed ADD COLUMN IF NOT EXISTS ts TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS admin_feed ADD COLUMN IF NOT EXISTS type TEXT;
-ALTER TABLE IF EXISTS admin_feed ADD COLUMN IF NOT EXISTS icon TEXT;
-ALTER TABLE IF EXISTS admin_feed ADD COLUMN IF NOT EXISTS severity TEXT DEFAULT 'info';
-ALTER TABLE IF EXISTS admin_feed ADD COLUMN IF NOT EXISTS text TEXT;
-ALTER TABLE IF EXISTS admin_feed ADD COLUMN IF NOT EXISTS detail JSONB;
-ALTER TABLE IF EXISTS admin_feed ADD COLUMN IF NOT EXISTS actor TEXT;
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS key TEXT;
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS svg TEXT;
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS image_url TEXT;
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS set_slug TEXT;
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS price_stars INT DEFAULT 0;
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 100;
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS builtin BOOLEAN DEFAULT false;
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS created_by BIGINT;
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS emoji_defs ADD COLUMN IF NOT EXISTS updated_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS emoji_sets ADD COLUMN IF NOT EXISTS slug TEXT;
-ALTER TABLE IF EXISTS emoji_sets ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE IF EXISTS emoji_sets ADD COLUMN IF NOT EXISTS description TEXT;
-ALTER TABLE IF EXISTS emoji_sets ADD COLUMN IF NOT EXISTS price_stars INT DEFAULT 0;
-ALTER TABLE IF EXISTS emoji_sets ADD COLUMN IF NOT EXISTS emoji_keys JSONB;
-ALTER TABLE IF EXISTS emoji_sets ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 100;
-ALTER TABLE IF EXISTS emoji_sets ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS emoji_sets ADD COLUMN IF NOT EXISTS icon_hint TEXT;
-ALTER TABLE IF EXISTS user_emoji_sets ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS user_emoji_sets ADD COLUMN IF NOT EXISTS set_slug TEXT;
-ALTER TABLE IF EXISTS user_emoji_sets ADD COLUMN IF NOT EXISTS unlocked_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS user_emoji_defs ADD COLUMN IF NOT EXISTS user_id BIGINT;
-ALTER TABLE IF EXISTS user_emoji_defs ADD COLUMN IF NOT EXISTS emoji_id BIGINT;
-ALTER TABLE IF EXISTS user_emoji_defs ADD COLUMN IF NOT EXISTS source TEXT DEFAULT 'code';
-ALTER TABLE IF EXISTS user_emoji_defs ADD COLUMN IF NOT EXISTS granted_at TIMESTAMPTZ DEFAULT now();
-ALTER TABLE IF EXISTS avatars ADD COLUMN IF NOT EXISTS slug TEXT;
-ALTER TABLE IF EXISTS avatars ADD COLUMN IF NOT EXISTS name TEXT;
-ALTER TABLE IF EXISTS avatars ADD COLUMN IF NOT EXISTS svg TEXT;
-ALTER TABLE IF EXISTS avatars ADD COLUMN IF NOT EXISTS active BOOLEAN DEFAULT true;
-ALTER TABLE IF EXISTS avatars ADD COLUMN IF NOT EXISTS sort_order INT DEFAULT 100;
-ALTER TABLE IF EXISTS schema_migrations ADD COLUMN IF NOT EXISTS filename TEXT;
-ALTER TABLE IF EXISTS schema_migrations ADD COLUMN IF NOT EXISTS applied_at TIMESTAMPTZ DEFAULT now();
 `;
 
 async function runMigrations() {
@@ -865,8 +536,6 @@ async function runMigrations() {
 export async function initDb() {
   if (!pool) return false;
   try {
-    console.log('[db] healing legacy columns…');
-    await pool.query(ENSURE_COLUMNS);
     console.log('[db] applying base schema…');
     await pool.query(SCHEMA);
     console.log('[db] base schema ready');

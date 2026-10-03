@@ -1,9 +1,14 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/kiva.css
+PURPOSE: Tribe chat bubbles and composer.
+DEPENDS ON: tokens.css
+═══════════════════════════════════════════════════════════════════ */
 .kiva-scroll {
   position: relative;
   padding: 16px 12px 100px;
   display: flex; flex-direction: column; gap: 10px;
   min-height: 60vh;
-  background: linear-gradient(180deg, rgba(90,60,30,.06) 0%, rgba(60,40,20,.12) 40%, rgba(60,40,20,.16) 100%),
+  background: linear-gradient(180deg, rgba(90,60,30,.04) 0%, rgba(60,40,20,.08) 40%, rgba(60,40,20,.10) 100%),
               var(--glass-bg);
   border-radius: var(--r-lg);
 }
@@ -19,8 +24,8 @@
 .kiva-bubble.mine {
   align-self: flex-end;
   border-radius: 18px 18px 6px;
-  background: linear-gradient(180deg, rgba(255,122,24,.2), rgba(196,58,5,.12));
-  border-color: rgba(255,180,100,.32);
+  background: linear-gradient(180deg, rgba(232,133,58,.18), rgba(168,84,32,.12));
+  border-color: rgba(255,199,138,.32);
 }
 .kiva-bubble.chief {
   border-color: rgba(255,210,122,.55);

@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/feed.js
+// PURPOSE: Admin feed writer + reader. Prunes to 3000 rows.
+// DEPENDS ON: db.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 
 const MAX_ROWS = 3000;

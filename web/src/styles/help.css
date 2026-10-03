@@ -1,1 +1,6 @@
-/* Help-specific styles */
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/help.css
+PURPOSE: Help list and article layout.
+DEPENDS ON: tokens.css
+═══════════════════════════════════════════════════════════════════ */
+/* Help handled by shared .glass and .card primitives. */

@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/api.js
+// PURPOSE: Fetch wrapper. Sends initData header. Typed errors.
+// DEPENDS ON: telegram.js
+// ═══════════════════════════════════════════════════════════════════
 import { initData } from './telegram.js';
 
 const GUEST_KEY = 'tribes.guest';
@@ -61,7 +66,6 @@ export const Endpoints = {
   arenaRankedFind: (game) => apiPost('/api/arena/ranked/find', { game }),
   arenaRankedResolve: (duel_id, payload) => apiPost('/api/arena/ranked/resolve', { duel_id, ...payload }),
   arenaStakedOpen: (stake, game) => apiPost('/api/arena/staked/open', { stake, game }),
-  arenaStakedAccept: (duel_id) => apiPost('/api/arena/staked/accept', { duel_id }),
   arenaStakedResolve: (duel_id, payload) => apiPost('/api/arena/staked/resolve', { duel_id, ...payload }),
   arenaRecent: () => apiGet('/api/arena/recent'),
 
@@ -72,8 +76,6 @@ export const Endpoints = {
   kiva: (since) => apiGet('/api/kiva' + (since ? '?since=' + since : '')),
   kivaPost: (body) => apiPost('/api/kiva', { body }),
   kivaSeal: (id, sealed) => apiPost('/api/kiva/seal', { id, sealed }),
-  kivaPoll: (data) => apiPost('/api/kiva/poll', data),
-  kivaVote: (id, option) => apiPost('/api/kiva/vote', { id, option }),
   kivaCurfew: (data) => apiPost('/api/kiva/curfew', data),
   kivaRead: (lastSeenId) => apiPost('/api/kiva/read', { lastSeenId }),
 
@@ -111,5 +113,9 @@ export const Endpoints = {
   starsInvoice: (itemId) => apiPost('/api/stars/invoice', { itemId }),
   tonIntent: (itemId) => apiPost('/api/ton/intent', { itemId }),
   tonVerify: (nonce) => apiPost('/api/ton/verify', { nonce }),
-  tonLink: (address) => apiPost('/api/ton/link', { address })
+  tonLink: (address) => apiPost('/api/ton/link', { address }),
+
+  rankTiers: () => apiGet('/api/rank/tiers'),
+  rankLeaderboard: () => apiGet('/api/rank/leaderboard'),
+  forgottenList: () => apiGet('/api/forgotten/list')
 };

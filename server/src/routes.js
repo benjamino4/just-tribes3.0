@@ -1,3 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/routes.js
+// PURPOSE: The entire player API surface. Every endpoint returns
+//          { ok, data } or { ok: false, error }.
+// DEPENDS ON: all modules
+// ═══════════════════════════════════════════════════════════════════
 import express from 'express';
 import { q } from './db.js';
 import { CFG } from './config.js';
@@ -16,7 +22,8 @@ import * as Arena from './arena.js';
 import * as War from './war.js';
 import * as Gift from './giftcodes.js';
 import * as Notif from './notifications.js';
-import { packs as listPacks } from './relics.js';
+import * as Rank from './rank.js';
+import * as Forgotten from './forgotten.js';
 
 export const router = express.Router();
 router.use(authMiddleware);
@@ -26,7 +33,6 @@ const wrap = (fn) => async (req, res, next) => {
   catch (e) { res.status(400).json({ ok: false, error: e.message, need: e.need }); }
 };
 
-/* STATE */
 router.get('/state', rateLimit('state', 240), wrap(async (req) => {
   const u = req.user;
   await refreshUserRole(u);
@@ -44,6 +50,7 @@ router.get('/state', rateLimit('state', 240), wrap(async (req) => {
   const referral = await Refs.summary(fresh.id);
   const firstPack = await FirstPack.status(fresh);
   const streakInsurance = await Streaks.config();
+
   let kivaUnread = 0, curfew = null;
   if (tribe) {
     try {
@@ -51,6 +58,7 @@ router.get('/state', rateLimit('state', 240), wrap(async (req) => {
       curfew = await Kiva.activeCurfew(tribe.id);
     } catch {}
   }
+
   const notifications = (await q(
     `SELECT id, type, icon, severity, title, body, action_kind, action_data, created_at
        FROM notifications WHERE user_id=$1 AND seen_at IS NULL
@@ -58,7 +66,8 @@ router.get('/state', rateLimit('state', 240), wrap(async (req) => {
   )).rows;
 
   const war = tribe ? await War.getActiveWar(tribe.id) : null;
-  const seats = tribe ? await (await import('./rank.js')).seatsForTribe(tribe.id) : [];
+  const seats = tribe ? await Rank.seatsForTribe(tribe.id) : [];
+  const tier = await Rank.tierFor(Number(fresh.rank_rating || 1000));
 
   return {
     user: {
@@ -72,6 +81,7 @@ router.get('/state', rateLimit('state', 240), wrap(async (req) => {
       referral_code: fresh.referral_code || null,
       blessed: !!fresh.blessed,
       rank_rating: Number(fresh.rank_rating || 1000),
+      rank_tier: tier,
       perf_tier: fresh.perf_tier || 'balanced',
       created_at: fresh.created_at
     },
@@ -98,7 +108,6 @@ router.get('/state', rateLimit('state', 240), wrap(async (req) => {
   };
 }));
 
-/* TRIBES */
 router.get('/tribes', rateLimit('tribes', 60), wrap(async () => ({ tribes: await Tribes.tribesList(60) })));
 router.get('/tribe/names', rateLimit('names', 60), wrap(async () => ({ names: await Tribes.namesAvailable() })));
 router.get('/tribe/:id', rateLimit('tribes', 60), wrap(async (req) => {
@@ -108,17 +117,13 @@ router.get('/tribe/:id', rateLimit('tribes', 60), wrap(async (req) => {
 }));
 router.post('/tribe/create', rateLimit('create', 5), wrap(async (req) => ({ tribe: await Tribes.createTribe(req.user, req.body || {}) })));
 router.post('/tribe/join', rateLimit('join', 20), wrap(async (req) => ({ tribe: await Tribes.joinTribe(req.user, Number(req.body?.tribeId)) })));
-router.post('/tribe/leave', rateLimit('leave', 10), wrap(async (req) => {
-  await Tribes.leaveTribe(req.user);
-  return { ok: true };
-}));
+router.post('/tribe/leave', rateLimit('leave', 10), wrap(async (req) => { await Tribes.leaveTribe(req.user); return { ok: true }; }));
 router.post('/tribe/donate', rateLimit('donate', 30), wrap(async (req) => {
   const r = await Tribes.donate(req.user, req.body?.amount);
   await Quests.bump(req.user.id, 'donate', r.donated);
   return r;
 }));
 
-/* ECONOMY */
 router.post('/checkin', rateLimit('checkin', 10), wrap(async (req) => {
   const u = req.user;
   const last = u.last_checkin ? new Date(u.last_checkin).getTime() : 0;
@@ -152,7 +157,6 @@ router.post('/share', rateLimit('share', 10), wrap(async (req) => {
   return { ok: true };
 }));
 
-/* TRIALS */
 router.get('/trials', rateLimit('trials', 60), wrap(async () => ({ trials: await Trials.listTrials() })));
 router.post('/trials/:slug', rateLimit('trial', 30), wrap(async (req) => {
   const slug = String(req.params.slug || '').slice(0, 32);
@@ -168,7 +172,6 @@ router.post('/trials/:slug', rateLimit('trial', 30), wrap(async (req) => {
   return { ok: true, game, reward_sparks: reward.reward_sparks, reward_kinship: reward.reward_kinship };
 }));
 
-/* DAILY / SPIN */
 router.get('/daily', rateLimit('daily', 60), wrap(async (req) => ({ daily: await Quests.dailyViewFor(req.user.id) })));
 router.post('/daily/:id/claim', rateLimit('daily', 60), wrap(async (req) => await Quests.claim(req.user.id, Number(req.params.id))));
 router.post('/spin', rateLimit('spin', 20), wrap(async (req) => {
@@ -177,7 +180,7 @@ router.post('/spin', rateLimit('spin', 20), wrap(async (req) => {
   return r;
 }));
 
-/* ARENA */
+// ARENA
 router.post('/arena/ranked/find', rateLimit('arena_r', 30), wrap(async (req) => {
   return await Arena.findRankedMatch(req.user, req.body?.game || null);
 }));
@@ -187,9 +190,6 @@ router.post('/arena/ranked/resolve', rateLimit('arena_r', 60), wrap(async (req) 
 router.post('/arena/staked/open', rateLimit('arena_s', 20), wrap(async (req) => {
   return await Arena.findStakedMatch(req.user, Number(req.body?.stake), req.body?.game || null);
 }));
-router.post('/arena/staked/accept', rateLimit('arena_s', 20), wrap(async (req) => {
-  return await Arena.acceptStakedMatch(req.user, Number(req.body?.duel_id));
-}));
 router.post('/arena/staked/resolve', rateLimit('arena_s', 60), wrap(async (req) => {
   return await Arena.resolveStakedMatch(req.user, Number(req.body?.duel_id), req.body || {});
 }));
@@ -197,7 +197,7 @@ router.get('/arena/recent', rateLimit('arena_r', 60), wrap(async (req) => ({
   matches: await Arena.recentMatches(req.user.id, 20)
 })));
 
-/* WAR */
+// WAR
 router.get('/war', rateLimit('war', 240), wrap(async (req) => {
   if (!req.user.tribe_id) return { war: null };
   return { war: await War.getActiveWar(req.user.tribe_id) };
@@ -219,7 +219,7 @@ router.post('/war/match', rateLimit('war_match', 120), wrap(async (req) => {
   return r;
 }));
 
-/* KIVA */
+// KIVA
 router.get('/kiva', rateLimit('kiva', 240), wrap(async (req) => {
   const u = req.user;
   if (!u.tribe_id) throw new Error('no tribe');
@@ -244,23 +244,6 @@ router.post('/kiva/seal', rateLimit('kiva', 20), wrap(async (req) => {
   const sealed = !!req.body?.sealed;
   return await Kiva.setSeal(u.tribe_id, id, u.id, sealed);
 }));
-router.post('/kiva/poll', rateLimit('kiva', 12), wrap(async (req) => {
-  const u = req.user;
-  if (!u.tribe_id) throw new Error('no tribe');
-  if (u.role !== 'Chief') throw new Error('only the Chief may post a poll');
-  const qText = String(req.body?.q || '').slice(0, 120);
-  const opts = Array.isArray(req.body?.opts) ? req.body.opts.slice(0, 4).map((s) => String(s).slice(0, 40)) : [];
-  if (qText.length < 2 || opts.length < 2) throw new Error('need a question and 2+ options');
-  const poll = { q: qText, opts: opts.map((t) => ({ t, v: 0 })), ends_at: null, voters: {}, by: u.id };
-  const msg = await Kiva.postMessage(u.tribe_id, u.id, null, 'poll', poll);
-  return { message: msg };
-}));
-router.post('/kiva/vote', rateLimit('kiva', 40), wrap(async (req) => {
-  const u = req.user;
-  if (!u.tribe_id) throw new Error('no tribe');
-  const poll = await Kiva.votePoll(u.tribe_id, Number(req.body?.id), u.id, Number(req.body?.option));
-  return { poll };
-}));
 router.post('/kiva/curfew', rateLimit('kiva', 6), wrap(async (req) => {
   const u = req.user;
   if (!u.tribe_id) throw new Error('no tribe');
@@ -274,9 +257,9 @@ router.post('/kiva/read', rateLimit('kiva', 240), wrap(async (req) => {
   return { ok: true };
 }));
 
-/* RELICS */
+// RELICS
 router.get('/relics/state', rateLimit('relics', 60), wrap(async (req) => await Relics.stateFor(req.user.id)));
-router.get('/relics/packs', rateLimit('relics', 60), wrap(async () => ({ packs: await listPacks() })));
+router.get('/relics/packs', rateLimit('relics', 60), wrap(async () => ({ packs: await Relics.packs() })));
 router.post('/relics/pack/open', rateLimit('relic_pack', 30), wrap(async (req) => {
   const slug = String(req.body?.slug || '');
   if (!slug) throw new Error('slug required');
@@ -291,11 +274,11 @@ router.post('/relics/unequip', rateLimit('relic_equip', 40), wrap(async (req) =>
   return await Relics.unequip(req.user.id, String(req.body?.category || 'flame'));
 }));
 
-/* GIFTS */
+// GIFTS
 router.post('/gift/preview', rateLimit('gift', 60), wrap(async (req) => await Gift.preview(req.user.id, String(req.body?.code || ''))));
 router.post('/gift/redeem', rateLimit('gift', 30), wrap(async (req) => await Gift.redeem(req.user, String(req.body?.code || ''))));
 
-/* NOTIFICATIONS */
+// NOTIFICATIONS
 router.get('/notifications', rateLimit('notif', 120), wrap(async (req) => ({
   notifications: await Notif.list(req.user.id, {
     sinceId: Number(req.query.since) || 0,
@@ -312,15 +295,16 @@ router.post('/notifications/seen/:id', rateLimit('notif', 120), wrap(async (req)
   return await Notif.markOneSeen(req.user.id, Number(req.params.id));
 }));
 
-/* REFERRALS / FIRST PACK / STREAK INSURANCE */
-router.get('/referral', rateLimit('ref', 60), wrap(async (req) => ({
-  code: req.user.referral_code, ...(await Refs.summary(req.user.id))
-})));
+// REFERRALS / FIRST PACK / STREAK
+router.get('/referral', rateLimit('ref', 60), wrap(async (req) => {
+  const summary = await Refs.summary(req.user.id);
+  return { code: req.user.referral_code, ...summary };
+}));
 router.post('/referral/claim', rateLimit('ref', 5), wrap(async (req) => await Refs.claim(req.user, req.body?.code)));
 router.post('/first-pack/claim', rateLimit('first', 5), wrap(async (req) => await FirstPack.claim(req.user)));
 router.post('/streak-insurance', rateLimit('sins', 5), wrap(async (req) => await Streaks.purchase(req.user)));
 
-/* STARS / TON */
+// STARS / TON
 router.post('/stars/invoice', rateLimit('invoice', 20), wrap(async (req) => {
   if (!Number(CFG.allow_store)) throw new Error('the trading post is closed');
   const Stars = await import('./stars.js');
@@ -354,7 +338,7 @@ router.post('/ton/link', rateLimit('link', 20), wrap(async (req) => {
   return { ok: true };
 }));
 
-/* HELP */
+// HELP
 router.get('/help', rateLimit('help', 60), wrap(async () => {
   const Help = await import('./help.js');
   return Help.list();
@@ -365,3 +349,17 @@ router.get('/help/:slug', rateLimit('help', 120), wrap(async (req) => {
   if (!a) throw new Error('no such article');
   return a;
 }));
+
+// RANK
+router.get('/rank/tiers', rateLimit('rank', 120), wrap(async () => ({ tiers: await Rank.listTiers() })));
+router.get('/rank/leaderboard', rateLimit('rank', 60), wrap(async () => ({
+  top: (await q(
+    `SELECT id, first_name, username, rank_rating FROM users
+      WHERE banned = false ORDER BY rank_rating DESC LIMIT 100`
+  )).rows
+})));
+
+// FORGOTTEN
+router.get('/forgotten/list', rateLimit('forgotten', 60), wrap(async () => ({
+  ones: await Forgotten.listAll()
+})));

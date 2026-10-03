@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/stars.js
+// PURPOSE: Telegram Stars invoice creation + webhook processing.
+// DEPENDS ON: db.js, notifications.js, feed.js, relics.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 import { notify } from './notifications.js';
 import { feedWrite } from './feed.js';

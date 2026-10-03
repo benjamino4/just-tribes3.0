@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/Sheet.jsx
+// PURPOSE: Bottom sheet. Drag to dismiss. Spring physics.
+// DEPENDS ON: motion.js, haptics.js
+// ═══════════════════════════════════════════════════════════════════
 import { useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useMotionConfig } from '../lib/motion.js';
@@ -16,7 +21,7 @@ export default function Sheet({ open, onClose, title, children }) {
           onClick={onClose}
           style={{
             position: 'fixed', inset: 0, zIndex: 100,
-            background: 'rgba(6,5,8,0.65)',
+            background: 'rgba(6,5,8,0.72)',
             backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
             display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
           }}

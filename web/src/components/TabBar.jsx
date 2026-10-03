@@ -1,9 +1,13 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/TabBar.jsx
+// PURPOSE: Four tabs. Hearth, Arena, Tribe, Vault.
+// DEPENDS ON: react-router, Icon, haptics
+// ═══════════════════════════════════════════════════════════════════
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import Icon from './Icon.jsx';
 import { useMotionConfig } from '../lib/motion.js';
 import { haptic } from '../lib/haptics.js';
-import { useApp } from '../lib/store.jsx';
 
 const TABS = [
   { to: '/',       icon: 'hearth', label: 'Hearth' },

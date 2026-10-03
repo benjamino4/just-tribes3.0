@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/Benchmark.jsx
+// PURPOSE: First-run benchmark. Five tests. Tier reveal.
+// DEPENDS ON: benchmark.js, perf.js, Icon
+// ═══════════════════════════════════════════════════════════════════
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { runBenchmark } from '../lib/benchmark.js';
@@ -25,7 +30,7 @@ export default function Benchmark({ onDone }) {
           transition={{ duration: 2, repeat: Infinity }}
           style={{ marginBottom: 24 }}
         >
-          <Icon name="hearth" size={72} style={{ color: 'var(--ember-400)' }} />
+          <Icon name="hearth" size={72} style={{ color: 'var(--ember-300)' }} />
         </motion.div>
         <h1 className="display" style={{ fontSize: 24, marginBottom: 8 }}>Testing your device</h1>
         <p className="tiny" style={{ marginBottom: 24 }}>{stage}</p>
@@ -66,10 +71,6 @@ export default function Benchmark({ onDone }) {
         <button className="btn ghost" onClick={() => { setTier('balanced'); onDone(); }}>Change</button>
         <button className="btn primary" onClick={onDone}>Continue</button>
       </div>
-      <details className="tiny" style={{ opacity: 0.5 }}>
-        <summary>Details</summary>
-        <pre>{JSON.stringify(result.tests, null, 2)}</pre>
-      </details>
     </div>
   );
 }

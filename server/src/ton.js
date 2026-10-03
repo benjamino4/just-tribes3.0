@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/ton.js
+// PURPOSE: TON Connect payment verification.
+// DEPENDS ON: db.js, feed.js, notifications.js
+// ═══════════════════════════════════════════════════════════════════
 import crypto from 'crypto';
 import { q } from './db.js';
 import { feedWrite } from './feed.js';

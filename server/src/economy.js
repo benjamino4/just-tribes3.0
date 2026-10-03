@@ -1,3 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/economy.js
+// PURPOSE: Role tiers, Kinship, level tables. Every currency change
+//          in the game flows through here.
+// DEPENDS ON: db.js, config.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 import { CFG } from './config.js';
 

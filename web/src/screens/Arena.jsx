@@ -1,39 +1,29 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/screens/Arena.jsx
+// PURPOSE: The PvP hub. 12 game cards. Ranked and Staked modes.
+// DEPENDS ON: GameDispatcher, RulesOverlay, api, store
+// ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
 import { useMotionConfig, V } from '../lib/motion.js';
-import { fmt, shortTime } from '../lib/format.js';
+import { fmt } from '../lib/format.js';
 import { Endpoints } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
+import { GAME_META } from '../data/games.js';
 import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
+import GameDispatcher from '../games/GameDispatcher.jsx';
 import RulesOverlay from '../components/RulesOverlay.jsx';
-import EmberReflex from '../games/EmberReflex.jsx';
-import CascadeReflex from '../games/CascadeReflex.jsx';
-import AncestorMemory from '../games/AncestorMemory.jsx';
-import MissingRune from '../games/MissingRune.jsx';
-import RiteOfHands from '../games/RiteOfHands.jsx';
-import BidOrFold from '../games/BidOrFold.jsx';
-import ChainOfFire from '../games/ChainOfFire.jsx';
-import ThreeMasks from '../games/ThreeMasks.jsx';
 import { toast } from '../components/Toast.jsx';
 
-const GAME_COMPONENTS = {
-  reflex: EmberReflex, cascade: CascadeReflex, ancestor: AncestorMemory,
-  rune: MissingRune, hands: RiteOfHands, bid: BidOrFold, chain: ChainOfFire, masks: ThreeMasks
-};
-
 const SEEN_KEY = 'tribes.games.seen';
-
-function hasSeenGame(slug) {
-  try {
-    const s = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}');
-    return !!s[slug];
-  } catch { return false; }
+function hasSeen(slug) {
+  try { return !!JSON.parse(localStorage.getItem(SEEN_KEY) || '{}')[slug]; } catch { return false; }
 }
-function markGameSeen(slug) {
+function markSeen(slug) {
   try {
     const s = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}');
     s[slug] = 1;
@@ -46,7 +36,6 @@ export default function Arena() {
   const { data, reload } = useApp();
   const M = useMotionConfig();
   const user = data?.user || {};
-  const tribe = data?.tribe;
 
   const [tab, setTab] = useState('ranked');
   const [match, setMatch] = useState(null);
@@ -57,42 +46,23 @@ export default function Arena() {
     Endpoints.arenaRecent().then((r) => setRecent((r.data || r).matches || [])).catch(() => {});
   }, [match]);
 
-  async function findRanked() {
+  async function findRanked(slug) {
     try {
       haptic('medium');
-      const r = await Endpoints.arenaRankedFind(null);
+      const r = await Endpoints.arenaRankedFind(slug);
       const body = r.data || r;
-      if (!body.opponent) {
-        // Fall back to bot practice against self
-        setMatch({ mode: 'ranked', game: body.game || 'reflex', duel_id: null, bot: true });
-      } else {
-        if (!hasSeenGame(body.game)) setRules(body.game);
-        setMatch({ mode: 'ranked', game: body.game, duel_id: body.duel_id, opponent: body.opponent });
-      }
+      if (!hasSeen(body.game)) { setRules(body.game); markSeen(body.game); }
+      setMatch({ mode: 'ranked', game: body.game, duel_id: body.duel_id, opponent: body.opponent });
     } catch (e) { toast(e.message || 'Matchmaking failed', 'bad'); }
-  }
-
-  async function findStaked(stake) {
-    try {
-      haptic('medium');
-      const r = await Endpoints.arenaStakedOpen(stake, null);
-      const body = r.data || r;
-      if (!hasSeenGame(body.game)) setRules(body.game);
-      setMatch({ mode: 'staked', game: body.game, duel_id: body.duel_id, stake: body.stake });
-    } catch (e) { toast(e.message || 'Could not stake', 'bad'); }
   }
 
   async function onGameDone(score, payload) {
     if (!match) return;
     try {
-      if (match.mode === 'ranked' && match.duel_id) {
+      if (match.duel_id) {
         const r = await Endpoints.arenaRankedResolve(match.duel_id, payload || {});
         const body = r.data || r;
         toast(body.won ? 'Victory!' : 'Defeat', body.won ? 'good' : 'bad');
-      } else if (match.mode === 'staked' && match.duel_id) {
-        const r = await Endpoints.arenaStakedResolve(match.duel_id, payload || {});
-        const body = r.data || r;
-        toast(body.won ? `Victory! +${body.payout}` : 'Defeat', body.won ? 'good' : 'bad');
       } else {
         toast(`Score: ${score}`, 'info');
       }
@@ -102,11 +72,10 @@ export default function Arena() {
   }
 
   if (match) {
-    const Game = GAME_COMPONENTS[match.game] || EmberReflex;
     return (
       <>
         {rules && <RulesOverlay slug={rules} open onClose={() => setRules(null)} />}
-        <Game onDone={onGameDone} onExit={() => setMatch(null)} />
+        <GameDispatcher slug={match.game} onDone={onGameDone} onExit={() => setMatch(null)} mode="ranked" timeLimit={90000} />
       </>
     );
   }
@@ -118,7 +87,6 @@ export default function Arena() {
           <h2 className="display" style={{ fontSize: 22 }}>Arena</h2>
           <Hint slug="arena" text="Fight other players 1v1 in mini-games. Ranked matches give Kinship. Staked matches bet Sparks." />
         </div>
-        <span className="chip gold"><Icon name="crown" size={12} /> {user.rank_rating || 1000}</span>
       </div>
 
       <div className="row" style={{ gap: 8, marginBottom: 12 }}>
@@ -128,39 +96,37 @@ export default function Arena() {
             className="chip"
             style={{
               flex: 1, justifyContent: 'center',
-              borderColor: tab === t ? 'var(--ember-400)' : 'var(--glass-brd)',
+              borderColor: tab === t ? 'var(--ember-300)' : 'var(--glass-brd)',
               color: tab === t ? 'var(--ember-200)' : 'var(--ink-dim)',
-              background: tab === t ? 'rgba(255,122,24,.14)' : 'var(--glass-bg)'
+              background: tab === t ? 'rgba(255,199,138,.14)' : 'var(--glass-bg)'
             }}
           >{t === 'ranked' ? 'Ranked' : t === 'staked' ? 'Staked' : 'War'}</button>
         ))}
       </div>
 
-      {tab === 'ranked' && (
-        <div className="glass card">
-          <b style={{ fontSize: 15 }}>Ranked duel</b>
-          <p className="tiny" style={{ marginTop: 6 }}>
-            Free matchmaking against a player near your rank. Win to climb.
-          </p>
-          <Button variant="primary" block style={{ marginTop: 14 }} onClick={findRanked}>
-            <Icon name="swords" size={16} /> Find a fight
-          </Button>
-        </div>
-      )}
+      <p className="tiny" style={{ marginBottom: 8, marginLeft: 4 }}>
+        {tab === 'ranked' ? 'Ranked duels are free. Win to climb the ladder.' :
+         tab === 'staked' ? 'Stake Sparks. Winner takes the pot.' :
+         'Tribe vs tribe. Enter the war room.'}
+      </p>
 
-      {tab === 'staked' && (
-        <div className="glass card">
-          <b style={{ fontSize: 15 }}>Staked duel</b>
-          <p className="tiny" style={{ marginTop: 6 }}>
-            Both players stake Sparks. Winner takes 95%. You have {fmt(user.sparks || 0)} Sparks.
-          </p>
-          <div className="row" style={{ gap: 8, marginTop: 14 }}>
-            {[50, 200, 1000].map((s) => (
-              <Button key={s} variant="primary" block onClick={() => findStaked(s)}>{s}</Button>
-            ))}
-          </div>
-        </div>
-      )}
+      <div className="arena-game-grid">
+        {Object.entries(GAME_META).map(([slug, meta], i) => (
+          <motion.button
+            key={slug}
+            initial={{ opacity: 0, y: 14 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ ...M.buoyant, delay: i * 0.03 }}
+            whileTap={{ scale: 0.95 }}
+            onClick={() => tab === 'ranked' ? findRanked(slug) : findRanked(slug)}
+            className="arena-game-card"
+            style={{ '--accent': meta.accent }}
+          >
+            <span className="arena-game-dot" />
+            <b>{meta.name}</b>
+          </motion.button>
+        ))}
+      </div>
 
       {recent.length > 0 && (
         <>
@@ -168,7 +134,7 @@ export default function Arena() {
           {recent.slice(0, 5).map((m) => (
             <div key={m.id} className="glass card">
               <div className="row between">
-                <b style={{ fontSize: 13 }}>{m.game_slug}</b>
+                <b style={{ fontSize: 13 }}>{GAME_META[m.game_slug]?.name || m.game_slug}</b>
                 <span className="chip tiny">
                   {Number(m.winner_id) === Number(user.id) ? 'Won' : 'Lost'}
                 </span>

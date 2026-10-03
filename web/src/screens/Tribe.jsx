@@ -1,10 +1,14 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/screens/Tribe.jsx
+// PURPOSE: The seven-seat circle, Pyre, roster, Kiva entry.
+// DEPENDS ON: SeatCircle, api, store
+// ═══════════════════════════════════════════════════════════════════
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
-import { useMotionConfig, V } from '../lib/motion.js';
+import { V } from '../lib/motion.js';
 import { fmt } from '../lib/format.js';
 import { Endpoints } from '../lib/api.js';
-import { haptic } from '../lib/haptics.js';
 import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
@@ -14,7 +18,6 @@ import { toast } from '../components/Toast.jsx';
 export default function Tribe() {
   const nav = useNavigate();
   const { data, reload } = useApp();
-  const M = useMotionConfig();
   const tribe = data?.tribe;
   const seats = data?.seats || [];
 
@@ -24,7 +27,9 @@ export default function Tribe() {
         <div className="glass card" style={{ textAlign: 'center', padding: 28 }}>
           <Icon name="tribe" size={48} style={{ color: 'var(--gold-300)' }} />
           <h2 className="display" style={{ fontSize: 22, marginTop: 12 }}>No tribe yet</h2>
-          <p className="tiny" style={{ marginTop: 8, marginBottom: 16 }}>Join a tribe to unlock the Kiva, the Pyre, and the Warband.</p>
+          <p className="tiny" style={{ marginTop: 8, marginBottom: 16 }}>
+            Join a tribe to unlock the Kiva, the Pyre, and the Warband.
+          </p>
           <Button variant="primary" block onClick={() => nav('/')}>Back to Hearth</Button>
         </div>
       </motion.div>

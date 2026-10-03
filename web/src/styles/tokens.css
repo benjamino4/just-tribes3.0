@@ -1,50 +1,108 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/tokens.css
+PURPOSE: The Midnight Fire palette. Scientifically calming.
+DEPENDS ON: nothing
+═══════════════════════════════════════════════════════════════════ */
 :root {
-  --ember-50: #fff2e0; --ember-100: #ffe0b8; --ember-200: #ffc37f;
-  --ember-300: #ff9f45; --ember-400: #ff8324; --ember-500: #f26a10;
-  --ember-600: #cc4f05; --ember-700: #8f3402;
-  --gold-100: #fff3d0; --gold-200: #ffe2a1; --gold-300: #efc168;
-  --gold-400: #d9a646; --gold-500: #b8842c; --gold-600: #8a5e19;
-  --lapis-200: #b9d5ff; --lapis-400: #5f92d4; --lapis-500: #3d6ea8; --lapis-700: #1f3c62;
-  --ochre-200: #f3cf9a; --ochre-400: #d8964a; --ochre-600: #a4652a;
-  --blood-200: #ffb0a4; --blood-400: #d0483a; --blood-500: #a83028; --blood-700: #661a16;
-  --moss-200: #d4e8b6; --moss-400: #8ab06a; --moss-500: #5e8646; --moss-700: #365422;
-  --bone-50: #fbf5e6; --bone-100: #f0e6cf; --bone-200: #d8c9a6; --bone-300: #b0a080; --bone-400: #877a5c;
-  --ash-600: #4a4235; --ash-700: #2e2920;
-  --obsidian-0: #060508; --obsidian-1: #0b0a10; --obsidian-2: #111018;
-  --obsidian-3: #17161f; --obsidian-4: #1f1d28; --obsidian-5: #2a2735;
+  /* Midnight — base backgrounds */
+  --midnight-0: #0a0e14;
+  --midnight-1: #0f141c;
+  --midnight-2: #161c26;
+  --midnight-3: #1e242e;
+  --midnight-4: #262c38;
 
-  --ink: var(--bone-100); --ink-dim: var(--bone-200); --ink-faint: var(--bone-400);
-  --good: var(--moss-400); --bad: var(--blood-400); --info: var(--lapis-400); --warn: var(--ochre-400);
-  --bg-0: var(--obsidian-1); --bg-1: var(--obsidian-2); --bg-2: var(--obsidian-3); --bg-3: var(--obsidian-4);
-  --gold: var(--gold-400); --ash: var(--bone-300);
+  /* Slate — structure, text */
+  --slate-50:  #e8eef5;
+  --slate-100: #c9d4e0;
+  --slate-200: #8e9aaa;
+  --slate-300: #5a6675;
+  --slate-400: #3a4452;
 
-  --glass-bg: rgba(23, 22, 31, 0.62);
-  --glass-bg-strong: rgba(17, 16, 24, 0.82);
-  --glass-bg-hero: rgba(28, 24, 34, 0.66);
-  --glass-bg-sunken: rgba(6, 5, 8, 0.72);
-  --glass-bg-raise: rgba(31, 29, 40, 0.72);
-  --glass-brd: rgba(216, 201, 166, 0.14);
-  --glass-hi: rgba(255, 243, 208, 0.14);
+  /* Ember — precious, focal only */
+  --ember-50:  #ffe7c2;
+  --ember-100: #ffc78a;
+  --ember-200: #f7a259;
+  --ember-300: #e8853a;
+  --ember-400: #d46f2c;
+  --ember-500: #a85420;
+
+  /* Jade — success */
+  --jade-100: #b8e0cd;
+  --jade-200: #7fc9a7;
+  --jade-300: #55a882;
+  --jade-400: #3a7c5e;
+
+  /* Lapis — info */
+  --lapis-100: #b8ccdd;
+  --lapis-200: #7ea3c4;
+  --lapis-300: #5a7fa5;
+  --lapis-400: #3f5c78;
+
+  /* Amber — warn */
+  --amber-100: #f4d9a0;
+  --amber-200: #e0b46a;
+  --amber-300: #c49040;
+
+  /* Rose — danger, muted */
+  --rose-100: #e8b5b5;
+  --rose-200: #c98282;
+  --rose-300: #a05858;
+
+  /* Semantic */
+  --ink: var(--slate-100);
+  --ink-dim: var(--slate-200);
+  --ink-faint: var(--slate-300);
+  --good: var(--jade-200);
+  --bad: var(--rose-200);
+  --info: var(--lapis-200);
+  --warn: var(--amber-200);
+
+  --bg-0: var(--midnight-1);
+  --bg-1: var(--midnight-2);
+  --bg-2: var(--midnight-3);
+  --bg-3: var(--midnight-4);
+
+  /* Legacy aliases (map old names to new) */
+  --ember-400-old: #ff8324;
+  --gold-300: var(--ember-100);
+  --gold-400: var(--ember-200);
+  --bone-50: var(--slate-50);
+  --bone-100: var(--slate-100);
+  --bone-200: var(--slate-200);
+  --bone-300: var(--slate-300);
+  --bone-400: var(--slate-400);
+
+  /* Glass */
+  --glass-bg: rgba(22, 28, 38, 0.62);
+  --glass-bg-strong: rgba(15, 20, 28, 0.86);
+  --glass-bg-hero: rgba(28, 32, 42, 0.66);
+  --glass-bg-sunken: rgba(6, 10, 14, 0.72);
+  --glass-brd: rgba(142, 154, 170, 0.14);
+  --glass-hi: rgba(232, 238, 245, 0.14);
   --glass-blur: 22px;
 
+  /* Shadows */
   --sh-1: 0 1px 2px rgba(0,0,0,0.55);
   --sh-2: 0 6px 22px rgba(0,0,0,0.55);
   --sh-3: 0 22px 60px rgba(0,0,0,0.65);
-  --sh-ember: 0 12px 40px rgba(242, 106, 16, 0.28);
-  --sh-gold: 0 12px 40px rgba(217, 166, 70, 0.30);
+  --sh-ember: 0 12px 40px rgba(212, 111, 44, 0.28);
   --sh-inset-hi: inset 0 1px 0 var(--glass-hi);
 
+  /* Radius */
   --r-xs: 8px; --r-sm: 12px; --r-md: 18px; --r-lg: 26px;
   --r-xl: 34px; --r-2xl: 44px; --r-pill: 999px;
 
+  /* Easing */
   --ease-ember: cubic-bezier(0.34, 1.32, 0.56, 1);
   --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
   --dur-1: 0.16s; --dur-2: 0.28s; --dur-3: 0.48s;
 
+  /* Layout */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bot: env(safe-area-inset-bottom, 0px);
   --tabbar-h: 72px; --topbar-h: 58px; --maxw: 520px;
 
+  /* Fonts */
   --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
   --font-display: "Cinzel Decorative", "Trajan Pro", Georgia, serif;
   --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
@@ -52,7 +110,7 @@
 
 :root[data-perf="potato"], :root[data-perf="low"] {
   --glass-blur: 0px;
-  --glass-bg: rgba(17, 16, 24, 0.94);
-  --glass-bg-strong: rgba(11, 10, 16, 0.96);
-  --sh-ember: 0 0 0 1px rgba(255, 131, 36, 0.24);
+  --glass-bg: rgba(15, 20, 28, 0.94);
+  --glass-bg-strong: rgba(10, 14, 20, 0.96);
+  --sh-ember: 0 0 0 1px rgba(212, 111, 44, 0.24);
 }

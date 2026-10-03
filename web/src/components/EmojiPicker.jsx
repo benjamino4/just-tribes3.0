@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/EmojiPicker.jsx
+// PURPOSE: Bottom sheet with emoji sets. Unlock with Stars.
+// DEPENDS ON: emojiRegistry.jsx, api.js, Toast, Button
+// ═══════════════════════════════════════════════════════════════════
 import { useState } from 'react';
 import { motion } from 'framer-motion';
 import { useMotionConfig } from '../lib/motion.js';
@@ -19,7 +24,8 @@ export default function EmojiPicker({ open, onClose, onPick }) {
     setBusy(true);
     try {
       const r = await apiPost('/api/emoji/unlock', { slug });
-      if (r.blessed) toast('Unlocked (blessing)', 'good'); else toast('Unlocked', 'good');
+      if (r.blessed) toast('Unlocked (blessing)', 'good');
+      else toast('Unlocked', 'good');
       await reload();
     } catch (e) {
       if (e.data?.need) toast(`Not enough Stars · ${e.data.need}`, 'bad');
@@ -35,8 +41,8 @@ export default function EmojiPicker({ open, onClose, onPick }) {
       onClick={onClose}
       style={{
         position: 'fixed', inset: 0, zIndex: 110,
-        background: 'rgba(6,5,8,0.65)',
-        backdropFilter: 'blur(6px)',
+        background: 'rgba(6,5,8,0.72)',
+        backdropFilter: 'blur(8px)',
         display: 'flex', alignItems: 'flex-end', justifyContent: 'center'
       }}
     >
@@ -93,7 +99,6 @@ export default function EmojiPicker({ open, onClose, onPick }) {
                 <div style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center' }}>
                   <Button variant="primary" disabled={busy} onClick={() => unlock(s.slug)}>
                     <Icon name="lock" size={14} /> Unlock · {s.price}
-                    <Emoji name="star" size={12} style={{ marginLeft: 4 }} />
                   </Button>
                 </div>
               )}

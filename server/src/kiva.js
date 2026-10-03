@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/kiva.js
+// PURPOSE: Tribe chat. SSE. Polls. Seals. Curfew.
+// DEPENDS ON: db.js, config.js, auth.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 import { verifyInitData } from './auth.js';
 import { CFG } from './config.js';

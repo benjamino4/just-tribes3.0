@@ -1,19 +1,29 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/RulesOverlay.jsx
+// PURPOSE: First-time rules. Shows before a game. Never shows twice.
+// DEPENDS ON: RULES data, Emoji
+// ═══════════════════════════════════════════════════════════════════
 import { motion, AnimatePresence } from 'framer-motion';
 import Emoji from './Emoji.jsx';
+import { RULES as ALL_RULES } from '../data/games.js';
 
-const RULES = {
-  reflex:   { name: 'Ember Reflex',    demo: 'reaction', line: 'Tap the fire as soon as it lights.', body: 'Five rounds. Faster reactions score higher.' },
-  cascade:  { name: 'Cascade',         demo: 'reaction', line: 'Tap the lights in the order they appeared.', body: 'Wrong tap restarts the round.' },
-  ancestor: { name: 'Ancestor Memory', demo: 'memory',   line: 'Repeat the emoji sequence.', body: 'The sequence grows each round.' },
-  rune:     { name: 'Missing Rune',    demo: 'memory',   line: 'Name the missing rune.', body: 'A ring pulses, one is removed, you pick.' },
-  hands:    { name: 'Rite of Hands',   demo: 'choice',   line: 'Read their pattern, beat their throw.', body: 'Best of 5. You see the last 5 throws.' },
-  bid:      { name: 'Bid or Fold',     demo: 'choice',   line: 'Bid more than them or fold.', body: 'First to 5 coins wins.' },
-  chain:    { name: 'Chain of Fire',   demo: 'sequence', line: 'Keep the chain alive.', body: 'If you cannot move, you lose.' },
-  masks:    { name: 'Three Masks',     demo: 'deduction',line: 'Guess their mask.', body: 'Best of 3 rounds.' }
+const ICON_FOR = {
+  rune_match: 'relic-vase',
+  stone_stack: 'dom-bone',
+  fireflies: 'flame_flicker',
+  rite_hands: 'reaction-swords',
+  ember_flow: 'rune_draw',
+  stone_sort: 'dom-ash',
+  bid_fold: 'flame_flicker',
+  three_masks: 'eye_blink',
+  chain_fire: 'flame_flicker',
+  ember_cascade: 'flame_flicker',
+  rune_line: 'rune_draw',
+  rune_bloom: 'halo_glow'
 };
 
 export default function RulesOverlay({ slug, open, onClose }) {
-  const r = RULES[slug] || RULES.reflex;
+  const r = ALL_RULES[slug] || ALL_RULES.rune_match;
   if (!open) return null;
   return (
     <AnimatePresence>
@@ -33,7 +43,7 @@ export default function RulesOverlay({ slug, open, onClose }) {
           style={{ padding: 26, borderRadius: 'var(--r-2xl)', width: 320, maxWidth: '92vw', textAlign: 'center' }}
         >
           <div style={{ marginBottom: 14 }}>
-            <Emoji name="reaction-fire" size={64} />
+            <Emoji name={ICON_FOR[slug] || 'flame_flicker'} size={64} />
           </div>
           <h3 className="display" style={{ fontSize: 20, marginBottom: 6 }}>{r.name}</h3>
           <p style={{ fontSize: 14, marginBottom: 8 }}>{r.line}</p>
@@ -42,9 +52,9 @@ export default function RulesOverlay({ slug, open, onClose }) {
             onClick={onClose}
             style={{
               width: '100%', padding: 14, borderRadius: 999,
-              background: 'linear-gradient(180deg, var(--ember-400), var(--ember-600))',
+              background: 'linear-gradient(180deg, var(--ember-300), var(--ember-500))',
               color: '#1a0b02', fontWeight: 800, fontSize: 15,
-              border: '1px solid rgba(255,131,36,.55)', boxShadow: 'var(--sh-ember)'
+              border: '1px solid rgba(255,199,138,.55)', boxShadow: 'var(--sh-ember)'
             }}
           >Got it</button>
         </motion.div>

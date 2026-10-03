@@ -1,3 +1,8 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/games/masks.css
+PURPOSE: Three Masks figure.
+DEPENDS ON: games/_frame.css
+═══════════════════════════════════════════════════════════════════ */
 .masks-scene { display: flex; flex-direction: column; align-items: center; gap: 20px; padding-top: 20px; }
 .masks-figure {
   width: 140px; height: 180px;
@@ -9,24 +14,24 @@
 .masks-face {
   padding: 12px 24px;
   border-radius: 16px;
-  background: rgba(139,92,246,.15);
-  border: 2px solid rgba(139,92,246,.5);
+  background: rgba(162,108,209,.15);
+  border: 2px solid rgba(162,108,209,.5);
   color: #e0c6ff;
   font-family: var(--font-display);
   font-size: 20px;
   letter-spacing: .1em;
 }
-.masks-face[data-mask="war"] { background: rgba(208,72,58,.2); border-color: var(--blood-400); color: #ffb0a4; }
-.masks-face[data-mask="trick"] { background: rgba(139,92,246,.2); border-color: #a26cd1; color: #e0c6ff; }
-.masks-face[data-mask="guard"] { background: rgba(95,146,212,.2); border-color: var(--lapis-400); color: #b9d5ff; }
+.masks-face[data-mask="war"] { background: rgba(201,130,130,.2); border-color: var(--rose-200); color: #ffb0a4; }
+.masks-face[data-mask="trick"] { background: rgba(162,108,209,.2); border-color: #a26cd1; color: #e0c6ff; }
+.masks-face[data-mask="guard"] { background: rgba(126,163,196,.2); border-color: var(--lapis-200); color: #b9d5ff; }
 .masks-picks { display: flex; gap: 10px; }
 .masks-btn {
   padding: 12px 18px;
   border-radius: 12px;
-  background: rgba(255,243,208,.05);
+  background: rgba(232,238,245,.05);
   border: 1px solid var(--glass-brd);
   font-weight: 700;
   font-size: 13px;
-  color: var(--bone-100);
+  color: var(--slate-100);
 }
 .masks-btn:disabled { opacity: 0.5; }

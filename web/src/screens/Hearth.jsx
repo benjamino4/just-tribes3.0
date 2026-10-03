@@ -1,12 +1,17 @@
-import { useState, useEffect } from 'react';
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/screens/Hearth.jsx
+// PURPOSE: The shrine. Living fire. Feed button. Verses. Below-fold.
+// DEPENDS ON: LivingFire, Button, Sheet, celebrate, api
+// ═══════════════════════════════════════════════════════════════════
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
-import { useMotionConfig, V } from '../lib/motion.js';
+import { V, useMotionConfig } from '../lib/motion.js';
 import { fmt } from '../lib/format.js';
 import { apiPost } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
-import LivingFire from '../components/LivingFire.jsx';
+import LivingFire, { fireStateFor } from '../components/LivingFire.jsx';
 import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
 import Hint from '../components/Hint.jsx';
@@ -15,9 +20,9 @@ import { toast } from '../components/Toast.jsx';
 import { celebrate } from '../lib/celebrate.jsx';
 
 const TILES = [
-  { to: '/arena',  name: 'Arena',  icon: 'swords', tone: 'var(--ember-400)', shape: 'shield' },
+  { to: '/arena',  name: 'Arena',  icon: 'swords', tone: 'var(--ember-300)', shape: 'shield' },
   { to: '/tribe',  name: 'Tribe',  icon: 'tribe',  tone: 'var(--gold-300)',  shape: 'blob'   },
-  { to: '/vault',  name: 'Vault',  icon: 'relic',  tone: 'var(--lapis-400)', shape: 'curved' }
+  { to: '/vault',  name: 'Vault',  icon: 'relic',  tone: 'var(--lapis-200)', shape: 'curved' }
 ];
 
 const SHAPES = {
@@ -31,10 +36,10 @@ export default function Hearth() {
   const { data, reload } = useApp();
   const M = useMotionConfig();
   const user = data?.user || {};
-  const ash = data?.ash || {};
   const daily = data?.daily || [];
   const firstPack = data?.firstPack;
   const streak = Number(user.streak || 0);
+  const fire = fireStateFor(streak);
 
   const [ashSheet, setAshSheet] = useState(false);
   const [firstPackSheet, setFirstPackSheet] = useState(false);
@@ -90,21 +95,24 @@ export default function Hearth() {
 
   return (
     <motion.div className="col" style={{ gap: 4 }} variants={V.page} initial="initial" animate="animate">
-      <div className="glass hero card" style={{
+      <div className="glass hero card hearth-shrine" style={{
         paddingTop: 8, textAlign: 'center', overflow: 'hidden',
-        position: 'relative', minHeight: extended ? 520 : 380,
+        position: 'relative', minHeight: extended ? 520 : 400,
         transition: 'min-height .4s cubic-bezier(.34,1.3,.5,1)'
       }}
       onClick={() => { haptic('light'); setExtended((v) => !v); }}>
-        <div style={{ position: 'absolute', top: 12, right: 12 }}>
+        <div style={{ position: 'absolute', top: 12, right: 12, zIndex: 3 }}>
           <Hint slug="hearth" text="Your Hearth tracks your daily streak. Feed it every day to earn Sparks." />
         </div>
         <div style={{ marginTop: extended ? 20 : 4 }}>
           <LivingFire streak={streak} extended={extended} />
         </div>
-        {!extended && <h2 className="display" style={{ fontSize: 22, marginTop: 4 }}>The Hearth</h2>}
-        {extended && <p className="tiny" style={{ marginTop: 90 }}>The flame remembers <b>{streak} days</b>.</p>}
-        {!extended && <p className="tiny" style={{ margin: '4px 0 14px' }}>Feed it daily · <b>{streak} days</b></p>}
+        <h2 className="display" style={{ fontSize: 22, marginTop: 4 }}>
+          {fire.label.charAt(0).toUpperCase() + fire.label.slice(1)} Fire
+        </h2>
+        <p className="tiny" style={{ margin: '4px 0 14px' }}>
+          Day {streak} · The flame remembers
+        </p>
         <Button
           variant="primary" size="lg" block haptic="heavy"
           onClick={(e) => { e.stopPropagation(); doCheckin(); }}
@@ -185,15 +193,21 @@ export default function Hearth() {
               <div key={t.id} className="glass card">
                 <div className="row between">
                   <div className="row">
-                    <span className="crest-art" style={{ background: t.claimed ? 'linear-gradient(180deg,#2a6b45,#164028)' : 'linear-gradient(180deg,#3a2c1c,#1c1208)' }}>
-                      <Icon name={t.claimed ? 'check' : 'bolt'} size={18} style={{ color: t.claimed ? 'var(--good)' : 'var(--gold-300)' }} />
+                    <span className="crest-art" style={{
+                      background: t.claimed
+                        ? 'linear-gradient(180deg,#2a6b45,#164028)'
+                        : 'linear-gradient(180deg,#3a2c1c,#1c1208)'
+                    }}>
+                      <Icon name={t.claimed ? 'check' : 'bolt'} size={18} style={{ color: t.claimed ? 'var(--jade-200)' : 'var(--gold-300)' }} />
                     </span>
                     <div className="col" style={{ gap: 1 }}>
                       <b style={{ fontSize: 14 }}>{t.title}</b>
-                      <span className="tiny">{t.claimed ? 'Claimed' : `${t.progress}/${t.goal_amount} · +${fmt(t.reward_sparks)} Sparks`}</span>
+                      <span className="tiny">
+                        {t.claimed ? 'Claimed' : `${t.progress}/${t.goal_amount} · +${fmt(t.reward_sparks)} Sparks`}
+                      </span>
                     </div>
                   </div>
-                  {t.claimed ? <span className="chip" style={{ color: 'var(--good)' }}>Done</span> :
+                  {t.claimed ? <span className="chip" style={{ color: 'var(--jade-200)' }}>Done</span> :
                     <Button variant={done ? 'primary' : 'ghost'} onClick={() => done ? claimTask(t.id) : toast('Finish first', 'info')}>
                       {done ? 'Claim' : 'View'}
                     </Button>}
@@ -206,20 +220,20 @@ export default function Hearth() {
 
       <Sheet open={ashSheet} onClose={() => setAshSheet(false)} title="Gather the Ash">
         <p className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
-          Ash pools every {ash.interval_min || 30} minutes into Sparks you can collect.
+          Ash pools into Sparks you can collect.
         </p>
         <div className="row between" style={{ margin: '16px 0' }}>
-          <div className="col"><span className="tiny">Per pool</span><b>{fmt(ash.per_pool || 0)}</b></div>
-          <div className="col"><span className="tiny">Stored</span><b>{ash.pools_stored || 0}</b></div>
+          <div className="col"><span className="tiny">Per pool</span><b>{fmt(90)}</b></div>
+          <div className="col"><span className="tiny">Stored</span><b>{user.ash_count || 0}</b></div>
         </div>
-        <Button variant="primary" block disabled={(ash.pools_stored || 0) < 1} onClick={collectAsh}>
-          {(ash.pools_stored || 0) > 0 ? 'Collect' : 'Not ready'}
+        <Button variant="primary" block disabled={(user.ash_count || 0) < 1} onClick={collectAsh}>
+          {(user.ash_count || 0) > 0 ? 'Collect' : 'Not ready'}
         </Button>
       </Sheet>
 
       <Sheet open={firstPackSheet} onClose={() => setFirstPackSheet(false)} title="First Pack">
         <p className="muted" style={{ fontSize: 14, lineHeight: 1.5 }}>
-          A welcome gift. Claim it once within your first {firstPack?.duration_hours || 24} hours.
+          A welcome gift. Claim it once within your first 24 hours.
         </p>
         <Button variant="primary" block onClick={claimFirstPack} style={{ marginTop: 16 }}>Claim</Button>
       </Sheet>

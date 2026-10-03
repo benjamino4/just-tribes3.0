@@ -1,7 +1,12 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/startup.css
+PURPOSE: Startup scene. Ember expand → TRIBES → verse.
+DEPENDS ON: tokens.css
+═══════════════════════════════════════════════════════════════════ */
 .startup-scene {
   position: fixed; inset: 0; z-index: 1000;
   display: grid; place-items: center;
-  background: radial-gradient(circle at 50% 60%, #1a0d06 0%, #060508 70%);
+  background: radial-gradient(circle at 50% 60%, #141c2a 0%, #0a0e14 70%);
   overflow: hidden;
 }
 .startup-void {
@@ -12,32 +17,26 @@
 .startup-ember {
   position: absolute;
   width: 20px; height: 20px; border-radius: 50%;
-  background: radial-gradient(circle, #ffe2a1, #ff8324 60%, #8f3402);
+  background: radial-gradient(circle, #ffe7c2, #e8853a 60%, #a85420);
   box-shadow:
-    0 0 20px #ff8324,
-    0 0 60px #ff9f45,
-    0 0 120px rgba(242,106,16,0.5);
+    0 0 20px #e8853a,
+    0 0 60px #f7a259,
+    0 0 120px rgba(232,133,58,0.5);
 }
 .startup-title {
   position: relative; z-index: 2;
   font-size: 52px;
-  color: var(--bone-50);
+  color: var(--slate-50);
   text-shadow:
-    0 0 30px rgba(255,131,36,0.8),
-    0 0 80px rgba(242,106,16,0.5);
+    0 0 30px rgba(232,133,58,0.8),
+    0 0 80px rgba(232,133,58,0.5);
   font-weight: 900;
 }
 .startup-verse {
   position: absolute; bottom: 32%;
   font-size: 15px;
-  color: var(--bone-200);
+  color: var(--slate-200);
   font-style: italic;
   letter-spacing: 0.04em;
   z-index: 2;
-}
-:root[data-perf="potato"] .startup-ember { animation: none; }
-
-@keyframes cfShrink {
-  0% { transform: scale(1); opacity: 1; }
-  100% { transform: scale(0.5); opacity: 0.4; }
 }

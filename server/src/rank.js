@@ -1,6 +1,28 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/rank.js
+// PURPOSE: The rank ladder. Nine tiers (Bone → Eternal Flame).
+//          Weekly seat assignment. Decay for inactive players.
+// DEPENDS ON: db.js, config.js, events.js, economy.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 import { CFG } from './config.js';
 import { emit } from './events.js';
+
+export async function tierFor(rating) {
+  const r = (await q(
+    `SELECT slug, name, title, min_rating, max_rating, color_hex, emoji
+       FROM rank_tiers WHERE active=true AND min_rating <= $1
+        AND (max_rating IS NULL OR max_rating >= $1)
+      ORDER BY min_rating DESC LIMIT 1`, [rating]
+  )).rows[0];
+  return r || { slug: 'bone', name: 'Bone', title: 'Bone Carver', color_hex: '#b0a080', emoji: '🦴' };
+}
+
+export async function listTiers() {
+  return (await q(
+    'SELECT slug, name, title, min_rating, max_rating, color_hex, emoji FROM rank_tiers WHERE active=true ORDER BY sort_order'
+  )).rows;
+}
 
 function weekKey(d = new Date()) {
   const utc = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
@@ -13,16 +35,35 @@ function weekKey(d = new Date()) {
 export async function adjustRank(userId, delta, reason) {
   const before = (await q('SELECT rank_rating FROM users WHERE id=$1', [userId])).rows[0];
   if (!before) return null;
-  const after = Math.max(0, Number(before.rank_rating || 1000) + delta);
+  const beforeRating = Number(before.rank_rating || 1000);
+  const after = Math.max(0, beforeRating + delta);
   await q(
     'UPDATE users SET rank_rating=$1, rank_games=rank_games+1, rank_wins=rank_wins+$2 WHERE id=$3',
     [after, delta > 0 ? 1 : 0, userId]
   );
   await q(
     'INSERT INTO rank_history (user_id, rank_before, rank_after, reason) VALUES ($1,$2,$3,$4)',
-    [userId, before.rank_rating, after, reason]
+    [userId, beforeRating, after, reason]
   );
-  return { before: Number(before.rank_rating), after };
+
+  const tierBefore = await tierFor(beforeRating);
+  const tierAfter = await tierFor(after);
+
+  if (tierBefore.slug !== tierAfter.slug) {
+    const up = (tierAfter.min_rating || 0) > (tierBefore.min_rating || 0);
+    await emit({
+      userId, tier: 'island', kind: 'rank_change',
+      title: up ? `Risen to ${tierAfter.title}` : `Descended to ${tierAfter.title}`,
+      body: `Rank ${after}`,
+      icon: up ? 'crown' : 'bolt',
+      severity: up ? 'success' : 'warn',
+      sticky: up,
+      action_kind: 'profile',
+      action_data: { tier_from: tierBefore.slug, tier_to: tierAfter.slug, rating: after, up }
+    });
+  }
+
+  return { before: beforeRating, after, tier_before: tierBefore, tier_after: tierAfter };
 }
 
 export async function applyRankAfterMatch(winnerId, loserId, kind = 'duel') {
@@ -101,14 +142,15 @@ export async function decayInactiveRanks() {
   } catch (e) { console.warn('[rank] decay', e.message); }
 }
 
-export function seatsForTribe(tribeId) {
-  return q(
+export async function seatsForTribe(tribeId) {
+  const rows = (await q(
     `SELECT s.position, s.user_id, u.first_name, u.username, u.rank_rating
        FROM seat_assignments s
        JOIN users u ON u.id = s.user_id
       WHERE s.tribe_id=$1 AND s.week_key=$2`,
     [tribeId, weekKey()]
-  ).then((r) => r.rows);
+  )).rows;
+  return rows;
 }
 
 export { weekKey };

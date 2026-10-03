@@ -1,3 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/push.js
+// PURPOSE: Telegram push notification queue. Retries with backoff.
+//          Respects Telegram's 30/sec cap by spacing batches.
+// DEPENDS ON: db.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 
 const BOT_TOKEN = process.env.BOT_TOKEN || '';
@@ -39,7 +45,7 @@ export async function flushQueue(limit = 40) {
       });
       await q('UPDATE push_queue SET sent_at=now() WHERE id=$1', [row.id]);
       sent++;
-      if (sent % 20 === 0) await new Promise((r) => setTimeout(r, 1100));
+      if (sent % 20 === 0) await new Promise((res) => setTimeout(res, 1100));
     } catch (e) {
       const attempts = (row.attempts || 0) + 1;
       const giveUp = attempts >= MAX_ATTEMPTS;

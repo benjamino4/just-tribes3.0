@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/App.jsx
+// PURPOSE: Routes. Startup flow. War pull. Four tabs. World.
+// DEPENDS ON: everything
+// ═══════════════════════════════════════════════════════════════════
 import { useEffect, useState } from 'react';
 import { Routes, Route, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
@@ -9,7 +14,7 @@ import IslandHost from './components/IslandHost.jsx';
 import TickerHost from './components/TickerHost.jsx';
 import GiftBox from './components/GiftBox.jsx';
 import Startup from './screens/Startup.jsx';
-import Benchmark from './screens/Benchmark.jsx';
+import Benchmark from './components/Benchmark.jsx';
 import Hearth from './screens/Hearth.jsx';
 import Arena from './screens/Arena.jsx';
 import ArenaWar from './screens/ArenaWar.jsx';
@@ -21,16 +26,20 @@ import VaultForge from './screens/VaultForge.jsx';
 import Profile from './screens/Profile.jsx';
 import Help from './screens/Help.jsx';
 import HelpArticle from './screens/HelpArticle.jsx';
+import Referral from './screens/Referral.jsx';
 import WarPullSequence from './components/WarPullSequence.jsx';
+import RankUpSequence from './components/RankUpSequence.jsx';
 import { V, useMotionConfig } from './lib/motion.js';
 import { useApp } from './lib/store.jsx';
-import { getPerf } from './lib/perf.js';
+import { useEvents } from './lib/EventProvider.jsx';
 
 function Shell() {
   const location = useLocation();
   const M = useMotionConfig();
   const { data } = useApp();
+  const { subscribe } = useEvents();
   const [pulled, setPulled] = useState(false);
+  const [rankUp, setRankUp] = useState(null);
 
   useEffect(() => {
     if (!data?.war?.war || pulled) return;
@@ -39,6 +48,12 @@ function Shell() {
     sessionStorage.setItem(key, '1');
     setPulled(true);
   }, [data?.war?.war?.id, pulled]);
+
+  useEffect(() => subscribe((evt) => {
+    if (evt.kind === 'rank_change' && evt.action_data?.up) {
+      setRankUp(evt.action_data);
+    }
+  }), [subscribe]);
 
   return (
     <div className="app-frame">
@@ -64,6 +79,7 @@ function Shell() {
               <Route path="/vault" element={<Vault />} />
               <Route path="/vault/store" element={<VaultStore />} />
               <Route path="/vault/forge" element={<VaultForge />} />
+              <Route path="/referral" element={<Referral />} />
               <Route path="/profile" element={<Profile />} />
               <Route path="/help" element={<Help />} />
               <Route path="/help/:slug" element={<HelpArticle />} />
@@ -76,6 +92,26 @@ function Shell() {
       <ToastHost />
       <GiftBox />
       {pulled && data?.war?.war && <WarPullSequence war={data.war} onDone={() => setPulled(false)} />}
+      {rankUp && (
+        <RankUpSequence
+          tierFrom={{ color_hex: '#8899aa', emoji: '🪨', name: 'Flint' }}
+          tierTo={{
+            color_hex: rankUp.tier_to === 'gold' ? '#efc168' :
+                       rankUp.tier_to === 'silver' ? '#c9d4e0' :
+                       rankUp.tier_to === 'jade' ? '#55a882' :
+                       rankUp.tier_to === 'obsidian' ? '#2a2735' :
+                       rankUp.tier_to === 'eternal' ? '#fff3d0' : '#c08a4a',
+            emoji: rankUp.tier_to === 'gold' ? '🟡' :
+                   rankUp.tier_to === 'silver' ? '⚪' :
+                   rankUp.tier_to === 'jade' ? '💚' :
+                   rankUp.tier_to === 'obsidian' ? '⚫' :
+                   rankUp.tier_to === 'eternal' ? '🔥' : '🟠',
+            name: rankUp.tier_to.charAt(0).toUpperCase() + rankUp.tier_to.slice(1),
+            title: rankUp.tier_to.charAt(0).toUpperCase() + rankUp.tier_to.slice(1) + ' Warlord'
+          }}
+          onDone={() => setRankUp(null)}
+        />
+      )}
     </div>
   );
 }

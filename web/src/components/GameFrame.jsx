@@ -1,8 +1,13 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/GameFrame.jsx
+// PURPOSE: Shared game container. Header + body + material accent.
+// DEPENDS ON: Icon, haptics
+// ═══════════════════════════════════════════════════════════════════
 import { useNavigate } from 'react-router-dom';
 import Icon from './Icon.jsx';
 import { haptic } from '../lib/haptics.js';
 
-export default function GameFrame({ title, onExit, children, accent = 'var(--ember-400)', material = 'ember' }) {
+export default function GameFrame({ title, onExit, children, accent = '#ff8324', material = 'ember' }) {
   const nav = useNavigate();
 
   return (

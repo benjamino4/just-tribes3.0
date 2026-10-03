@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/games/ChainOfFire.jsx
+// PURPOSE: Add torches to a growing chain. Cannot move = lose.
+// DEPENDS ON: GameFrame, Emoji, haptics
+// ═══════════════════════════════════════════════════════════════════
 import { useState } from 'react';
 import GameFrame from '../components/GameFrame.jsx';
 import Emoji from '../components/Emoji.jsx';
@@ -29,7 +34,7 @@ export default function ChainOfFire({ onDone, onExit }) {
   }
 
   return (
-    <GameFrame title="Chain of Fire" onExit={onExit} material="ember">
+    <GameFrame title="Chain of Fire" onExit={onExit} material="ember" accent="#ff8324">
       <div className="chain-scene">
         <div className="chain-line">
           {chain.map((s, i) => (

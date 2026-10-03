@@ -1,5 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/trials.js
+// PURPOSE: Trial definitions and completion.
+// DEPENDS ON: db.js, config.js, games/index.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
-import { CFG } from './config.js';
 import { pickGameForArchetypeWeights } from './games/index.js';
 
 export async function listTrials() {
@@ -22,9 +26,7 @@ export function trialAvailable(trial, stateRow, nowMs = Date.now()) {
 export function pickGameForTrial(trial) {
   const arch = trial.archetype_bias;
   if (arch) return pickGameForArchetypeWeights({ [arch]: 100 });
-  return pickGameForArchetypeWeights({
-    reaction: 30, memory: 25, choice: 20, sequence: 15, deduction: 10
-  });
+  return pickGameForArchetypeWeights({ reaction: 30, memory: 25, choice: 20, sequence: 15, deduction: 10 });
 }
 
 export async function completeTrial(user, trial, nowMs = Date.now()) {
@@ -33,8 +35,7 @@ export async function completeTrial(user, trial, nowMs = Date.now()) {
   state[trial.slug] = { last_at: new Date(nowMs).toISOString(), count: (cur.count || 0) + 1 };
 
   await q(
-    `UPDATE users SET sparks = sparks + $1, kinship = kinship + $2, trials_state = $3::jsonb
-      WHERE id = $4`,
+    `UPDATE users SET sparks = sparks + $1, kinship = kinship + $2, trials_state = $3::jsonb WHERE id = $4`,
     [trial.reward_sparks, trial.reward_kinship, JSON.stringify(state), user.id]
   );
   if (user.tribe_id && trial.reward_kinship) {

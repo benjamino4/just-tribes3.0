@@ -1,3 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/middleware.js
+// PURPOSE: Auth middleware. Per-key rate limiting. Ban check.
+//          Maintenance mode gate.
+// DEPENDS ON: auth.js, config.js
+// ═══════════════════════════════════════════════════════════════════
 import { resolveUser } from './auth.js';
 import { CFG } from './config.js';
 

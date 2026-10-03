@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/Celebration.jsx
+// PURPOSE: Full-screen celebration. Nine layers. Reduced-tier fallback.
+// DEPENDS ON: motion.js, haptics.js, Emoji
+// ═══════════════════════════════════════════════════════════════════
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { useMotionConfig } from '../lib/motion.js';
@@ -58,8 +63,8 @@ export default function Celebration({
       onClick={dismiss}
       style={{
         position: 'fixed', inset: 0, zIndex: 400,
-        background: 'radial-gradient(circle at 50% 45%, rgba(6,5,8,.68), rgba(6,5,8,.94))',
-        backdropFilter: 'blur(10px)',
+        background: 'radial-gradient(circle at 50% 45%, rgba(6,5,8,.72), rgba(6,5,8,.94))',
+        backdropFilter: 'blur(12px)',
         display: 'grid', placeItems: 'center', padding: 24,
         cursor: dismissible ? 'pointer' : 'default'
       }}

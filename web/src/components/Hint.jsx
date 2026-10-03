@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/Hint.jsx
+// PURPOSE: Inline help bubble. Opens a popover with text and a link.
+// DEPENDS ON: motion.js
+// ═══════════════════════════════════════════════════════════════════
 import { useState, useRef, useEffect, useCallback, createContext, useContext } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -14,7 +19,7 @@ export function HintProvider({ children }) {
 
 let hintIdSeq = 0;
 
-export default function Hint({ text, slug, tone = '#efc168' }) {
+export default function Hint({ text, slug, tone = 'var(--gold-300)' }) {
   const ctx = useContext(HintCtx);
   const idRef = useRef(null);
   if (idRef.current === null) idRef.current = ++hintIdSeq;

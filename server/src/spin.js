@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/spin.js
+// PURPOSE: Wheel of Ash. Free + paid spins.
+// DEPENDS ON: db.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 
 export async function spinState(user) {

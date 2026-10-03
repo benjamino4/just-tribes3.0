@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/SeatCircle.jsx
+// PURPOSE: Seven seats visualized as a circle. Chief + 6 by rank.
+// DEPENDS ON: Icon
+// ═══════════════════════════════════════════════════════════════════
 import { motion } from 'framer-motion';
 import Icon from './Icon.jsx';
 
@@ -47,8 +52,7 @@ export default function SeatCircle({ seats = [] }) {
                 : 'rgba(255,243,208,.04)',
               border: seat ? '2px solid var(--gold-300)' : '1px dashed rgba(255,243,208,.15)',
               boxShadow: seat ? '0 0 20px rgba(239,193,104,.4)' : 'none',
-              textAlign: 'center',
-              padding: 4
+              textAlign: 'center', padding: 4
             }}
           >
             <Icon name={p.icon} size={16} style={{ color: seat ? '#2a1200' : 'var(--ink-dim)' }} />

@@ -1,5 +1,10 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/perf.js
+// PURPOSE: Performance tier detection and CSS variable injection.
+//          5 tiers: ultra120, ultra, high, balanced, low, potato.
+// DEPENDS ON: nothing
+// ═══════════════════════════════════════════════════════════════════
 const PERF_KEY = 'tribes.perf';
-
 let cached = null;
 
 export function initPerf() {

@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/refresh.js
+// PURPOSE: Measure the display's native refresh rate.
+// DEPENDS ON: nothing
+// ═══════════════════════════════════════════════════════════════════
 export function measureRefreshRate(durationMs = 500) {
   return new Promise((resolve) => {
     let frames = 0;

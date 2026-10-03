@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/tribes.js
+// PURPOSE: Tribe create/join/leave/donate. Uses 60-name pool.
+// DEPENDS ON: db.js, config.js, economy.js
+// ═══════════════════════════════════════════════════════════════════
 import { q } from './db.js';
 import { CFG } from './config.js';
 import { addKinship, levelTable } from './economy.js';

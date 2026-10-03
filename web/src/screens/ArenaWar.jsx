@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/screens/ArenaWar.jsx
+// PURPOSE: The War Room. Three fronts, live scoreboard, match flow.
+// DEPENDS ON: GameDispatcher, RulesOverlay, api, store
+// ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
@@ -6,25 +11,26 @@ import { useMotionConfig, V } from '../lib/motion.js';
 import { fmt, shortTime } from '../lib/format.js';
 import { Endpoints } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
+import { GAME_META, RULES } from '../data/games.js';
 import Icon from '../components/Icon.jsx';
 import Button from '../components/Button.jsx';
-import Hint from '../components/Hint.jsx';
 import Emoji from '../components/Emoji.jsx';
+import ForgottenRune from '../components/ForgottenRune.jsx';
+import GameDispatcher from '../games/GameDispatcher.jsx';
 import RulesOverlay from '../components/RulesOverlay.jsx';
-import EmberReflex from '../games/EmberReflex.jsx';
-import CascadeReflex from '../games/CascadeReflex.jsx';
-import AncestorMemory from '../games/AncestorMemory.jsx';
-import MissingRune from '../games/MissingRune.jsx';
-import RiteOfHands from '../games/RiteOfHands.jsx';
-import BidOrFold from '../games/BidOrFold.jsx';
-import ChainOfFire from '../games/ChainOfFire.jsx';
-import ThreeMasks from '../games/ThreeMasks.jsx';
 import { toast } from '../components/Toast.jsx';
 
-const GAME_COMPONENTS = {
-  reflex: EmberReflex, cascade: CascadeReflex, ancestor: AncestorMemory,
-  rune: MissingRune, hands: RiteOfHands, bid: BidOrFold, chain: ChainOfFire, masks: ThreeMasks
-};
+function pickGameForTerrain(terrain) {
+  const pool = {
+    plains:    ['rune_match', 'stone_stack', 'ember_cascade'],
+    forest:    ['fireflies', 'rune_bloom', 'rune_line'],
+    ruins:     ['ember_flow', 'rune_line', 'rune_match'],
+    ashlands:  ['ember_cascade', 'chain_fire', 'ember_flow'],
+    hills:     ['stone_sort', 'rune_bloom', 'stone_stack'],
+    swamp:     ['three_masks', 'bid_fold', 'rite_hands']
+  }[terrain] || ['rune_match', 'stone_stack', 'fireflies'];
+  return pool[Math.floor(Math.random() * pool.length)];
+}
 
 export default function ArenaWar() {
   const nav = useNavigate();
@@ -52,7 +58,7 @@ export default function ArenaWar() {
   async function declare() {
     try {
       haptic('heavy');
-      const r = await Endpoints.warDeclare();
+      await Endpoints.warDeclare();
       toast('War declared!', 'good');
       load();
       reload();
@@ -83,11 +89,10 @@ export default function ArenaWar() {
   }
 
   if (playing) {
-    const Game = GAME_COMPONENTS[playing.game] || EmberReflex;
     return (
       <>
         {rules && <RulesOverlay slug={rules} open onClose={() => setRules(null)} />}
-        <Game onDone={onGameDone} onExit={() => setPlaying(null)} />
+        <GameDispatcher slug={playing.game} onDone={onGameDone} onExit={() => setPlaying(null)} mode="war" timeLimit={90000} />
       </>
     );
   }
@@ -108,7 +113,7 @@ export default function ArenaWar() {
           <h3 className="display" style={{ fontSize: 20, marginTop: 12 }}>Peace</h3>
           <p className="tiny" style={{ marginTop: 8, marginBottom: 16 }}>
             {['Chief', 'Head', 'Elder'].includes(data?.user?.role)
-              ? 'Declare war to summon 30 minutes of live battle.'
+              ? 'Declare war to summon 5 minutes of live battle.'
               : 'Only Elders+ can declare war.'}
           </p>
           {['Chief', 'Head', 'Elder'].includes(data?.user?.role) && (
@@ -126,6 +131,9 @@ export default function ArenaWar() {
   const myScore = mine === 'attacker' ? Number(w.attacker_score) : Number(w.defender_score);
   const foeScore = mine === 'attacker' ? Number(w.defender_score) : Number(w.attacker_score);
   const endsIn = Math.max(0, new Date(w.end_at).getTime() - Date.now());
+  const substitutions = war.substitutions || [];
+  const subMap = {};
+  for (const s of substitutions) subMap[s.user_id] = s;
 
   return (
     <motion.div variants={V.page} initial="initial" animate="animate" className="col" style={{ gap: 10 }}>
@@ -136,7 +144,7 @@ export default function ArenaWar() {
           </button>
           <h2 className="display" style={{ fontSize: 22 }}>War</h2>
         </div>
-        <span className="chip" style={{ color: 'var(--ember-300)' }}>{shortTime(endsIn)} left</span>
+        <span className="chip" style={{ color: 'var(--ember-200)' }}>{shortTime(endsIn)} left</span>
       </div>
 
       <div className="glass card" style={{ padding: '14px 16px' }}>
@@ -148,17 +156,17 @@ export default function ArenaWar() {
         <div style={{ display: 'flex', height: 20, borderRadius: 999, overflow: 'hidden' }}>
           <motion.div
             animate={{ width: (myScore / Math.max(1, myScore + foeScore)) * 100 + '%' }}
-            style={{ background: 'linear-gradient(90deg,#8f3402,#ff8324)' }}
+            style={{ background: 'linear-gradient(90deg,#7a2a0f,#e8853a)' }}
           />
           <motion.div
             animate={{ width: (foeScore / Math.max(1, myScore + foeScore)) * 100 + '%' }}
-            style={{ background: 'linear-gradient(90deg,#4c1d95,#8b5cf6)' }}
+            style={{ background: 'linear-gradient(90deg,#3f5c78,#7ea3c4)' }}
           />
         </div>
         <div className="row between" style={{ marginTop: 8 }}>
-          <b className="tabular" style={{ color: 'var(--ember-300)' }}>{fmt(myScore)}</b>
+          <b className="tabular" style={{ color: 'var(--ember-200)' }}>{fmt(myScore)}</b>
           <span className="tiny">{myScore >= foeScore ? 'Winning' : 'Behind'}</span>
-          <b className="tabular" style={{ color: '#c9b0ff' }}>{fmt(foeScore)}</b>
+          <b className="tabular" style={{ color: 'var(--lapis-200)' }}>{fmt(foeScore)}</b>
         </div>
       </div>
 
@@ -171,28 +179,42 @@ export default function ArenaWar() {
             className={`war-front terrain-${f.terrain}`}
             onClick={() => {
               haptic('medium');
-              const game = ['reflex','cascade','ancestor','rune','hands','bid','chain','masks'][Math.floor(Math.random() * 8)];
-              if (!localStorage.getItem('tribes.games.seen')) setRules(game);
+              const game = pickGameForTerrain(f.terrain);
+              try {
+                const seen = JSON.parse(localStorage.getItem('tribes.games.seen') || '{}');
+                if (!seen[game]) {
+                  seen[game] = 1;
+                  localStorage.setItem('tribes.games.seen', JSON.stringify(seen));
+                  setRules(game);
+                }
+              } catch {}
               setPlaying({ front: f.idx, game });
-            }}
-            style={{
-              padding: 16, borderRadius: 'var(--r-lg)',
-              textAlign: 'left', border: '1px solid var(--glass-brd)',
-              background: 'linear-gradient(180deg, rgba(60,10,4,.32), rgba(30,6,2,.55))'
             }}
           >
             <div className="row between" style={{ marginBottom: 6 }}>
               <b style={{ fontSize: 15 }}>{f.name}</b>
-              <span className="tiny">{f.terrain}</span>
+              <span className="tiny" style={{ textTransform: 'uppercase', letterSpacing: '.08em' }}>{f.terrain}</span>
             </div>
             <div className="row between">
-              <b className="tabular" style={{ color: 'var(--ember-300)' }}>{fmt(myF)}</b>
+              <b className="tabular" style={{ color: 'var(--ember-200)' }}>{fmt(myF)}</b>
               <span className="tiny">Tap to fight</span>
-              <b className="tabular" style={{ color: '#c9b0ff' }}>{fmt(foeF)}</b>
+              <b className="tabular" style={{ color: 'var(--lapis-200)' }}>{fmt(foeF)}</b>
             </div>
           </button>
         );
       })}
+
+      {substitutions.length > 0 && (
+        <div className="glass card">
+          <b style={{ fontSize: 12, textTransform: 'uppercase', color: 'var(--ink-dim)' }}>Substitutions</b>
+          {substitutions.slice(0, 4).map((s, i) => (
+            <div key={i} className="row between" style={{ marginTop: 8 }}>
+              <span className="tiny">Player {s.user_id} → Forgotten One</span>
+              <ForgottenRune />
+            </div>
+          ))}
+        </div>
+      )}
     </motion.div>
   );
 }

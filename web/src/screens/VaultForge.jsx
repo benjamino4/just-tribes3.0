@@ -1,8 +1,13 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/screens/VaultForge.jsx
+// PURPOSE: Open caches. Ceremony, not transaction.
+// DEPENDS ON: api, celebrate, Emoji
+// ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
-import { useMotionConfig, V } from '../lib/motion.js';
+import { V } from '../lib/motion.js';
 import { Endpoints } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
 import Icon from '../components/Icon.jsx';
@@ -14,7 +19,6 @@ import { toast } from '../components/Toast.jsx';
 export default function VaultForge() {
   const nav = useNavigate();
   const { reload } = useApp();
-  const M = useMotionConfig();
   const [packs, setPacks] = useState([]);
 
   useEffect(() => {
@@ -51,13 +55,15 @@ export default function VaultForge() {
         </div>
       </div>
 
+      <p className="tiny" style={{ padding: '0 4px' }}>Feed the fire with a Cache. Relics rise from the flames.</p>
+
       {packs.map((p) => (
         <div key={p.slug} className="glass card">
           <div className="row" style={{ gap: 14 }}>
             <div style={{
               width: 64, height: 64, flex: '0 0 auto',
               borderRadius: 16, display: 'grid', placeItems: 'center',
-              background: 'radial-gradient(circle at 30% 25%, #ff8324, #2a1200)'
+              background: 'radial-gradient(circle at 30% 25%, #e8853a, #2a1200)'
             }}>
               <Emoji name="relic-vase" size={34} />
             </div>
