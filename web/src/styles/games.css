@@ -1,1 +1,183 @@
-/* Games use inline styles from GameHost.jsx */
+/* ======================================================================
+   Games — modern, tactile visual system for the Arena engines.
+   Shared stage, vivid tiles, depth, glow and motion. Replaces the old
+   washed-out inline surfaces.
+   ====================================================================== */
+
+.game-screen {
+  position: fixed; inset: 0; z-index: 100;
+  display: flex; flex-direction: column;
+  background:
+    radial-gradient(1200px 600px at 50% -10%, rgba(247,162,89,0.12), transparent 60%),
+    radial-gradient(circle at 50% 40%, #1b0f08 0%, #0a0710 55%, #050409 100%);
+}
+.game-screen::before {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background-image:
+    radial-gradient(rgba(255,255,255,0.035) 1px, transparent 1px);
+  background-size: 22px 22px; opacity: 0.5;
+  -webkit-mask: radial-gradient(circle at 50% 35%, #000 0%, transparent 75%);
+          mask: radial-gradient(circle at 50% 35%, #000 0%, transparent 75%);
+}
+.game-head {
+  position: relative; z-index: 2;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: calc(var(--safe-top) + 14px) 18px 8px;
+}
+.game-head h1 { font-size: 18px; letter-spacing: .01em; }
+.game-back {
+  width: 38px; height: 38px; border-radius: 50%;
+  background: rgba(15,20,28,0.8); border: 1px solid var(--glass-brd);
+  color: var(--slate-100); font-size: 18px;
+  display: grid; place-items: center;
+}
+.game-body { position: relative; z-index: 1; flex: 1; overflow: auto; }
+
+/* Generic stage surface used by all engines */
+.game-stage {
+  position: relative; border-radius: 22px; overflow: hidden;
+  background:
+    linear-gradient(180deg, rgba(255,255,255,0.05), rgba(0,0,0,0.1)),
+    radial-gradient(circle at 50% 0%, #221628, #0b0810 70%);
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow:
+    inset 0 1px 0 rgba(255,255,255,0.08),
+    inset 0 -40px 60px rgba(0,0,0,0.5),
+    0 24px 60px rgba(0,0,0,0.5);
+}
+.game-pad { padding: 16px; }
+.game-hint { font-size: 11.5px; letter-spacing: .06em; text-transform: uppercase; color: var(--ink-faint); }
+
+/* Primary action button inside a game */
+.game-cta {
+  width: 100%; margin-top: 16px; padding: 16px; border-radius: 16px;
+  font-size: 16px; font-weight: 800; letter-spacing: .02em; color: #2a1708;
+  background: linear-gradient(180deg, #ffd27a, #f7a259 55%, #e07b2c);
+  box-shadow: 0 10px 30px rgba(224,123,44,0.45), inset 0 1px 0 rgba(255,255,255,0.5);
+  border: none;
+}
+.game-cta:active { transform: translateY(1px); }
+
+/* -------------------------------------------------- Rune Match (match-3) */
+.m3-grid {
+  display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; padding: 12px;
+}
+.m3-tile {
+  aspect-ratio: 1; border-radius: 13px; font-size: 24px;
+  display: grid; place-items: center;
+  background: linear-gradient(180deg, rgba(255,255,255,0.1), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.12), 0 4px 10px rgba(0,0,0,0.35);
+  filter: drop-shadow(0 2px 3px rgba(0,0,0,0.4));
+}
+.m3-tile.sel {
+  background: linear-gradient(180deg, rgba(247,162,89,0.5), rgba(212,111,44,0.3));
+  border-color: var(--ember-300);
+  box-shadow: 0 0 0 2px rgba(247,162,89,0.6), 0 0 22px rgba(247,162,89,0.5);
+}
+
+/* -------------------------------------------------- Stone Stack */
+.stk-stage { height: 320px; }
+.stk-floor {
+  position: absolute; left: 0; right: 0; bottom: 0; height: 22px;
+  background: linear-gradient(180deg, #3a2a1c, #1a120b);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.08);
+}
+.stk-block {
+  position: absolute; left: 22px; right: 22px; height: 13px; border-radius: 5px;
+  background: linear-gradient(180deg, #c9d4e0, #6a7686);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.4), 0 2px 4px rgba(0,0,0,0.4);
+}
+.stk-mover {
+  position: absolute; width: 64px; height: 13px; margin-left: -32px; border-radius: 5px;
+  background: linear-gradient(180deg, #ffd27a, #e07b2c);
+  box-shadow: 0 0 22px rgba(247,162,89,0.7), inset 0 1px 0 rgba(255,255,255,0.5);
+}
+
+/* -------------------------------------------------- Fireflies (catch) */
+.fly-stage { height: 340px; background:
+    radial-gradient(circle at 50% 120%, #142417, #080d0a 65%) !important; }
+.fly {
+  position: absolute; width: 34px; height: 34px; border-radius: 50%;
+  transform: translate(-50%, -50%);
+  background: radial-gradient(circle at 35% 30%, #fff6d8, #ffb24d 55%, #d46f2c);
+  box-shadow: 0 0 24px 4px rgba(247,162,89,0.75);
+}
+.fly::after {
+  content: ''; position: absolute; inset: -8px; border-radius: 50%;
+  border: 1px solid rgba(255,210,122,0.4); animation: fly-halo 1.6s ease-out infinite;
+}
+@keyframes fly-halo { 0%{ transform: scale(0.6); opacity: 0.8;} 100%{ transform: scale(1.5); opacity: 0;} }
+
+/* -------------------------------------------------- Ember Reflex (reaction) */
+.rx-pad {
+  width: 100%; height: 300px; border-radius: 22px;
+  display: grid; place-items: center; font-size: 26px; font-weight: 900;
+  letter-spacing: .08em; color: #fff; border: 1px solid rgba(255,255,255,0.1);
+  transition: background .12s ease, box-shadow .12s ease;
+}
+.rx-pad.idle { background: radial-gradient(circle at 50% 40%, #2a2030, #0f0b14); }
+.rx-pad.wait { background: radial-gradient(circle at 50% 40%, #4a2630, #241016); }
+.rx-pad.live {
+  background: radial-gradient(circle at 50% 40%, #ffd27a, #e07b2c);
+  box-shadow: 0 0 60px rgba(247,162,89,0.8), inset 0 0 40px rgba(255,255,255,0.3);
+  color: #2a1708;
+}
+
+/* -------------------------------------------------- Rite of Hands / Masks */
+.rps-stage { padding: 18px 16px; }
+.rps-vs {
+  display: flex; gap: 16px; justify-content: center; align-items: center;
+  margin: 10px 0 22px; min-height: 96px;
+}
+.rps-slot {
+  width: 92px; height: 92px; border-radius: 20px; padding: 12px;
+  display: grid; place-items: center;
+  background: radial-gradient(circle at 40% 30%, rgba(90,60,30,0.3), rgba(10,8,12,0.6));
+  border: 1px solid rgba(255,255,255,0.08);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.1), 0 10px 26px rgba(0,0,0,0.45);
+}
+.rps-choices { display: flex; gap: 12px; justify-content: center; }
+.rps-btn {
+  width: 80px; height: 80px; border-radius: 18px; padding: 10px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.08), rgba(255,255,255,0.02));
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: inset 0 1px 0 rgba(255,255,255,0.14), 0 6px 16px rgba(0,0,0,0.4);
+  display: grid; place-items: center;
+}
+.rps-btn:active { transform: scale(0.94); }
+.rps-history { display: flex; gap: 6px; justify-content: center; align-items: center; margin-bottom: 14px; min-height: 24px; }
+
+.mask-stage { padding: 18px 16px; text-align: center; }
+.mask-face {
+  width: 150px; height: 190px; margin: 18px auto;
+  background: linear-gradient(180deg, #241018, #0c0710);
+  border-radius: 46% 46% 24% 24%;
+  display: grid; place-items: center;
+  border: 1px solid rgba(255,255,255,0.1);
+  box-shadow: inset 0 2px 0 rgba(255,255,255,0.08), 0 18px 40px rgba(0,0,0,0.5);
+  font-size: 20px; font-weight: 900; letter-spacing: .14em;
+}
+.mask-face.reveal { color: var(--ember-200); border-color: rgba(247,162,89,0.4); box-shadow: inset 0 2px 0 rgba(255,255,255,0.08), 0 0 36px rgba(247,162,89,0.4); }
+.mask-choices { display: flex; gap: 10px; justify-content: center; }
+
+/* -------------------------------------------------- Live scoreboard */
+.sb {
+  position: relative; z-index: 2; margin: 0 16px 6px; padding: 12px 14px;
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(0,0,0,0.12));
+  border: 1px solid var(--glass-brd);
+  box-shadow: 0 10px 30px rgba(0,0,0,0.4);
+}
+.sb-top { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 8px; }
+.sb-name { font-size: 11px; font-weight: 800; letter-spacing: .08em; }
+.sb-you .sb-name { color: var(--ember-300); }
+.sb-ai .sb-name { color: #c9b0ff; }
+.sb-score { font-size: 30px; line-height: 1; font-variant-numeric: tabular-nums; display: block; }
+.sb-you .sb-score { color: var(--ember-200); }
+.sb-ai .sb-score { color: #c9b0ff; }
+.sb-bar { display: flex; height: 12px; border-radius: 999px; overflow: hidden; background: rgba(6,5,8,0.6); }
+.sb-bar .you { background: linear-gradient(90deg,#8f3402,#f7a259); }
+.sb-bar .ai { background: linear-gradient(90deg,#8b5cf6,#4c1d95); }
+.sb-time { margin-top: 8px; height: 4px; border-radius: 999px; background: rgba(255,255,255,0.08); overflow: hidden; }
+.sb-time > span { display: block; height: 100%; background: var(--ember-400); }

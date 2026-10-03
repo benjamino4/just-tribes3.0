@@ -11,6 +11,8 @@ export const DEFAULTS = {
   referral_reward_sparks: 1000, referral_reward_kinship: 50,
   rank_starting_rating: 1000, rank_win_delta: 25, rank_loss_delta: 20,
   rank_decay_days: 7, rank_decay_amount: 15,
+  mm_bot_fallback_sec: 45, mm_rating_window: 250, mm_stale_sec: 120,
+  friendly_challenge_ttl_min: 30,
   seat_recalc_day: 0, seat_recalc_hour: 20,
   war_duration_minutes: 5, war_cooldown_minutes: 10,
   war_front_count: 3, war_score_per_win: 1,

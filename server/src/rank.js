@@ -94,6 +94,26 @@ export async function applyRankAfterMatch(winnerId, loserId, kind = 'duel') {
   return { winner: r1, loser: r2 };
 }
 
+// Adjust ONLY the given player's rating for a match they just finished. Used by
+// the ranked-queue flow where each human resolves their OWN duel independently
+// (so applying both sides here would double-count). Bots (negative ids / no
+// users row) are never touched because adjustRank is a no-op for them.
+export async function adjustSelf(userId, won, kind = 'ranked') {
+  const winDelta = Number(CFG.rank_win_delta) || 25;
+  const lossDelta = Number(CFG.rank_loss_delta) || 20;
+  const r = await adjustRank(userId, won ? +winDelta : -lossDelta, kind);
+  if (r?.tierChanged && won) {
+    await emit({
+      userId, tier: 'island', kind: 'rank_up',
+      title: `You are now ${r.newTier.title}`,
+      body: `Welcome to the ${r.newTier.name} rank`,
+      icon: 'crown', severity: 'success',
+      action_data: { tier: r.newTier.slug, rating: r.after }
+    });
+  }
+  return r;
+}
+
 export async function recalcSeatsForTribe(tribeId) {
   const wk = weekKey();
   const roster = (await q(

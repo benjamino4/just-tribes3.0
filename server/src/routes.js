@@ -98,8 +98,20 @@ router.post('/ash/collect', rateLimit('ash', 30), wrap(async (req) => {
 
 router.post('/arena/ranked/find', rateLimit('arena_r', 30), wrap(async (req) =>
   await Arena.findRankedMatch(req.user)));
+router.post('/arena/ranked/poll', rateLimit('arena_poll', 240), wrap(async (req) =>
+  await Arena.pollRankedMatch(req.user)));
+router.post('/arena/ranked/cancel', rateLimit('arena_r', 60), wrap(async (req) =>
+  await Arena.cancelRankedSearch(req.user)));
 router.post('/arena/ranked/resolve', rateLimit('arena_r', 60), wrap(async (req) =>
   await Arena.resolveRankedDuel(req.user, Number(req.body?.duel_id), req.body || {})));
+router.post('/arena/friendly/create', rateLimit('arena_r', 30), wrap(async (req) =>
+  await Arena.createFriendly(req.user)));
+router.post('/arena/friendly/accept', rateLimit('arena_r', 30), wrap(async (req) =>
+  await Arena.acceptFriendly(req.user, req.body?.code)));
+router.post('/arena/friendly/poll', rateLimit('arena_poll', 240), wrap(async (req) =>
+  await Arena.pollFriendly(req.user, req.body?.code)));
+router.post('/arena/friendly/cancel', rateLimit('arena_r', 30), wrap(async (req) =>
+  await Arena.cancelFriendly(req.user, req.body?.code)));
 router.get('/arena/recent', rateLimit('arena_r', 60), wrap(async (req) => ({
   matches: await Arena.recentMatches(req.user.id, 20)
 })));

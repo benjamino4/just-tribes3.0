@@ -95,22 +95,15 @@ function Match3Game({ onDone, report }) {
   }, [score]);
 
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{
-        display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4,
-        padding: 12, background: 'rgba(6,5,8,0.5)', borderRadius: 16
-      }}>
+    <div className="game-pad">
+      <div className="game-hint" style={{ marginBottom: 10 }}>Swap neighbours — line up 3 runes</div>
+      <div className="game-stage m3-grid">
         {board.map((v, i) => (
           <motion.button
             key={i}
             whileTap={{ scale: 0.9 }}
             onClick={() => tap(i)}
-            style={{
-              aspectRatio: '1', borderRadius: 10, fontSize: 22,
-              background: selected === i ? 'rgba(212,111,44,0.3)' : 'rgba(255,243,208,0.05)',
-              border: selected === i ? '2px solid var(--ember-400)' : '1px solid var(--glass-brd)',
-              display: 'grid', placeItems: 'center'
-            }}
+            className={'m3-tile' + (selected === i ? ' sel' : '')}
           >
             {RUNES[v] || ''}
           </motion.button>
@@ -154,28 +147,16 @@ function StackerGame({ onDone, report }) {
   }, [height, perfects]);
 
   return (
-    <div style={{ padding: 16, textAlign: 'center' }}>
-      <div style={{
-        height: 300, background: 'rgba(6,5,8,0.5)', borderRadius: 16,
-        position: 'relative', overflow: 'hidden'
-      }}>
+    <div className="game-pad" style={{ textAlign: 'center' }}>
+      <div className="game-hint" style={{ marginBottom: 10 }}>Tap to drop — land it dead-centre for a perfect</div>
+      <div className="game-stage stk-stage">
+        <div className="stk-floor" />
         {Array.from({ length: height }).map((_, i) => (
-          <div key={i} style={{
-            position: 'absolute', bottom: i * 14, left: 20, right: 20,
-            height: 12, background: `linear-gradient(180deg, var(--slate-200), var(--slate-400))`,
-            borderRadius: 4
-          }} />
+          <div key={i} className="stk-block" style={{ bottom: 22 + i * 14 }} />
         ))}
-        <div style={{
-          position: 'absolute', bottom: height * 14, left: `${pos}%`,
-          width: 60, height: 12, marginLeft: -30,
-          background: 'linear-gradient(180deg, var(--ember-200), var(--ember-400))',
-          borderRadius: 4, boxShadow: '0 0 20px var(--ember-400)'
-        }} />
+        <div className="stk-mover" style={{ bottom: 22 + height * 14, left: `${pos}%` }} />
       </div>
-      <button className="btn primary block" style={{ marginTop: 16 }} onClick={drop}>
-        Drop Stone
-      </button>
+      <button className="game-cta" onClick={drop}>Drop Stone</button>
     </div>
   );
 }
@@ -216,23 +197,16 @@ function CatchGame({ onDone, report }) {
   }, [caught]);
 
   return (
-    <div style={{ padding: 16 }}>
-      <div style={{
-        height: 340, background: 'radial-gradient(circle at 50% 100%, #1a2418, #05080d)',
-        borderRadius: 16, position: 'relative', overflow: 'hidden'
-      }}>
+    <div className="game-pad">
+      <div className="game-hint" style={{ marginBottom: 10 }}>Tap the drifting fireflies before they scatter</div>
+      <div className="game-stage fly-stage">
         {flies.map((f) => (
           <motion.button
             key={f.id}
             whileTap={{ scale: 0.8 }}
             onClick={() => tap(f.id)}
-            style={{
-              position: 'absolute', left: `${f.x}%`, top: `${f.y}%`,
-              width: 30, height: 30, borderRadius: '50%',
-              background: 'radial-gradient(circle, #ffe7c2, #d46f2c)',
-              boxShadow: '0 0 20px #f7a259',
-              transform: 'translate(-50%, -50%)'
-            }}
+            className="fly"
+            style={{ left: `${f.x}%`, top: `${f.y}%` }}
           />
         ))}
       </div>
@@ -283,22 +257,11 @@ function ReactionGame({ onDone, report }) {
 
   const avg = times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
 
+  const padClass = phase === 'live' ? 'live' : phase === 'wait' ? 'wait' : 'idle';
   return (
-    <div style={{ padding: 16, textAlign: 'center' }}>
-      <div className="tiny" style={{ marginBottom: 10 }}>Round {round}/5 · avg {avg}ms</div>
-      <button
-        onClick={tap}
-        style={{
-          width: '100%', height: 300, borderRadius: 16,
-          background: phase === 'live'
-            ? 'radial-gradient(circle, #f7a259, #d46f2c)'
-            : phase === 'wait' ? 'radial-gradient(circle, #5a6675, #3a4452)'
-            : 'radial-gradient(circle, #262c38, #0f141c)',
-          border: '2px solid var(--glass-brd)',
-          color: '#fff', fontSize: 24, fontWeight: 800,
-          boxShadow: phase === 'live' ? '0 0 40px var(--ember-400)' : 'none'
-        }}
-      >
+    <div className="game-pad" style={{ textAlign: 'center' }}>
+      <div className="game-hint" style={{ marginBottom: 10 }}>Round {round}/5 · avg {avg}ms — strike the instant it glows</div>
+      <button onClick={tap} className={'rx-pad ' + padClass}>
         {phase === 'idle' ? (round === 0 ? 'TAP TO START' : 'READY…') :
          phase === 'wait' ? 'WAIT…' : 'STRIKE!'}
       </button>
@@ -413,33 +376,25 @@ function ChoiceGame({ onDone, report }) {
   }
 
   return (
-    <div style={{ padding: 16, textAlign: 'center' }}>
-      <div className="tiny" style={{ marginBottom: 6, opacity: 0.7 }}>Rite of Hands · best of 5</div>
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center', marginBottom: 16, minHeight: 24 }}>
+    <div className="game-pad rps-stage" style={{ textAlign: 'center' }}>
+      <div className="game-hint" style={{ marginBottom: 6 }}>Rite of Hands · best of 5</div>
+      <div className="rps-history">
         {history.length === 0
           ? <span className="tiny" style={{ opacity: 0.4 }}>your marks appear on the wall…</span>
           : history.map((h, i) => <RpsHand key={i} idx={h} size={22} dim />)}
       </div>
-      <div style={{
-        display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'center',
-        marginBottom: 22, minHeight: 84,
-      }}>
-        <RpsHand idx={reveal ? reveal.player : -1} size={80} />
+      <div className="rps-vs">
+        <span className="rps-slot"><RpsHand idx={reveal ? reveal.player : -1} size={64} /></span>
         <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--slate-300)' }}>vs</span>
-        <RpsHand idx={reveal ? reveal.bot : -1} size={80} />
+        <span className="rps-slot"><RpsHand idx={reveal ? reveal.bot : -1} size={64} /></span>
       </div>
       <div className="tiny" style={{ marginBottom: 14 }}>
         You {pw} · {bw} Them
       </div>
-      <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
+      <div className="rps-choices">
         {[0, 1, 2].map((i) => (
           <button key={i} onClick={() => play(i)} disabled={!!reveal}
-            aria-label={RPS_LABEL[i]}
-            style={{
-              width: 76, height: 76, borderRadius: 16, padding: 10,
-              background: 'rgba(90,60,30,0.14)', border: '1px solid var(--glass-brd)',
-              display: 'grid', placeItems: 'center', opacity: reveal ? 0.5 : 1,
-            }}>
+            aria-label={RPS_LABEL[i]} className="rps-btn" style={{ opacity: reveal ? 0.5 : 1 }}>
             <RpsHand idx={i} size={52} />
           </button>
         ))}
@@ -481,20 +436,12 @@ function DeductionGame({ onDone, report }) {
   }
 
   return (
-    <div style={{ padding: 16, textAlign: 'center' }}>
-      <div className="tiny" style={{ marginBottom: 10 }}>Round {round}/3</div>
-      <div style={{
-        width: 140, height: 180, margin: '20px auto',
-        background: 'linear-gradient(180deg, #1a1010, #0a0608)',
-        borderRadius: '40% 40% 20% 20%',
-        display: 'grid', placeItems: 'center',
-        border: '1px solid var(--glass-brd)',
-        fontSize: 20, fontWeight: 800, letterSpacing: '.1em',
-        color: reveal ? 'var(--ember-200)' : 'var(--slate-300)'
-      }}>
+    <div className="game-pad mask-stage">
+      <div className="game-hint" style={{ marginBottom: 10 }}>Round {round}/3 — read the mask, choose your move</div>
+      <div className={'mask-face' + (reveal ? ' reveal' : '')}>
         {reveal ? reveal.mask.toUpperCase() : '???'}
       </div>
-      <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
+      <div className="mask-choices">
         {RESPONSES.map((r) => (
           <button key={r} onClick={() => play(r)} disabled={!!reveal}
             className="btn ghost" style={{ padding: '12px 18px' }}>
@@ -616,22 +563,11 @@ export default function GameHost({ game, opponent, onDone, onExit, mode = 'duel'
   }
 
   return (
-    <div style={{
-      position: 'fixed', inset: 0, zIndex: 100,
-      background: 'radial-gradient(circle at 50% 40%, #1a0d06 0%, #060508 70%)',
-      display: 'flex', flexDirection: 'column'
-    }}>
-      <header style={{
-        display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-        padding: 'calc(var(--safe-top) + 14px) 20px 10px'
-      }}>
-        <button onClick={onExit} style={{
-          width: 36, height: 36, borderRadius: '50%',
-          background: 'rgba(15,20,28,0.82)', border: '1px solid var(--glass-brd)',
-          color: 'var(--slate-100)'
-        }}>←</button>
-        <h1 className="display" style={{ fontSize: 18 }}>{meta.name}</h1>
-        <span className="chip" style={{ fontSize: 11 }}>{mode === 'war' ? 'War' : 'Ranked'}</span>
+    <div className="game-screen">
+      <header className="game-head">
+        <button onClick={onExit} className="game-back">←</button>
+        <h1 className="display">{meta.name}</h1>
+        <span className="chip" style={{ fontSize: 11 }}>{mode === 'war' ? 'War' : mode === 'friendly' ? 'Friendly' : 'Ranked'}</span>
       </header>
       <VsScoreboard
         you={you} ai={ai}
@@ -639,7 +575,7 @@ export default function GameHost({ game, opponent, onDone, onExit, mode = 'duel'
         forgotten={opponent?.forgotten}
         timed={meta.timed} endsIn={timePct}
       />
-      <div style={{ flex: 1, overflow: 'auto' }}>
+      <div className="game-body">
         <Engine onDone={handleDone} report={report} />
       </div>
     </div>

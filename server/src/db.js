@@ -180,6 +180,39 @@ CREATE TABLE IF NOT EXISTS rank_history (
   reason TEXT, at TIMESTAMPTZ DEFAULT now()
 );
 
+CREATE TABLE IF NOT EXISTS matchmaking_queue (
+  user_id BIGINT PRIMARY KEY,
+  mode TEXT NOT NULL DEFAULT 'ranked',
+  rank_rating INT DEFAULT 1000,
+  display_name TEXT,
+  game_slug TEXT,
+  status TEXT DEFAULT 'searching',
+  matched_duel_id BIGINT,
+  opponent_json JSONB,
+  enqueued_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+CREATE INDEX IF NOT EXISTS mmq_search_idx ON matchmaking_queue (mode, status, enqueued_at);
+
+CREATE TABLE IF NOT EXISTS friendly_challenges (
+  id BIGSERIAL PRIMARY KEY,
+  code TEXT UNIQUE NOT NULL,
+  host_id BIGINT NOT NULL,
+  host_name TEXT,
+  host_rating INT DEFAULT 1000,
+  guest_id BIGINT,
+  guest_name TEXT,
+  guest_rating INT,
+  game_slug TEXT,
+  status TEXT DEFAULT 'open',
+  host_duel_id BIGINT,
+  guest_duel_id BIGINT,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  matched_at TIMESTAMPTZ
+);
+CREATE INDEX IF NOT EXISTS friendly_host_idx ON friendly_challenges (host_id, status);
+CREATE INDEX IF NOT EXISTS friendly_code_idx ON friendly_challenges (code, status);
+
 CREATE TABLE IF NOT EXISTS seat_assignments (
   id BIGSERIAL PRIMARY KEY,
   tribe_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
@@ -423,6 +456,10 @@ ALTER TABLE duels ADD COLUMN IF NOT EXISTS opponent_name TEXT;
 ALTER TABLE kiva_messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN DEFAULT false;
 ALTER TABLE kiva_messages ADD COLUMN IF NOT EXISTS pinned_by BIGINT;
 ALTER TABLE kiva_messages ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMPTZ;
+ALTER TABLE duels ADD COLUMN IF NOT EXISTS mode TEXT;
+ALTER TABLE matchmaking_queue ADD COLUMN IF NOT EXISTS game_slug TEXT;
+ALTER TABLE matchmaking_queue ADD COLUMN IF NOT EXISTS opponent_json JSONB;
+ALTER TABLE friendly_challenges ADD COLUMN IF NOT EXISTS game_slug TEXT;
 `;
 
 export async function initDb() {
