@@ -1,18 +1,17 @@
-# ═══════════════════════════════════════════════════════════════════
-# FILE: render.yaml
-# PURPOSE: Render.com deployment blueprint.
-# DEPENDS ON: nothing
-# ═══════════════════════════════════════════════════════════════════
 services:
   - type: web
     name: tribes
     runtime: node
-    plan: starter
+    plan: free
     region: oregon
     buildCommand: npm run build
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
+    disk:
+      name: tribes-data
+      mountPath: /var/data
+      sizeGB: 1
     envVars:
       - { key: NODE_VERSION, value: "20" }
       - { key: NODE_ENV, value: production }
@@ -23,14 +22,11 @@ services:
       - { key: ADMIN_WEBHOOK_SECRET, sync: false }
       - { key: TG_WEBHOOK_SECRET, sync: false }
       - { key: CRON_SECRET, sync: false }
+      - { key: APP_URL, sync: false }
+      - { key: DATA_DIR, value: "/var/data" }
       - { key: RENDER_API_KEY, sync: false }
       - { key: RENDER_SERVICE_ID, sync: false }
-      - { key: APP_URL, sync: false }
-      - { key: TON_RECEIVE_ADDRESS, sync: false }
-      - { key: TONCENTER_API_KEY, sync: false }
-      - { key: TON_NETWORK, value: mainnet }
       - { key: PYSCORE_URL, sync: false }
       - { key: PUSH_ENABLED, value: "0" }
-      - { key: PUSH_FLUSH_SECONDS, value: "20" }
       - { key: ALLOW_GUEST, value: "0" }
       - { key: MIGRATE, value: "0" }

@@ -1,8 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════
-// FILE: web/src/lib/EventProvider.jsx
-// PURPOSE: SSE connection to /api/events/stream. Fan-out to subscribers.
-// DEPENDS ON: telegram.js
-// ═══════════════════════════════════════════════════════════════════
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { initData } from './telegram.js';
 
@@ -36,6 +31,4 @@ export function EventProvider({ children }) {
   return <Ctx.Provider value={{ subscribe, lastEvent }}>{children}</Ctx.Provider>;
 }
 
-export function useEvents() {
-  return useContext(Ctx);
-}
+export function useEvents() { return useContext(Ctx); }

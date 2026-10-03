@@ -1,14 +1,7 @@
-// ═══════════════════════════════════════════════════════════════════
-// FILE: web/src/screens/Help.jsx
-// PURPOSE: Help center list. Grouped by section.
-// DEPENDS ON: api
-// ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { V } from '../lib/motion.js';
 import { apiGet } from '../lib/api.js';
-import Icon from '../components/Icon.jsx';
 
 export default function Help() {
   const nav = useNavigate();
@@ -25,33 +18,20 @@ export default function Help() {
   }
 
   return (
-    <motion.div variants={V.page} initial="initial" animate="animate" className="col" style={{ gap: 12 }}>
-      <div className="row between" style={{ margin: '2px 2px 0' }}>
-        <div className="row" style={{ gap: 10 }}>
-          <button className="chip" style={{ padding: 9, borderRadius: 999 }} onClick={() => nav(-1)}>
-            <Icon name="chevL" size={18} />
-          </button>
-          <h2 className="display" style={{ fontSize: 22 }}>Help</h2>
-        </div>
+    <motion.div className="col" style={{ gap: 12 }}>
+      <div className="row" style={{ gap: 10 }}>
+        <button className="chip" style={{ padding: 9, borderRadius: 999 }} onClick={() => nav(-1)}>←</button>
+        <h2 className="display" style={{ fontSize: 22 }}>Help</h2>
       </div>
-
       {Object.entries(sections).map(([section, items]) => (
         <div key={section} className="glass card">
-          <b style={{ fontSize: 13, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--bone-200)' }}>{section}</b>
+          <b style={{ fontSize: 13, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--slate-200)' }}>{section}</b>
           <div className="col" style={{ gap: 6, marginTop: 10 }}>
             {items.map((a) => (
-              <button
-                key={a.slug}
-                onClick={() => nav('/help/' + a.slug)}
-                style={{
-                  textAlign: 'left', padding: '10px 12px', borderRadius: 12,
-                  background: 'rgba(255,243,208,.04)',
-                  border: '1px solid var(--glass-brd)',
-                  color: 'var(--ink)'
-                }}
-              >
+              <div key={a.slug} style={{ padding: '10px 0', borderBottom: '1px solid var(--glass-brd)' }}>
                 <b style={{ fontSize: 14 }}>{a.title}</b>
-              </button>
+                <p className="tiny" style={{ marginTop: 4 }}>{a.body}</p>
+              </div>
             ))}
           </div>
         </div>

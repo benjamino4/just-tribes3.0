@@ -1,9 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════
-// FILE: server/src/env.js
-// PURPOSE: Load .env from root or server directory. Never overwrites
-//          existing process.env. Silent if no file present.
-// DEPENDS ON: nothing
-// ═══════════════════════════════════════════════════════════════════
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';

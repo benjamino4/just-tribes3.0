@@ -1,146 +1,86 @@
-// ═══════════════════════════════════════════════════════════════════
-// FILE: web/src/screens/Arena.jsx
-// PURPOSE: The PvP hub. 12 game cards. Ranked and Staked modes.
-// DEPENDS ON: GameDispatcher, RulesOverlay, api, store
-// ═══════════════════════════════════════════════════════════════════
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { useApp } from '../lib/store.jsx';
-import { useMotionConfig, V } from '../lib/motion.js';
-import { fmt } from '../lib/format.js';
 import { Endpoints } from '../lib/api.js';
 import { haptic } from '../lib/haptics.js';
-import { GAME_META } from '../data/games.js';
-import Icon from '../components/Icon.jsx';
-import Button from '../components/Button.jsx';
-import Hint from '../components/Hint.jsx';
-import GameDispatcher from '../games/GameDispatcher.jsx';
-import RulesOverlay from '../components/RulesOverlay.jsx';
 import { toast } from '../components/Toast.jsx';
-
-const SEEN_KEY = 'tribes.games.seen';
-function hasSeen(slug) {
-  try { return !!JSON.parse(localStorage.getItem(SEEN_KEY) || '{}')[slug]; } catch { return false; }
-}
-function markSeen(slug) {
-  try {
-    const s = JSON.parse(localStorage.getItem(SEEN_KEY) || '{}');
-    s[slug] = 1;
-    localStorage.setItem(SEEN_KEY, JSON.stringify(s));
-  } catch {}
-}
+import GameHost from '../components/GameHost.jsx';
 
 export default function Arena() {
   const nav = useNavigate();
   const { data, reload } = useApp();
-  const M = useMotionConfig();
   const user = data?.user || {};
-
-  const [tab, setTab] = useState('ranked');
   const [match, setMatch] = useState(null);
-  const [rules, setRules] = useState(null);
-  const [recent, setRecent] = useState([]);
+  const [games, setGames] = useState([]);
 
   useEffect(() => {
-    Endpoints.arenaRecent().then((r) => setRecent((r.data || r).matches || [])).catch(() => {});
-  }, [match]);
+    Endpoints.games().then((r) => setGames((r.data || r).games || [])).catch(() => {});
+  }, []);
 
-  async function findRanked(slug) {
+  async function findRanked() {
     try {
       haptic('medium');
-      const r = await Endpoints.arenaRankedFind(slug);
+      const r = await Endpoints.arenaRankedFind(null);
       const body = r.data || r;
-      if (!hasSeen(body.game)) { setRules(body.game); markSeen(body.game); }
-      setMatch({ mode: 'ranked', game: body.game, duel_id: body.duel_id, opponent: body.opponent });
+      setMatch({
+        duel_id: body.duel_id,
+        game: body.game,
+        opponent: body.opponent,
+        opponent_type: body.opponent_type
+      });
     } catch (e) { toast(e.message || 'Matchmaking failed', 'bad'); }
   }
 
-  async function onGameDone(score, payload) {
+  async function onGameDone(payload) {
     if (!match) return;
     try {
-      if (match.duel_id) {
-        const r = await Endpoints.arenaRankedResolve(match.duel_id, payload || {});
-        const body = r.data || r;
-        toast(body.won ? 'Victory!' : 'Defeat', body.won ? 'good' : 'bad');
-      } else {
-        toast(`Score: ${score}`, 'info');
-      }
+      const r = await Endpoints.arenaRankedResolve(match.duel_id, payload);
+      const body = r.data || r;
+      toast(body.won ? 'Victory!' : 'Defeat', body.won ? 'good' : 'bad');
       reload();
     } catch (e) { toast(e.message || 'Resolve failed', 'bad'); }
     finally { setMatch(null); }
   }
 
   if (match) {
-    return (
-      <>
-        {rules && <RulesOverlay slug={rules} open onClose={() => setRules(null)} />}
-        <GameDispatcher slug={match.game} onDone={onGameDone} onExit={() => setMatch(null)} mode="ranked" timeLimit={90000} />
-      </>
-    );
+    return <GameHost game={match.game} opponent={match.opponent} onDone={onGameDone} onExit={() => setMatch(null)} />;
   }
 
   return (
-    <motion.div className="col" style={{ gap: 4 }} variants={V.page} initial="initial" animate="animate">
-      <div className="row between" style={{ margin: '2px 2px 12px' }}>
-        <div className="row" style={{ gap: 10 }}>
-          <h2 className="display" style={{ fontSize: 22 }}>Arena</h2>
-          <Hint slug="arena" text="Fight other players 1v1 in mini-games. Ranked matches give Kinship. Staked matches bet Sparks." />
-        </div>
+    <motion.div className="col" style={{ gap: 12 }}>
+      <div className="row between">
+        <h2 className="display" style={{ fontSize: 22 }}>Arena</h2>
+        <span className="chip gold">
+          {user.rank_tier?.emoji} {user.rank_tier?.title || 'Kin'}
+        </span>
       </div>
 
-      <div className="row" style={{ gap: 8, marginBottom: 12 }}>
-        {['ranked', 'staked', 'war'].map((t) => (
-          <button key={t}
-            onClick={() => { haptic('select'); t === 'war' ? nav('/arena/war') : setTab(t); }}
-            className="chip"
-            style={{
-              flex: 1, justifyContent: 'center',
-              borderColor: tab === t ? 'var(--ember-300)' : 'var(--glass-brd)',
-              color: tab === t ? 'var(--ember-200)' : 'var(--ink-dim)',
-              background: tab === t ? 'rgba(255,199,138,.14)' : 'var(--glass-bg)'
-            }}
-          >{t === 'ranked' ? 'Ranked' : t === 'staked' ? 'Staked' : 'War'}</button>
-        ))}
+      <div className="glass card">
+        <b style={{ fontSize: 15 }}>Ranked duel</b>
+        <p className="tiny" style={{ marginTop: 6 }}>
+          Free matchmaking. Win to climb the ranks.
+        </p>
+        <button className="btn primary block" style={{ marginTop: 14 }} onClick={findRanked}>
+          ⚔️ Find a fight
+        </button>
       </div>
 
-      <p className="tiny" style={{ marginBottom: 8, marginLeft: 4 }}>
-        {tab === 'ranked' ? 'Ranked duels are free. Win to climb the ladder.' :
-         tab === 'staked' ? 'Stake Sparks. Winner takes the pot.' :
-         'Tribe vs tribe. Enter the war room.'}
-      </p>
+      <button className="btn ghost block" onClick={() => nav('/arena/war')}>
+        ⚔️ Enter the War Room
+      </button>
 
-      <div className="arena-game-grid">
-        {Object.entries(GAME_META).map(([slug, meta], i) => (
-          <motion.button
-            key={slug}
-            initial={{ opacity: 0, y: 14 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ ...M.buoyant, delay: i * 0.03 }}
-            whileTap={{ scale: 0.95 }}
-            onClick={() => tab === 'ranked' ? findRanked(slug) : findRanked(slug)}
-            className="arena-game-card"
-            style={{ '--accent': meta.accent }}
-          >
-            <span className="arena-game-dot" />
-            <b>{meta.name}</b>
-          </motion.button>
-        ))}
-      </div>
-
-      {recent.length > 0 && (
+      {games.length > 0 && (
         <>
-          <div className="sec-h"><h3>Recent</h3><span className="line" /></div>
-          {recent.slice(0, 5).map((m) => (
-            <div key={m.id} className="glass card">
-              <div className="row between">
-                <b style={{ fontSize: 13 }}>{GAME_META[m.game_slug]?.name || m.game_slug}</b>
-                <span className="chip tiny">
-                  {Number(m.winner_id) === Number(user.id) ? 'Won' : 'Lost'}
-                </span>
+          <div className="sec-h"><h3>Games</h3><span className="line" /></div>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+            {games.map((g) => (
+              <div key={g.slug} className="glass card" style={{ padding: 12 }}>
+                <b style={{ fontSize: 13 }}>{g.name}</b>
+                <p className="tiny" style={{ marginTop: 4 }}>{g.description}</p>
               </div>
-            </div>
-          ))}
+            ))}
+          </div>
         </>
       )}
     </motion.div>

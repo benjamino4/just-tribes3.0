@@ -1,17 +1,24 @@
-// ═══════════════════════════════════════════════════════════════════
-// FILE: web/src/screens/Startup.jsx
-// PURPOSE: The living title. Verse. Ember → fire → Hearth continuity.
-// DEPENDS ON: verse.js, motion
-// ═══════════════════════════════════════════════════════════════════
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { generateVerse } from '../lib/verse.js';
-import { useApp } from '../lib/store.jsx';
+import { useLiveContent } from '../lib/liveContent.jsx';
+
+function generateVerse(verses) {
+  if (!verses?.patterns?.length) return 'Feed the fire, kin.';
+  const patterns = verses.patterns;
+  const vocab = verses.vocabulary || {};
+  const p = patterns[Math.floor(Math.random() * patterns.length)];
+  if (p.literal) return p.template;
+  const pick = (arr) => arr[Math.floor(Math.random() * arr.length)];
+  return p.template
+    .replace(/\{verb\}/g, pick(vocab.verb || ['Feed']))
+    .replace(/\{noun\}/g, pick(vocab.noun || ['fire']))
+    .replace(/\{adj\}/g, pick(vocab.adj || ['warm']));
+}
 
 export default function Startup({ onDone }) {
-  const { data } = useApp();
+  const { content } = useLiveContent();
   const [phase, setPhase] = useState('ember');
-  const [verse] = useState(() => generateVerse(data));
+  const [verse] = useState(() => generateVerse(content.verses));
 
   useEffect(() => {
     const t1 = setTimeout(() => setPhase('title'), 800);
@@ -39,7 +46,7 @@ export default function Startup({ onDone }) {
             initial={{ opacity: 0, letterSpacing: '0.4em' }}
             animate={{ opacity: 1, letterSpacing: '0.06em' }}
             exit={{ opacity: 0 }}
-            transition={{ duration: 1.2, ease: [0.16, 1, 0.3, 1] }}
+            transition={{ duration: 1.2 }}
             className="display startup-title"
           >TRIBES</motion.h1>
         )}

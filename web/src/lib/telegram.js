@@ -1,8 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════
-// FILE: web/src/lib/telegram.js
-// PURPOSE: Telegram WebApp SDK wrapper. initData, user, haptics hookup.
-// DEPENDS ON: nothing
-// ═══════════════════════════════════════════════════════════════════
 const tg = typeof window !== 'undefined' ? window.Telegram?.WebApp : null;
 
 export function initTelegram() {
@@ -10,7 +5,7 @@ export function initTelegram() {
   try {
     tg.ready();
     tg.expand();
-    tg.setHeaderColor?.('#0a0908');
+    tg.setHeaderColor?.('#0f141c');
     tg.setBackgroundColor?.('#0f141c');
     tg.enableClosingConfirmation?.();
   } catch {}
@@ -24,4 +19,7 @@ export function user() {
   try { return tg?.initDataUnsafe?.user || null; } catch { return null; }
 }
 
-export function isInsideTelegram() { return !!initData(); }
+export function openInvoice(link, callback) {
+  if (tg?.openInvoice) tg.openInvoice(link, callback);
+  else window.open(link, '_blank');
+}
