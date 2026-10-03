@@ -306,21 +306,97 @@ function ReactionGame({ onDone, report }) {
   );
 }
 
+// --- Cave-painting Rite of Hands (rock / paper / scissors) ---------------
+// Hand-drawn ochre glyphs on a stone wall, matching the stone-age theme. Index
+// order is fixed to the engine: 0 = rock (fist), 1 = paper (open palm),
+// 2 = scissors (two-finger). Pure inline SVG — no scripts, no handlers.
+const RPS_ART = [
+  // 0 — ROCK: a closed fist / knuckles
+  `<svg viewBox="0 0 64 64" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+    <g fill="#b4532f" stroke="#7d3418" stroke-width="1.5">
+      <rect x="16" y="28" width="32" height="24" rx="11"/>
+      <rect x="18" y="23" width="7" height="12" rx="3.5"/>
+      <rect x="27" y="21" width="7" height="14" rx="3.5"/>
+      <rect x="36" y="23" width="7" height="12" rx="3.5"/>
+      <path d="M15 36c-5 1-7 5-5 9" fill="none" stroke-width="5" stroke-linecap="round"/>
+    </g>
+    <path d="M22 40h20M22 45h20" stroke="#7d3418" stroke-width="1.5" stroke-linecap="round" opacity="0.55"/>
+  </svg>`,
+  // 1 — PAPER: open palm, five fingers
+  `<svg viewBox="0 0 64 64" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+    <g fill="#c9743a" stroke="#8a4a1f" stroke-width="1.5" stroke-linejoin="round">
+      <ellipse cx="32" cy="42" rx="13" ry="13"/>
+      <rect x="13" y="34" width="6" height="15" rx="3" transform="rotate(38 16 41)"/>
+      <rect x="20" y="16" width="6" height="24" rx="3"/>
+      <rect x="28" y="12" width="6" height="28" rx="3"/>
+      <rect x="36" y="16" width="6" height="24" rx="3"/>
+      <rect x="44" y="22" width="6" height="20" rx="3"/>
+    </g>
+  </svg>`,
+  // 2 — SCISSORS: two extended fingers (a "V")
+  `<svg viewBox="0 0 64 64" width="100%" height="100%" xmlns="http://www.w3.org/2000/svg">
+    <g fill="#a84f8c" stroke="#6e2f5c" stroke-width="1.5" stroke-linejoin="round">
+      <ellipse cx="32" cy="44" rx="12" ry="11"/>
+      <rect x="22" y="12" width="7" height="30" rx="3.5" transform="rotate(-16 25 27)"/>
+      <rect x="35" y="12" width="7" height="30" rx="3.5" transform="rotate(16 39 27)"/>
+      <rect x="40" y="36" width="6" height="12" rx="3" transform="rotate(34 43 42)"/>
+    </g>
+  </svg>`,
+];
+const RPS_LABEL = ['Rock', 'Paper', 'Shards'];
+
+function RpsHand({ idx, size = 56, dim = false }) {
+  if (idx == null || idx < 0) {
+    return (
+      <span style={{
+        width: size, height: size, display: 'grid', placeItems: 'center',
+        fontSize: size * 0.5, color: 'var(--slate-300)', opacity: 0.6,
+      }}>?</span>
+    );
+  }
+  return (
+    <span
+      aria-label={RPS_LABEL[idx]}
+      style={{ width: size, height: size, display: 'inline-block', opacity: dim ? 0.4 : 1 }}
+      dangerouslySetInnerHTML={{ __html: RPS_ART[idx] }}
+    />
+  );
+}
+
 function ChoiceGame({ onDone, report }) {
   const [pw, setPw] = useState(0);
   const [bw, setBw] = useState(0);
   const [reveal, setReveal] = useState(null);
+  // History of the PLAYER's own throws — shown to the player AND reported to the
+  // server so the hidden Forgotten bot can learn this human's bias over time.
   const [history, setHistory] = useState([]);
-  const THROWS = ['✊', '✋', '✌️'];
+  const playsRef = useRef([]);
 
   useEffect(() => { report(Math.round((pw * 100) / Math.max(1, pw + bw))); }, [pw, bw]);
+
+  // Adaptive hidden opponent: looks at the player's recent throws, finds their
+  // favourite, and mostly plays the counter to it — with enough randomness that
+  // it never feels scripted. Falls back to random until it has seen a few plays.
+  function botThrow(recent) {
+    if (recent.length >= 2 && Math.random() < 0.6) {
+      const counts = [0, 0, 0];
+      for (const p of recent) if (p >= 0 && p < 3) counts[p]++;
+      const fav = counts.indexOf(Math.max(...counts));
+      // counter: beats rock(0)->paper(1), paper(1)->scissors(2), scissors(2)->rock(0)
+      return (fav + 1) % 3;
+    }
+    return Math.floor(Math.random() * 3);
+  }
 
   function play(idx) {
     if (reveal) return;
     haptic('select');
-    const bot = Math.floor(Math.random() * 3);
+    const recent = playsRef.current.slice(-5);
+    const bot = botThrow(recent);
+    const nextPlays = [...playsRef.current, idx];
+    playsRef.current = nextPlays;
     setReveal({ player: idx, bot });
-    setHistory((h) => [...h, bot].slice(-5));
+    setHistory((h) => [...h, idx].slice(-5));
     let newPw = pw, newBw = bw;
     if (idx !== bot) {
       const wins = (idx === 0 && bot === 2) || (idx === 1 && bot === 0) || (idx === 2 && bot === 1);
@@ -330,26 +406,42 @@ function ChoiceGame({ onDone, report }) {
       setReveal(null);
       setPw(newPw); setBw(newBw);
       if (newPw >= 3 || newBw >= 3 || (pw + bw + 1) >= 5) {
-        onDone({ wins: newPw, losses: newBw, archetype: 'choice', opponent_plays: history });
+        // Report the PLAYER's throws as opponent_plays so the Forgotten learns.
+        onDone({ wins: newPw, losses: newBw, archetype: 'choice', opponent_plays: nextPlays });
       }
     }, 800);
   }
 
   return (
     <div style={{ padding: 16, textAlign: 'center' }}>
-      <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 20, opacity: 0.5 }}>
-        {history.map((h, i) => <span key={i} style={{ fontSize: 18 }}>{THROWS[h]}</span>)}
+      <div className="tiny" style={{ marginBottom: 6, opacity: 0.7 }}>Rite of Hands · best of 5</div>
+      <div style={{ display: 'flex', gap: 6, justifyContent: 'center', alignItems: 'center', marginBottom: 16, minHeight: 24 }}>
+        {history.length === 0
+          ? <span className="tiny" style={{ opacity: 0.4 }}>your marks appear on the wall…</span>
+          : history.map((h, i) => <RpsHand key={i} idx={h} size={22} dim />)}
       </div>
-      <div style={{ fontSize: 64, marginBottom: 20 }}>
-        {reveal ? `${THROWS[reveal.player]} vs ${THROWS[reveal.bot]}` : '? vs ?'}
+      <div style={{
+        display: 'flex', gap: 14, justifyContent: 'center', alignItems: 'center',
+        marginBottom: 22, minHeight: 84,
+      }}>
+        <RpsHand idx={reveal ? reveal.player : -1} size={80} />
+        <span style={{ fontSize: 20, fontWeight: 800, color: 'var(--slate-300)' }}>vs</span>
+        <RpsHand idx={reveal ? reveal.bot : -1} size={80} />
+      </div>
+      <div className="tiny" style={{ marginBottom: 14 }}>
+        You {pw} · {bw} Them
       </div>
       <div style={{ display: 'flex', gap: 12, justifyContent: 'center' }}>
-        {THROWS.map((t, i) => (
+        {[0, 1, 2].map((i) => (
           <button key={i} onClick={() => play(i)} disabled={!!reveal}
+            aria-label={RPS_LABEL[i]}
             style={{
-              width: 72, height: 72, borderRadius: 16, fontSize: 32,
-              background: 'rgba(255,243,208,0.05)', border: '1px solid var(--glass-brd)'
-            }}>{t}</button>
+              width: 76, height: 76, borderRadius: 16, padding: 10,
+              background: 'rgba(90,60,30,0.14)', border: '1px solid var(--glass-brd)',
+              display: 'grid', placeItems: 'center', opacity: reveal ? 0.5 : 1,
+            }}>
+            <RpsHand idx={i} size={52} />
+          </button>
         ))}
       </div>
     </div>

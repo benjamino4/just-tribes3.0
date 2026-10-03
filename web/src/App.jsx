@@ -18,9 +18,25 @@ import Profile from './screens/Profile.jsx';
 import Help from './screens/Help.jsx';
 import { V } from './lib/motion.js';
 import { useApp } from './lib/store.jsx';
+import { useEvents } from './lib/EventProvider.jsx';
 
 function Shell() {
   const location = useLocation();
+  const { reloadSilent } = useApp();
+  const { subscribe } = useEvents();
+
+  // Near-real-time, flicker-free refresh: whenever an island event lands
+  // (new Kiva message, bless, reward, etc.) quietly re-pull state in place.
+  // Debounced so a burst of events only triggers one silent refresh.
+  useEffect(() => {
+    let t = null;
+    return subscribe((evt) => {
+      if (!evt || evt.tier !== 'island') return;
+      if (t) clearTimeout(t);
+      t = setTimeout(() => { reloadSilent(); t = null; }, 250);
+    });
+  }, [subscribe, reloadSilent]);
+
   return (
     <div className="app-frame">
       <TopBar />

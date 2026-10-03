@@ -12,6 +12,8 @@ export default function Hearth() {
   const nav = useNavigate();
   const { data, reload } = useApp();
   const user = data?.user || {};
+  const tribe = data?.tribe;
+  const tier = user.rank_tier || {};
   const streak = Number(user.streak || 0);
 
   async function doCheckin() {
@@ -42,7 +44,31 @@ export default function Hearth() {
         </button>
       </div>
 
+      {/* At-a-glance standing: rank, sparks, kinship */}
       <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 12 }}>
+        <div className="glass card" style={{ padding: '12px 10px', textAlign: 'center' }}>
+          <div className="tiny" style={{ textTransform: 'uppercase', letterSpacing: '.1em', opacity: 0.7 }}>Rank</div>
+          <b className="tabular" style={{ fontSize: 18, color: tier.color_hex || 'var(--ember-200)' }}>
+            {user.rank_rating || 1000}
+          </b>
+          <div className="tiny" style={{ opacity: 0.8 }}>{tier.title || 'Kin'}</div>
+        </div>
+        <div className="glass card" style={{ padding: '12px 10px', textAlign: 'center' }}>
+          <div className="tiny" style={{ textTransform: 'uppercase', letterSpacing: '.1em', opacity: 0.7 }}>Sparks</div>
+          <b className="tabular" style={{ fontSize: 18 }}>🔥 {fmt(user.sparks || 0)}</b>
+          <div className="tiny" style={{ opacity: 0.8 }}>day {streak}</div>
+        </div>
+        <div className="glass card" style={{ padding: '12px 10px', textAlign: 'center' }}>
+          <div className="tiny" style={{ textTransform: 'uppercase', letterSpacing: '.1em', opacity: 0.7 }}>Kinship</div>
+          <b className="tabular" style={{ fontSize: 18, color: 'var(--gold-300)' }}>🏛 {fmt(user.kinship || 0)}</b>
+          <div className="tiny" style={{ opacity: 0.8, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {tribe ? tribe.name : 'no tribe'}
+          </div>
+        </div>
+      </div>
+
+      <div className="sec-h" style={{ marginTop: 18 }}><h3>Where to next</h3><span className="line" /></div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 4 }}>
         <motion.button whileTap={{ scale: 0.95 }} onClick={() => nav('/arena')} className="glass card" style={{ padding: 16, textAlign: 'center' }}>
           <div style={{ fontSize: 28 }}>⚔️</div>
           <b style={{ fontSize: 13, marginTop: 4 }}>Arena</b>

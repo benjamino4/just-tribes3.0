@@ -22,12 +22,22 @@ export function AppProvider({ children }) {
     }
   }, []);
 
+  // Silent refresh: pulls fresh state WITHOUT flipping the `loading` flag, so the
+  // UI swaps in new numbers in place instead of flashing a skeleton/spinner.
+  // Used for event-driven, near-real-time updates (no flicker).
+  const reloadSilent = useCallback(async () => {
+    try {
+      const j = await Endpoints.state();
+      setData(j.data || j);
+    } catch { /* keep showing last-known state on a transient failure */ }
+  }, []);
+
   useEffect(() => { load(); }, [load]);
 
   const patch = useCallback((p) => setData((d) => ({ ...(d || {}), ...p })), []);
 
   return (
-    <Ctx.Provider value={{ data, loading, error, reload: load, patch }}>
+    <Ctx.Provider value={{ data, loading, error, reload: load, reloadSilent, patch }}>
       {children}
     </Ctx.Provider>
   );

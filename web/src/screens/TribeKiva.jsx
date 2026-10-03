@@ -5,6 +5,7 @@ import { useApp } from '../lib/store.jsx';
 import { apiGet, apiPost, Endpoints } from '../lib/api.js';
 import { initData } from '../lib/telegram.js';
 import { toast } from '../components/Toast.jsx';
+import { EmojiText, EmojiPicker, useEmoji } from '../components/EmojiKit.jsx';
 
 export default function TribeKiva() {
   const nav = useNavigate();
@@ -16,6 +17,26 @@ export default function TribeKiva() {
   const [loadError, setLoadError] = useState(null);
   const bottomRef = useRef(null);
   const streamRef = useRef(null);
+  const inputRef = useRef(null);
+  const emojiAnchor = useRef(null);
+  const { glyphs } = useEmoji();
+
+  // De-duplicate by message id. Protects against the sender seeing their own
+  // message twice (once from the optimistic append, once echoed back over SSE).
+  function mergeMessages(prev, incoming) {
+    const list = Array.isArray(incoming) ? incoming : [incoming];
+    const seen = new Set(prev.map((m) => Number(m.id)));
+    const add = [];
+    for (const m of list) {
+      if (!m) continue;
+      const id = Number(m.id);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      add.push(m);
+    }
+    if (!add.length) return prev;
+    return [...prev, ...add];
+  }
 
   useEffect(() => {
     if (!tribe) return;
@@ -39,7 +60,7 @@ export default function TribeKiva() {
       es.onmessage = (ev) => {
         try {
           const evt = JSON.parse(ev.data);
-          if (evt.type === 'message' && evt.message) setMessages((m) => [...m, evt.message]);
+          if (evt.type === 'message' && evt.message) setMessages((m) => mergeMessages(m, evt.message));
         } catch {}
       };
       streamRef.current = es;
@@ -60,9 +81,18 @@ export default function TribeKiva() {
     try {
       const r = await apiPost('/api/kiva', { body });
       const msg = (r.data || r).message;
-      if (msg) setMessages((m) => [...m, msg]);
+      if (msg) setMessages((m) => mergeMessages(m, msg));
       setDraft('');
     } catch (e) { toast(e.message || 'Could not send', 'bad'); }
+  }
+
+  function insertEmoji(token) {
+    setDraft((d) => {
+      const base = d || '';
+      const needsSpace = base && !base.endsWith(' ');
+      return base + (needsSpace ? ' ' : '') + token + ' ';
+    });
+    inputRef.current?.focus();
   }
 
   if (!tribe) {
@@ -89,7 +119,7 @@ export default function TribeKiva() {
             {Number(m.user_id) !== Number(user.id) && (
               <b style={{ fontSize: 12.5, color: 'var(--ember-200)' }}>{m.first_name || m.username || 'Kin'}</b>
             )}
-            <span style={{ fontSize: 14.5, lineHeight: 1.45 }}>{m.body}</span>
+            <span style={{ fontSize: 14.5, lineHeight: 1.45 }}><EmojiText text={m.body} glyphs={glyphs} /></span>
             <span className="tiny" style={{ marginTop: 4 }}>
               {new Date(m.created_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
             </span>
@@ -98,7 +128,9 @@ export default function TribeKiva() {
         <div ref={bottomRef} />
       </div>
       <div className="kiva-composer glass strong">
+        <EmojiPicker onPick={insertEmoji} anchorRef={emojiAnchor} />
         <input
+          ref={inputRef}
           className="kiva-input"
           value={draft}
           onChange={(e) => setDraft(e.target.value)}

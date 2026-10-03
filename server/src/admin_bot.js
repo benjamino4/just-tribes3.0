@@ -128,8 +128,8 @@ async function runCommand(adminId, cmd, args, chatId) {
       if (!r.rowCount) return { text: 'No such player.' };
       await audit(adminId, 'bless', String(id));
       try {
-        const { notify } = await import('./notifications.js');
-        await notify({ userId: id, type: 'system', title: 'You have been Blessed', body: 'An elder has blessed your flame. ✨', severity: 'info' });
+        const { emit } = await import('./events.js');
+        await emit({ userId: id, tier: 'island', kind: 'system', icon: 'spark', title: 'You have been Blessed', body: 'An elder has blessed your flame. ✨', severity: 'info' });
       } catch {}
       return { text: `✨ Blessed ${r.rows[0].first_name || r.rows[0].username || id}.` };
     }
@@ -197,9 +197,9 @@ async function runCommand(adminId, cmd, args, chatId) {
       const text = args.join(' ');
       if (!text) return { text: 'Usage: /broadcast <message>' };
       const ids = (await q('SELECT id FROM users WHERE banned=false')).rows;
-      const { notify } = await import('./notifications.js');
+      const { emit } = await import('./events.js');
       for (const r of ids) {
-        await notify({ userId: r.id, type: 'system', title: 'Announcement', body: text, severity: 'info' });
+        await emit({ userId: r.id, tier: 'island', kind: 'system', icon: 'spark', title: 'Announcement', body: text, severity: 'info' });
       }
       await audit(adminId, 'broadcast', `${ids.length} users`);
       return { text: `📣 Sent to ${ids.length}` };

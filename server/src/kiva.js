@@ -1,6 +1,7 @@
 import { q } from './db.js';
 import { verifyInitData } from './auth.js';
 import { CFG } from './config.js';
+import { emit } from './events.js';
 
 const MAX_MESSAGES = Number(CFG.kiva_max_messages) || 500;
 const subscribers = new Map();
@@ -24,6 +25,28 @@ export async function postMessage(tribeId, userId, body, kind = 'chat') {
   );
   const msg = r.rows[0];
   broadcast(tribeId, { type: 'message', message: msg });
+  // Island notification: ping every tribe member (except the sender) that a
+  // new Kiva message has arrived, so the whole tribe sees it on their island.
+  try {
+    const sender = (await q(
+      'SELECT first_name, username FROM users WHERE id=$1', [userId]
+    )).rows[0] || {};
+    const who = sender.first_name || sender.username || 'A tribemate';
+    const preview = clean.length > 90 ? clean.slice(0, 89) + '…' : clean;
+    const members = (await q(
+      'SELECT id FROM users WHERE tribe_id=$1 AND banned=false AND id <> $2',
+      [tribeId, userId]
+    )).rows;
+    for (const m of members) {
+      emit({
+        userId: m.id, tribeId, tier: 'island', kind: 'kiva',
+        icon: 'chat', severity: 'info',
+        title: `${who} in Kiva`, body: preview,
+        action_kind: 'open_kiva', action_data: { tribeId },
+        ttl: 20,
+      }).catch(() => {});
+    }
+  } catch (e) { console.warn('[kiva] island notify', e.message); }
   return msg;
 }
 

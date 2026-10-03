@@ -35,6 +35,13 @@ export default function IslandHost() {
   function tap(evt) {
     haptic('light');
     apiPost(`/api/notifications/seen/${evt.id || 0}`).catch(() => {});
+    // Deep-link from the island pill to the relevant place.
+    try {
+      if (evt.action_kind === 'open_kiva') nav('/tribe/kiva');
+      else if (evt.action_kind === 'open_arena') nav('/arena');
+      else if (evt.action_kind === 'open_vault') nav('/vault');
+      else if (evt.action_kind === 'open_tribe') nav('/tribe');
+    } catch {}
     setQueue((q) => q.slice(1));
   }
 
