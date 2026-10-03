@@ -45,6 +45,7 @@ router.get('/state', rateLimit('state', 240), wrap(async (req) => {
       referral_code: fresh.referral_code,
       referral_count: Number(fresh.referral_count || 0),
       perf_tier: fresh.perf_tier || 'balanced',
+      blessed: !!fresh.blessed,
     },
     tribe: tribe ? {
       id: tribe.id, name: tribe.name,

@@ -40,7 +40,8 @@ const MAIN_MENU = {
     [{ text: '🎮 Games', callback_data: 'menu:games' }, { text: '⚔️ Wars', callback_data: 'menu:wars' }],
     [{ text: '👻 Forgotten', callback_data: 'menu:forgotten' }, { text: '💰 Economy', callback_data: 'menu:economy' }],
     [{ text: '📝 Content', callback_data: 'menu:content' }, { text: '⚙️ Config', callback_data: 'menu:config' }],
-    [{ text: '📜 Audit', callback_data: 'menu:audit' }, { text: '📣 Broadcast', callback_data: 'menu:broadcast' }]
+    [{ text: '📜 Audit', callback_data: 'menu:audit' }, { text: '📣 Broadcast', callback_data: 'menu:broadcast' }],
+    [{ text: '🎁 Gift Codes', callback_data: 'menu:codes' }, { text: '🌌 Emoji', callback_data: 'cmd:emoji' }]
   ]
 };
 
@@ -60,7 +61,7 @@ async function runCommand(adminId, cmd, args, chatId) {
   switch (cmd) {
     case 'start':
     case 'help':
-      return { text: '<b>🔥 TRIBES — Admin Console</b>\n\nTap a section below, or type a command directly:\n\n👥 /player /ban /unban /grant\n🏛 /tribes /tribe /dissolve\n🎮 /games /gametoggle\n⚔️ /wars /warend\n👻 /forgotten list|stats|spawn|del\n🪐 /emoji\n💰 /config /set\n📜 /audit · 📣 /broadcast\n\nEach button also explains how to use it.', keyboard: MAIN_MENU };
+      return { text: '<b>🔥 TRIBES — Admin Console</b>\n\nTap a section below, or type a command directly:\n\n👥 /player /ban /unban /grant /bless /unbless\n🏛 /tribes /tribe /dissolve\n🎮 /games /gametoggle\n⚔️ /wars /warend\n👻 /forgotten list|stats|spawn|del\n🎁 /codes /newcode /revokecode /delcode\n🌌 /emoji\n💰 /config /set\n📜 /audit · 📣 /broadcast\n\nEach button also explains how to use it.', keyboard: MAIN_MENU };
 
     case 'stats': {
       const u = (await q('SELECT count(*)::int n, coalesce(sum(sparks),0)::bigint e FROM users')).rows[0];
@@ -80,11 +81,11 @@ async function runCommand(adminId, cmd, args, chatId) {
       const s = String(args[0] || '').trim();
       if (!s) return { text: 'Usage: /player <id|username>' };
       const r = /^\d+$/.test(s)
-        ? await q('SELECT id, username, first_name, role, sparks, kinship, stars, banned, tribe_id, rank_rating FROM users WHERE id=$1', [s])
-        : await q('SELECT id, username, first_name, role, sparks, kinship, stars, banned, tribe_id, rank_rating FROM users WHERE username ILIKE $1 LIMIT 5', ['%' + s + '%']);
+        ? await q('SELECT id, username, first_name, role, sparks, kinship, stars, banned, blessed, tribe_id, rank_rating FROM users WHERE id=$1', [s])
+        : await q('SELECT id, username, first_name, role, sparks, kinship, stars, banned, blessed, tribe_id, rank_rating FROM users WHERE username ILIKE $1 LIMIT 5', ['%' + s + '%']);
       if (!r.rowCount) return { text: 'No such player.' };
       return { text: r.rows.map((u) =>
-        `<b>${u.first_name || u.username || u.id}</b> (${u.id})\n` +
+        `<b>${u.first_name || u.username || u.id}</b> (${u.id})${u.blessed ? ' ✨ blessed' : ''}\n` +
         `${fmt(u.sparks)} 🔥 · ${fmt(u.kinship)} 🏛 · ${fmt(u.stars)} ⭐\n` +
         `Rank: ${u.rank_rating} · ${u.banned ? 'BANNED' : 'ok'} · tribe ${u.tribe_id || '—'}`
       ).join('\n\n') };
@@ -118,6 +119,78 @@ async function runCommand(adminId, cmd, args, chatId) {
       await audit(adminId, 'grant', `${amount} ${kind} -> ${id}`,
         { before: before ? Number(before[kind]) : null, after: before ? Number(before[kind]) + amount : null });
       return { text: `✅ Granted ${amount} ${kind} to ${id}` };
+    }
+
+    case 'bless': {
+      const id = Number(args[0]);
+      if (!id) return { text: 'Usage: /bless <id>' };
+      const r = await q('UPDATE users SET blessed=true WHERE id=$1 RETURNING first_name, username', [id]);
+      if (!r.rowCount) return { text: 'No such player.' };
+      await audit(adminId, 'bless', String(id));
+      try {
+        const { notify } = await import('./notifications.js');
+        await notify({ userId: id, type: 'system', title: 'You have been Blessed', body: 'An elder has blessed your flame. ✨', severity: 'info' });
+      } catch {}
+      return { text: `✨ Blessed ${r.rows[0].first_name || r.rows[0].username || id}.` };
+    }
+
+    case 'unbless': {
+      const id = Number(args[0]);
+      if (!id) return { text: 'Usage: /unbless <id>' };
+      const r = await q('UPDATE users SET blessed=false WHERE id=$1 RETURNING first_name, username', [id]);
+      if (!r.rowCount) return { text: 'No such player.' };
+      await audit(adminId, 'unbless', String(id));
+      return { text: `✔️ Removed blessing from ${r.rows[0].first_name || r.rows[0].username || id}.` };
+    }
+
+    case 'newcode':
+    case 'givecode': {
+      // /newcode <CODE> <sparks|kinship|stars> <amount> [maxUses] [perUser]
+      const code = String(args[0] || '').trim().toUpperCase().replace(/[^A-Z0-9\-_]/g, '').slice(0, 32);
+      const kind = String(args[1] || '').toLowerCase();
+      const amount = Math.floor(Number(args[2]) || 0);
+      const maxUses = Math.max(0, Math.floor(Number(args[3]) || 0));
+      const perUser = Math.max(1, Math.floor(Number(args[4]) || 1));
+      if (!code || !['sparks', 'kinship', 'stars'].includes(kind) || amount <= 0) {
+        return { text: 'Usage: /newcode <CODE> <sparks|kinship|stars> <amount> [maxUses] [perUser]\n\nmaxUses 0 = unlimited. Example:\n/newcode WELCOME sparks 500 0 1' };
+      }
+      const exists = (await q('SELECT 1 FROM codes WHERE code=$1', [code])).rowCount;
+      if (exists) return { text: `⚠️ Code <code>${code}</code> already exists. Use /revokecode or /delcode first.` };
+      await q(
+        `INSERT INTO codes (code, kind, amount, max_uses, per_user_limit, active, created_by)
+         VALUES ($1,$2,$3,$4,$5,true,$6)`,
+        [code, kind, amount, maxUses, perUser, String(adminId)]
+      );
+      await audit(adminId, 'newcode', `${code}: ${amount} ${kind} max=${maxUses} per=${perUser}`);
+      return { text: `✅ Created gift code <code>${code}</code>\n${fmt(amount)} ${kind} · ${maxUses ? maxUses + ' total uses' : 'unlimited'} · ${perUser}/player\n\nPlayers redeem it in the floating Gift Code box.` };
+    }
+
+    case 'codes': {
+      const rows = (await q(
+        'SELECT code, kind, amount, uses, max_uses, per_user_limit, active FROM codes ORDER BY created_at DESC LIMIT 30'
+      )).rows;
+      if (!rows.length) return { text: 'No gift codes yet.\n\nCreate one: /newcode <CODE> <sparks|kinship|stars> <amount> [maxUses] [perUser]' };
+      return { text: '<b>🎁 Gift Codes</b>\n' + rows.map((c) =>
+        `${c.active ? '✅' : '⛔️'} <code>${c.code}</code> · ${fmt(c.amount)} ${c.kind} · ${c.uses}/${c.max_uses ? c.max_uses : '∞'} used · ${c.per_user_limit}/player`
+      ).join('\n') + '\n\nRevoke: /revokecode &lt;CODE&gt; · Delete: /delcode &lt;CODE&gt;' };
+    }
+
+    case 'revokecode': {
+      const code = String(args[0] || '').trim().toUpperCase();
+      if (!code) return { text: 'Usage: /revokecode <CODE>' };
+      const r = await q('UPDATE codes SET active=false WHERE code=$1 RETURNING code', [code]);
+      if (!r.rowCount) return { text: 'No such code.' };
+      await audit(adminId, 'revokecode', code);
+      return { text: `⛔️ Revoked <code>${code}</code> (can no longer be redeemed).` };
+    }
+
+    case 'delcode': {
+      const code = String(args[0] || '').trim().toUpperCase();
+      if (!code) return { text: 'Usage: /delcode <CODE>' };
+      const r = await q('DELETE FROM codes WHERE code=$1 RETURNING code', [code]);
+      if (!r.rowCount) return { text: 'No such code.' };
+      await audit(adminId, 'delcode', code);
+      return { text: `🗑 Deleted <code>${code}</code>.` };
     }
 
     case 'broadcast': {
@@ -333,7 +406,7 @@ async function handleCallback(adminId, data, chatId, messageId) {
   if (data.startsWith('menu:')) {
     const section = data.slice(5);
     const menus = {
-      players: { text: '👥 <b>Players</b>\n\nLook up and moderate any player.\n\n<b>How to use — type:</b>\n/player &lt;id|name&gt; — view a profile\n/ban &lt;id&gt; &lt;reason&gt; — ban\n/unban &lt;id&gt; — lift a ban\n/grant &lt;id&gt; &lt;sparks|kinship|stars&gt; &lt;amount&gt; — award currency', keyboard: { inline_keyboard: [[{ text: '← Back', callback_data: 'menu:main' }]] } },
+      players: { text: '👥 <b>Players</b>\n\nLook up and moderate any player.\n\n<b>How to use — type:</b>\n/player &lt;id|name&gt; — view a profile\n/ban &lt;id&gt; &lt;reason&gt; — ban\n/unban &lt;id&gt; — lift a ban\n/grant &lt;id&gt; &lt;sparks|kinship|stars&gt; &lt;amount&gt; — award currency\n/bless &lt;id&gt; — bless a player (✨ badge + notice)\n/unbless &lt;id&gt; — remove the blessing', keyboard: { inline_keyboard: [[{ text: '← Back', callback_data: 'menu:main' }]] } },
       tribes: { text: '🏛 <b>Tribes</b>\n\nBrowse and manage every tribe directly from here — no SQL needed.\n\n<b>Buttons below</b> list the top tribes. Then:\n/tribe &lt;id&gt; — full detail\n/dissolve &lt;id&gt; — disband a tribe (asks you to CONFIRM)', keyboard: { inline_keyboard: [[{ text: '📋 List tribes', callback_data: 'cmd:tribes' }], [{ text: '← Back', callback_data: 'menu:main' }]] } },
       games: { text: '🎮 <b>Games</b>\n\nTurn individual mini-games on or off. Disabled games stop appearing in Arena & War matchmaking immediately.\n\n<b>How to use:</b>\n/games — list all games + status\n/gametoggle &lt;slug&gt; — enable/disable one', keyboard: { inline_keyboard: [[{ text: '📋 List games', callback_data: 'cmd:games' }], [{ text: '← Back', callback_data: 'menu:main' }]] } },
       wars: { text: '⚔️ <b>Wars</b>\n\nWars run live and auto-resolve when their timer ends. From here you can watch them and end one early.\n\n<b>How to use:</b>\n/wars — list active wars + scores\n/warend &lt;id&gt; — resolve one right now\n/set war_duration_minutes &lt;n&gt; — length of new wars', keyboard: { inline_keyboard: [[{ text: '📋 List wars', callback_data: 'cmd:wars' }], [{ text: '← Back', callback_data: 'menu:main' }]] } },
@@ -350,6 +423,7 @@ async function handleCallback(adminId, data, chatId, messageId) {
       config: { text: '⚙️ <b>Config</b>\n\n/set <key> <value>\n/config to list all keys', keyboard: { inline_keyboard: [[{ text: '← Back', callback_data: 'menu:main' }]] } },
       audit: { text: '📜 <b>Audit</b>\n\n/audit 50 — last 50 actions', keyboard: { inline_keyboard: [[{ text: '← Back', callback_data: 'menu:main' }]] } },
       broadcast: { text: '📣 <b>Broadcast</b>\n\n/broadcast <message>', keyboard: { inline_keyboard: [[{ text: '← Back', callback_data: 'menu:main' }]] } },
+      codes: { text: '🎁 <b>Gift Codes</b>\n\nCreate redeemable codes players enter in the in-app floating Gift Code box. Each code grants sparks, kinship, or stars.\n\n<b>How to use:</b>\n/newcode &lt;CODE&gt; &lt;sparks|kinship|stars&gt; &lt;amount&gt; [maxUses] [perUser]\n   • maxUses 0 = unlimited total redemptions\n   • perUser defaults to 1\n   • e.g. <code>/newcode WELCOME sparks 500 0 1</code>\n/codes — list every code + how many times used\n/revokecode &lt;CODE&gt; — disable (keeps history)\n/delcode &lt;CODE&gt; — delete permanently', keyboard: { inline_keyboard: [[{ text: '📋 List codes', callback_data: 'cmd:codes' }], [{ text: '← Back', callback_data: 'menu:main' }]] } },
     };
     const m = menus[section];
     if (m) await send(chatId, m.text, m.keyboard);

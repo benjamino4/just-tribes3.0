@@ -6,6 +6,7 @@ import TabBar from './components/TabBar.jsx';
 import { ToastHost } from './components/Toast.jsx';
 import IslandHost from './components/IslandHost.jsx';
 import TickerHost from './components/TickerHost.jsx';
+import GiftBox from './components/GiftBox.jsx';
 import Startup from './screens/Startup.jsx';
 import Hearth from './screens/Hearth.jsx';
 import Arena from './screens/Arena.jsx';
@@ -50,6 +51,7 @@ function Shell() {
         </AnimatePresence>
       </div>
       <TabBar />
+      <GiftBox />
       <ToastHost />
     </div>
   );

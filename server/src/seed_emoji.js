@@ -152,6 +152,116 @@ export const STONE_AGE_SET = {
   keys: STONE_AGE_EMOJIS.map((e) => e.key)
 };
 
+// ---------------------------------------------------------------------------
+// Premium "Stone Age Faces" set — a SEPARATE pack of animated reaction faces.
+// These glyphs use self-contained CSS <style>/@keyframes animations. Every
+// class and keyframe name is namespaced with the glyph key so that rendering
+// several of them on the same page can never cause the animations to collide.
+// No <script>, no event handlers — safe to inline anywhere.
+// ---------------------------------------------------------------------------
+const F = (body) =>
+  `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">${body}</svg>`;
+
+export const STONE_AGE_FACES = [
+  {
+    key: 'sf_suspicious', name: 'Suspicious Chief',
+    svg: F(`
+      <style>
+        @keyframes sf_suspicious_squish { 0%,100% { transform: scaleX(1); } 50% { transform: scaleX(0.88); } }
+        .sf_suspicious_face { animation: sf_suspicious_squish 1.5s infinite ease-in-out; transform-origin: center; }
+      </style>
+      <g class="sf_suspicious_face">
+        <circle cx="32" cy="32" r="24" fill="#bd8253"/>
+        <line x1="14" y1="22" x2="28" y2="24" stroke="#000" stroke-width="4" stroke-linecap="round"/>
+        <line x1="36" y1="24" x2="50" y2="20" stroke="#000" stroke-width="4" stroke-linecap="round"/>
+        <circle cx="22" cy="28" r="3" fill="#000"/>
+        <circle cx="42" cy="28" r="3" fill="#000"/>
+        <path d="M20,44 Q32,34 44,44" fill="none" stroke="#000" stroke-width="4" stroke-linecap="round"/>
+      </g>`)
+  },
+  {
+    key: 'sf_stare', name: 'Heavy Brow Stare',
+    svg: F(`
+      <style>
+        @keyframes sf_stare_jaw { 0%,100% { transform: translateY(0); } 50% { transform: translateY(2px); } }
+        .sf_stare_jaw { animation: sf_stare_jaw 0.6s infinite ease-in-out; }
+      </style>
+      <g>
+        <circle cx="32" cy="32" r="24" fill="#baa290"/>
+        <path d="M12,16 L52,16 L46,26 L18,26 Z" fill="#473b33"/>
+        <circle cx="22" cy="32" r="2.5" fill="#000"/>
+        <circle cx="42" cy="32" r="2.5" fill="#000"/>
+        <line class="sf_stare_jaw" x1="22" y1="44" x2="42" y2="44" stroke="#000" stroke-width="4" stroke-linecap="round"/>
+      </g>`)
+  },
+  {
+    key: 'sf_concussion', name: 'Concussion',
+    svg: F(`
+      <style>
+        @keyframes sf_concussion_orbit { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        @keyframes sf_concussion_wobble { 0%,100% { transform: rotate(-3deg); } 50% { transform: rotate(3deg); } }
+        .sf_concussion_stars { animation: sf_concussion_orbit 3s infinite linear; transform-origin: 32px 32px; }
+        .sf_concussion_head { animation: sf_concussion_wobble 0.5s infinite ease-in-out; transform-origin: center bottom; }
+      </style>
+      <g>
+        <g class="sf_concussion_head">
+          <circle cx="32" cy="36" r="22" fill="#d49c6e"/>
+          <path d="M18,30 L26,38 M26,30 L18,38" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+          <path d="M38,30 L46,38 M46,30 L38,38" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+          <path d="M22,48 Q32,40 42,48" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+        </g>
+        <g class="sf_concussion_stars">
+          <polygon points="32,6 34,10 38,10 35,13 36,17 32,15 28,17 29,13 26,10 30,10" fill="#ffcc00"/>
+          <polygon points="12,46 14,50 18,50 15,53 16,57 12,55 8,57 9,53 6,50 10,50" fill="#ffcc00"/>
+          <polygon points="52,46 54,50 58,50 55,53 56,57 52,55 48,57 49,53 46,50 50,50" fill="#ffcc00"/>
+        </g>
+      </g>`)
+  },
+  {
+    key: 'sf_smug', name: 'Smug Unga',
+    svg: F(`
+      <style>
+        @keyframes sf_smug_brow { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-3px); } }
+        .sf_smug_brow { animation: sf_smug_brow 1s infinite ease-in-out; }
+      </style>
+      <g>
+        <circle cx="32" cy="32" r="24" fill="#db9760"/>
+        <path class="sf_smug_brow" d="M14,22 Q24,14 28,24" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+        <path d="M48,22 Q38,18 34,24" fill="none" stroke="#000" stroke-width="3" stroke-linecap="round"/>
+        <circle cx="22" cy="28" r="3" fill="#000"/>
+        <circle cx="40" cy="28" r="3" fill="#000"/>
+        <path d="M22,44 Q36,38 46,40" fill="none" stroke="#000" stroke-width="4" stroke-linecap="round"/>
+      </g>`)
+  },
+  {
+    key: 'sf_skull', name: 'Chattering Dino Skull',
+    svg: F(`
+      <style>
+        @keyframes sf_skull_clatter { 0%,100% { transform: scaleY(1); } 50% { transform: scaleY(1.2); } }
+        .sf_skull_jaw { animation: sf_skull_clatter 0.2s infinite ease-in-out; transform-origin: center top; }
+      </style>
+      <g>
+        <path d="M12,36 C12,18 22,12 36,12 C48,12 52,22 52,36 Z" fill="#e8e2ce"/>
+        <circle cx="26" cy="24" r="4" fill="#1a1512"/>
+        <g class="sf_skull_jaw">
+          <rect x="18" y="36" width="30" height="12" fill="#e8e2ce" rx="2"/>
+          <line x1="18" y1="36" x2="48" y2="36" stroke="#1a1512" stroke-width="2"/>
+          <line x1="24" y1="36" x2="24" y2="44" stroke="#1a1512" stroke-width="2"/>
+          <line x1="32" y1="36" x2="32" y2="44" stroke="#1a1512" stroke-width="2"/>
+          <line x1="40" y1="36" x2="40" y2="44" stroke="#1a1512" stroke-width="2"/>
+        </g>
+      </g>`)
+  }
+];
+
+export const STONE_AGE_FACES_SET = {
+  slug: 'stone_age_faces',
+  name: 'Stone Age Faces (Animated)',
+  description: 'A premium pack of 5 hand-animated prehistoric reaction faces. Unlock once, react everywhere.',
+  price_stars: 120,
+  keys: STONE_AGE_FACES.map((e) => e.key)
+};
+
 export async function seedEmoji(pool) {
   if (!pool) return;
   for (let i = 0; i < STONE_AGE_EMOJIS.length; i++) {
@@ -169,5 +279,23 @@ export async function seedEmoji(pool) {
      ON CONFLICT (slug) DO NOTHING`,
     [STONE_AGE_SET.slug, STONE_AGE_SET.name, STONE_AGE_SET.description,
      STONE_AGE_SET.price_stars, JSON.stringify(STONE_AGE_SET.keys)]
+  );
+
+  // Second premium set — the animated reaction faces, kept fully separate.
+  for (let i = 0; i < STONE_AGE_FACES.length; i++) {
+    const e = STONE_AGE_FACES[i];
+    await pool.query(
+      `INSERT INTO emoji_defs (key, name, svg, set_slug, price_stars, sort_order, builtin, active)
+       VALUES ($1,$2,$3,$4,0,$5,false,true)
+       ON CONFLICT (key) DO NOTHING`,
+      [e.key, e.name, e.svg, STONE_AGE_FACES_SET.slug, (i + 1) * 10]
+    );
+  }
+  await pool.query(
+    `INSERT INTO emoji_sets (slug, name, description, price_stars, emoji_keys, sort_order, active)
+     VALUES ($1,$2,$3,$4,$5::jsonb,11,true)
+     ON CONFLICT (slug) DO NOTHING`,
+    [STONE_AGE_FACES_SET.slug, STONE_AGE_FACES_SET.name, STONE_AGE_FACES_SET.description,
+     STONE_AGE_FACES_SET.price_stars, JSON.stringify(STONE_AGE_FACES_SET.keys)]
   );
 }
