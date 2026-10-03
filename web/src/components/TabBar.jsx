@@ -13,7 +13,7 @@ export default function TabBar() {
   const location = useLocation();
   return (
     <nav className="tabbar" aria-label="Primary">
-      {TABS.map((t) => {
+      {TABS.map((t, idx) => {
         const active = t.to === '/' ? location.pathname === '/' : location.pathname.startsWith(t.to);
         return (
           <NavLink
@@ -33,11 +33,11 @@ export default function TabBar() {
             <motion.span
               className="tab-icon-wrap"
               animate={active
-                ? { scale: [1, 1.35, 1], rotate: [0, -12, 10, 0], y: [0, -3, 0] }
-                : { scale: 1, rotate: 0, y: 0 }}
+                ? { scale: [1, 1.35, 1.12], rotate: [0, -12, 10, 0], y: [0, -3, -1] }
+                : { scale: [1, 1.09, 1], y: [0, -2.5, 0], rotate: [0, 1.5, -1.5, 0] }}
               transition={active
                 ? { duration: 0.5, ease: 'easeOut' }
-                : { type: 'spring', stiffness: 400, damping: 24 }}
+                : { duration: 2.8, ease: 'easeInOut', repeat: Infinity, delay: idx * 0.22 }}
               whileTap={{ scale: 0.82 }}
             >
               {t.icon}

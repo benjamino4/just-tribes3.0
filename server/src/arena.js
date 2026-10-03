@@ -339,6 +339,117 @@ export async function cancelFriendly(user, codeRaw) {
   return { ok: true };
 }
 
+/* ============================================================ Live PvP state
+ * For human-vs-human pairings each player has their OWN duel row (a mirror of
+ * the opponent's). While a match is in progress each client heartbeats its own
+ * live score + presence here, and reads the opponent's live score + presence
+ * from the mirror row. This powers the real-time opponent progress bar, the
+ * "opponent disconnected" notice and the forfeit-on-timeout rule. Bot (negative
+ * accepter_id) opponents have no mirror — the client simulates their ghost. */
+
+async function findMirror(duel) {
+  if (!duel || !duel.accepter_id || Number(duel.accepter_id) < 0) return null;
+  return (await q(
+    `SELECT * FROM duels
+     WHERE opener_id=$1 AND accepter_id=$2 AND game_slug=$3
+     ORDER BY id DESC LIMIT 1`,
+    [duel.accepter_id, duel.opener_id, duel.game_slug]
+  )).rows[0] || null;
+}
+
+// Heartbeat: report my live score, read the opponent's live state back.
+export async function liveUpdate(user, duelId, score) {
+  const duel = (await q('SELECT * FROM duels WHERE id=$1', [duelId])).rows[0];
+  if (!duel) throw new Error('no such duel');
+  if (Number(duel.opener_id) !== Number(user.id)) throw new Error('not your duel');
+  const s = Math.max(0, Math.min(100, Number(score) || 0));
+  await q(
+    `UPDATE duels SET live_score=$1, last_seen=now() WHERE id=$2 AND status='active'`,
+    [s, duelId]
+  );
+
+  const isBot = !duel.accepter_id || Number(duel.accepter_id) < 0;
+  if (isBot) {
+    // No real opponent to track; the client runs the Forgotten ghost locally.
+    return { opponent_is_bot: true, opponent_present: true, opponent_score: null,
+             opponent_finished: false, opponent_forfeited: false };
+  }
+  const mirror = await findMirror(duel);
+  if (!mirror) {
+    return { opponent_is_bot: false, opponent_present: false, opponent_score: 0,
+             opponent_finished: false, opponent_forfeited: false };
+  }
+  const offlineSec = Number(CFG.mm_live_offline_sec) || 12;
+  const seen = mirror.last_seen ? new Date(mirror.last_seen).getTime() : 0;
+  const stale = mirror.status === 'active' && seen > 0 && (Date.now() - seen) > offlineSec * 1000;
+
+  // The opponent heart-beat went quiet mid-match — treat it as abandonment: the
+  // opponent forfeits (and loses rating), I win. Guarded so it fires exactly
+  // once via the status transition.
+  if (stale) {
+    const r = await q(
+      `UPDATE duels SET status='resolved', finished=true, forfeited=true,
+         final_score=COALESCE(live_score,0), winner_id=$1, loser_id=$2, resolved_at=now()
+       WHERE id=$3 AND status='active'`,
+      [duel.opener_id, mirror.opener_id, mirror.id]
+    );
+    if (r.rowCount > 0) {
+      const casual = (mirror.kind === 'friendly' || mirror.mode === 'friendly');
+      if (!casual) { try { await adjustSelf(mirror.opener_id, false, mirror.kind || 'ranked'); } catch {} }
+      emit({
+        userId: mirror.opener_id, tier: 'toast', kind: 'duel_loss',
+        title: 'Disconnected', body: 'You left the match — it counts as a loss',
+        icon: 'bolt', severity: 'warn'
+      }).catch(() => {});
+    }
+    return { opponent_is_bot: false, opponent_present: false,
+             opponent_score: Number(mirror.live_score) || 0,
+             opponent_finished: true, opponent_forfeited: true };
+  }
+
+  const present = mirror.status === 'active'
+    ? (seen > 0 && (Date.now() - seen) < offlineSec * 1000)
+    : true; // resolved means they finished, treat as 'was present'
+  return {
+    opponent_is_bot: false,
+    opponent_present: present,
+    opponent_score: Number(mirror.finished ? (mirror.final_score ?? mirror.live_score) : mirror.live_score) || 0,
+    opponent_finished: !!mirror.finished || mirror.status === 'resolved',
+    opponent_forfeited: !!mirror.forfeited,
+  };
+}
+
+// Forfeit: the local player ran out of time or quit — opponent wins.
+export async function forfeitDuel(user, duelId, reason = 'timeout') {
+  const duel = (await q('SELECT * FROM duels WHERE id=$1', [duelId])).rows[0];
+  if (!duel) throw new Error('no such duel');
+  if (Number(duel.opener_id) !== Number(user.id)) throw new Error('not your duel');
+  if (duel.status !== 'active') return { ok: true, status: duel.status };
+  await q(
+    `UPDATE duels SET status='resolved', finished=true, forfeited=true,
+       final_score=COALESCE(live_score,0), winner_id=$2, loser_id=$1, resolved_at=now()
+     WHERE id=$3`,
+    [duel.opener_id, duel.accepter_id || null, duelId]
+  );
+  const casual = (duel.kind === 'friendly' || duel.mode === 'friendly');
+  let change = null;
+  if (!casual) change = await adjustSelf(user.id, false, duel.kind || 'ranked');
+  await emit({
+    userId: user.id, tier: 'toast', kind: 'duel_loss',
+    title: 'Forfeited', body: reason === 'offline' ? 'You left the match' : 'Your time ran out',
+    icon: 'bolt', severity: 'warn'
+  }).catch(() => {});
+  return {
+    ok: true, forfeited: true, won: false, casual, reason,
+    opponent_name: duel.opponent_name || null,
+    score: Number(duel.live_score) || 0, opponent_score: Number(duel.opponent_score) || 0,
+    rank: change ? {
+      before: change.before, after: change.after, delta: change.delta,
+      tier: change.newTier, old_tier: change.oldTier, tier_changed: change.tierChanged
+    } : null
+  };
+}
+
 /* ================================================================= Resolution */
 
 export async function resolveRankedDuel(user, duelId, payload) {
@@ -347,18 +458,32 @@ export async function resolveRankedDuel(user, duelId, payload) {
   if (Number(duel.opener_id) !== Number(user.id)) throw new Error('not your duel');
   if (duel.status !== 'active') return { ok: true, status: duel.status };
   const score = Number(payload.score) || 0;
-  // The opponent score is authoritative on the server (set at matchmaking from
-  // rank). We never trust a client-sent opponent score. Legacy duels without a
-  // stored value fall back to the client echo for backward compatibility.
-  const opponentScore = duel.opponent_score != null
-    ? Number(duel.opponent_score)
-    : (Number(payload.opponent_score) || 0);
-  const won = score > opponentScore;
+  // Opponent score is server-authoritative. For a human-vs-human pairing we use
+  // the OPPONENT's real final score from their mirror duel the moment it is
+  // available (so both players agree on the winner); a forfeit by the opponent
+  // is an automatic win. Until the opponent finishes — or for bot matches — we
+  // fall back to the rating-based target stored at matchmaking.
+  const mirror = await findMirror(duel);
+  let opponentScore;
+  let won;
+  if (mirror && mirror.forfeited) {
+    opponentScore = Number(mirror.final_score ?? mirror.live_score) || 0;
+    won = true;
+  } else if (mirror && (mirror.finished || mirror.status === 'resolved')) {
+    opponentScore = Number(mirror.final_score ?? mirror.live_score) || 0;
+    won = score > opponentScore;
+  } else {
+    opponentScore = duel.opponent_score != null
+      ? Number(duel.opponent_score)
+      : (Number(payload.opponent_score) || 0);
+    won = score > opponentScore;
+  }
   const winnerId = won ? duel.opener_id : duel.accepter_id;
   const loserId = won ? (duel.accepter_id || null) : duel.opener_id;
   await q(
-    `UPDATE duels SET status='resolved', winner_id=$1, loser_id=$2, resolved_at=now() WHERE id=$3`,
-    [winnerId, loserId, duelId]
+    `UPDATE duels SET status='resolved', finished=true, final_score=$4,
+       winner_id=$1, loser_id=$2, resolved_at=now() WHERE id=$3`,
+    [winnerId, loserId, duelId, score]
   );
 
   // Friendly matches are casual — no rank movement.

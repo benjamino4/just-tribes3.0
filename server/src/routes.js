@@ -104,6 +104,11 @@ router.post('/arena/ranked/cancel', rateLimit('arena_r', 60), wrap(async (req) =
   await Arena.cancelRankedSearch(req.user)));
 router.post('/arena/ranked/resolve', rateLimit('arena_r', 60), wrap(async (req) =>
   await Arena.resolveRankedDuel(req.user, Number(req.body?.duel_id), req.body || {})));
+router.post('/arena/live', rateLimit('arena_poll', 480), wrap(async (req) =>
+  await Arena.liveUpdate(req.user, Number(req.body?.duel_id), req.body?.score)));
+router.post('/arena/forfeit', rateLimit('arena_r', 60), wrap(async (req) =>
+  await Arena.forfeitDuel(req.user, Number(req.body?.duel_id), req.body?.reason)));
+router.get('/ping', rateLimit('ping', 600), wrap(async () => ({ t: Date.now() })));
 router.post('/arena/friendly/create', rateLimit('arena_r', 30), wrap(async (req) =>
   await Arena.createFriendly(req.user)));
 router.post('/arena/friendly/accept', rateLimit('arena_r', 30), wrap(async (req) =>

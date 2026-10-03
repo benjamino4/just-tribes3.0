@@ -60,6 +60,8 @@ export const Endpoints = {
   friendlyAccept: (code) => apiPost('/api/arena/friendly/accept', { code }),
   friendlyPoll: (code) => apiPost('/api/arena/friendly/poll', { code }),
   friendlyCancel: (code) => apiPost('/api/arena/friendly/cancel', { code }),
+  arenaLive: (duel_id, score) => apiPost('/api/arena/live', { duel_id, score }),
+  arenaForfeit: (duel_id, reason) => apiPost('/api/arena/forfeit', { duel_id, reason }),
   arenaRecent: () => apiGet('/api/arena/recent'),
   war: () => apiGet('/api/war'),
   warDeclare: () => apiPost('/api/war/declare'),
@@ -86,5 +88,19 @@ export const Endpoints = {
   rankTiers: () => apiGet('/api/rank/tiers'),
   leaderboard: () => apiGet('/api/leaderboard'),
   games: () => apiGet('/api/games'),
+  ping: () => apiGet('/api/ping'),
   starsInvoice: (itemId) => apiPost('/api/stars/invoice', { itemId }),
 };
+
+// Measure real network round-trip time to the server (ms). Returns a number, or
+// null if the request failed.
+export async function measurePing() {
+  const t0 = (performance && performance.now) ? performance.now() : Date.now();
+  try {
+    await Endpoints.ping();
+    const t1 = (performance && performance.now) ? performance.now() : Date.now();
+    return Math.max(1, Math.round(t1 - t0));
+  } catch {
+    return null;
+  }
+}

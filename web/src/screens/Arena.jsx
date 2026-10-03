@@ -272,6 +272,21 @@ export default function Arena() {
     setResult(null); setMatch(null); setPhase('idle');
   }
 
+  // ---- Forfeit: local timer ran out, or opponent dropped and we auto-lose ----
+  async function onGameForfeit(reason = 'timeout') {
+    if (!match) return;
+    try {
+      const r = await Endpoints.arenaForfeit(match.duel_id, reason);
+      const body = r.data || r;
+      setResult({ ...body, forfeited: true, opponent_name: body.opponent_name || match.opponent?.name });
+      setPhase('result');
+      reload();
+    } catch (e) {
+      toast(e.message || 'Forfeit failed', 'bad');
+      setMatch(null); setPhase('idle');
+    }
+  }
+
   if (phase === 'searching') return <Searching waited={waited} botAt={botAt} onCancel={cancelSearch} />;
   if (phase === 'friendly_wait') return <FriendlyWait code={friendCode} onCancel={cancelFriendly} />;
 
@@ -288,8 +303,10 @@ export default function Arena() {
   }
 
   if (phase === 'game' && match) {
-    return <GameHost game={match.game} opponent={match.opponent} mode={match.casual ? 'friendly' : 'duel'}
-      onDone={onGameDone} onExit={() => { setMatch(null); setPhase('idle'); }} />;
+    return <GameHost game={match.game} opponent={match.opponent} duelId={match.duel_id}
+      mode={match.casual ? 'friendly' : 'duel'}
+      onDone={onGameDone} onForfeit={onGameForfeit}
+      onExit={() => { setMatch(null); setPhase('idle'); }} />;
   }
 
   if (phase === 'result' && result) {
