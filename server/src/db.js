@@ -574,6 +574,22 @@ ALTER TABLE tribes ADD COLUMN IF NOT EXISTS perk_banner BOOLEAN DEFAULT false;
 ALTER TABLE tribes ADD COLUMN IF NOT EXISTS forgotten BOOLEAN DEFAULT false;
 ALTER TABLE tribes ADD COLUMN IF NOT EXISTS war_cooldown_until TIMESTAMPTZ;
 ALTER TABLE tribes ADD COLUMN IF NOT EXISTS created_at TIMESTAMPTZ DEFAULT now();
+
+-- Legacy relics tables carried a NOT NULL "buff_type" column that the current
+-- code never populates. A seed INSERT that omits it then fails with
+-- 'null value in column "buff_type" ... violates not-null constraint', which
+-- aborts the whole migration/boot. Relax the leftover column if it exists so
+-- inserts that omit it succeed. No-op on fresh schemas (column absent).
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_name = 'relics' AND column_name = 'buff_type'
+  ) THEN
+    EXECUTE 'ALTER TABLE relics ALTER COLUMN buff_type DROP NOT NULL';
+    EXECUTE 'ALTER TABLE relics ALTER COLUMN buff_type SET DEFAULT ''none''';
+  END IF;
+END $$;
 `;
 
 async function runMigrations() {
