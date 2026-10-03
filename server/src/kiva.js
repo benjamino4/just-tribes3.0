@@ -51,27 +51,140 @@ export async function postMessage(tribeId, userId, body, kind = 'chat') {
 }
 
 export async function listMessages(tribeId, sinceId = 0, limit = 50) {
-  return (await q(
-    `SELECT m.id, m.user_id, m.body, m.kind, m.pinned, m.created_at,
+  const rows = (await q(
+    `SELECT m.id, m.user_id, m.body, m.kind, m.pinned, m.pinned_at, m.created_at,
      u.username, u.first_name, u.name_color, u.role
      FROM kiva_messages m JOIN users u ON u.id = m.user_id
      WHERE m.tribe_id=$1 AND m.id > $2
      ORDER BY m.id ASC LIMIT $3`,
     [tribeId, sinceId, Math.min(limit, 200)]
   )).rows;
+  return attachReactions(rows);
 }
 
 export async function latestMessages(tribeId, limit = 50) {
   const r = await q(
     `SELECT * FROM (
-      SELECT m.id, m.user_id, m.body, m.kind, m.pinned, m.created_at,
+      SELECT m.id, m.user_id, m.body, m.kind, m.pinned, m.pinned_at, m.created_at,
       u.username, u.first_name, u.name_color, u.role
       FROM kiva_messages m JOIN users u ON u.id = m.user_id
       WHERE m.tribe_id=$1 ORDER BY m.id DESC LIMIT $2) s
     ORDER BY id ASC`,
     [tribeId, Math.min(limit, 100)]
   );
-  return r.rows;
+  return attachReactions(r.rows);
+}
+
+// Returns the currently pinned messages for a tribe (newest pin first).
+export async function pinnedMessages(tribeId) {
+  const rows = (await q(
+    `SELECT m.id, m.user_id, m.body, m.kind, m.pinned, m.pinned_at, m.created_at,
+     u.username, u.first_name, u.name_color, u.role
+     FROM kiva_messages m JOIN users u ON u.id = m.user_id
+     WHERE m.tribe_id=$1 AND m.pinned=true
+     ORDER BY m.pinned_at DESC NULLS LAST, m.id DESC`,
+    [tribeId]
+  )).rows;
+  return attachReactions(rows);
+}
+
+// Aggregates reactions for a batch of messages into a compact per-message shape:
+//   reactions: [{ key, count, mine }]
+async function attachReactions(rows) {
+  if (!rows.length) return rows;
+  const ids = rows.map((r) => Number(r.id));
+  const rx = (await q(
+    `SELECT message_id, emoji_key, user_id FROM kiva_reactions
+     WHERE message_id = ANY($1::bigint[])`,
+    [ids]
+  )).rows;
+  const byMsg = new Map();
+  for (const r of rx) {
+    const mid = Number(r.message_id);
+    if (!byMsg.has(mid)) byMsg.set(mid, new Map());
+    const m = byMsg.get(mid);
+    const prev = m.get(r.emoji_key) || { key: r.emoji_key, count: 0, users: [] };
+    prev.count += 1; prev.users.push(Number(r.user_id));
+    m.set(r.emoji_key, prev);
+  }
+  for (const row of rows) {
+    const m = byMsg.get(Number(row.id));
+    row.reactions = m ? Array.from(m.values()).map((e) => ({ key: e.key, count: e.count, users: e.users })) : [];
+  }
+  return rows;
+}
+
+// Toggles a single-user reaction on a message. Returns the fresh aggregate for
+// that message and broadcasts it so every open Kiva updates in real time.
+export async function toggleReaction(tribeId, userId, messageId, emojiKey) {
+  const key = String(emojiKey || '').trim().slice(0, 40);
+  if (!/^[a-z0-9_]{2,40}$/i.test(key)) throw new Error('bad reaction');
+  const owns = (await q(
+    'SELECT 1 FROM kiva_messages WHERE id=$1 AND tribe_id=$2', [messageId, tribeId]
+  )).rowCount;
+  if (!owns) throw new Error('no such message');
+  const existed = (await q(
+    'DELETE FROM kiva_reactions WHERE message_id=$1 AND user_id=$2 AND emoji_key=$3',
+    [messageId, userId, key]
+  )).rowCount;
+  if (!existed) {
+    await q(
+      `INSERT INTO kiva_reactions (message_id, tribe_id, user_id, emoji_key)
+       VALUES ($1,$2,$3,$4) ON CONFLICT DO NOTHING`,
+      [messageId, tribeId, userId, key]
+    );
+  }
+  const agg = (await q(
+    `SELECT emoji_key, user_id FROM kiva_reactions WHERE message_id=$1`, [messageId]
+  )).rows;
+  const map = new Map();
+  for (const r of agg) {
+    const prev = map.get(r.emoji_key) || { key: r.emoji_key, count: 0, users: [] };
+    prev.count += 1; prev.users.push(Number(r.user_id));
+    map.set(r.emoji_key, prev);
+  }
+  const reactions = Array.from(map.values());
+  broadcast(tribeId, { type: 'reaction', message_id: Number(messageId), reactions });
+  return { ok: true, message_id: Number(messageId), reactions, active: !existed };
+}
+
+// Premium: pin a message to the top of the Kiva by spending Stars. Atomic Star
+// deduction; capped number of pins per tribe (oldest pin is released when full).
+export async function pinMessage(tribeId, userId, messageId) {
+  const cost = Number(CFG.kiva_pin_cost_stars) || 50;
+  const maxPins = Number(CFG.kiva_pin_max) || 3;
+  const msg = (await q(
+    'SELECT id, pinned FROM kiva_messages WHERE id=$1 AND tribe_id=$2',
+    [messageId, tribeId]
+  )).rows[0];
+  if (!msg) throw new Error('no such message');
+  if (msg.pinned) return { ok: true, already: true };
+  const upd = await q(
+    'UPDATE users SET stars = stars - $1 WHERE id=$2 AND stars >= $1 RETURNING stars',
+    [cost, userId]
+  );
+  if (!upd.rowCount) { const e = new Error('not enough Stars'); e.need = cost; throw e; }
+  // Release the oldest pin if we're at the cap.
+  const pins = (await q(
+    'SELECT id FROM kiva_messages WHERE tribe_id=$1 AND pinned=true ORDER BY pinned_at ASC NULLS FIRST, id ASC',
+    [tribeId]
+  )).rows;
+  if (pins.length >= maxPins) {
+    const drop = pins.slice(0, pins.length - maxPins + 1).map((p) => Number(p.id));
+    await q('UPDATE kiva_messages SET pinned=false WHERE id = ANY($1::bigint[])', [drop]);
+  }
+  await q(
+    'UPDATE kiva_messages SET pinned=true, pinned_by=$2, pinned_at=now() WHERE id=$1',
+    [messageId, userId]
+  );
+  broadcast(tribeId, { type: 'pin', message_id: Number(messageId), pinned: true });
+  return { ok: true, stars: Number(upd.rows[0].stars), spent: cost };
+}
+
+export async function unpinMessage(tribeId, messageId) {
+  await q('UPDATE kiva_messages SET pinned=false WHERE id=$1 AND tribe_id=$2', [messageId, tribeId]);
+  broadcast(tribeId, { type: 'pin', message_id: Number(messageId), pinned: false });
+  return { ok: true };
 }
 
 export async function markRead(tribeId, userId, lastSeenId) {

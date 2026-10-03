@@ -273,7 +273,18 @@ CREATE TABLE IF NOT EXISTS kiva_messages (
   tribe_id BIGINT NOT NULL, user_id BIGINT NOT NULL,
   body TEXT, kind TEXT DEFAULT 'chat',
   pinned BOOLEAN DEFAULT false,
+  pinned_by BIGINT,
+  pinned_at TIMESTAMPTZ,
   created_at TIMESTAMPTZ DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS kiva_reactions (
+  message_id BIGINT NOT NULL,
+  tribe_id BIGINT NOT NULL,
+  user_id BIGINT NOT NULL,
+  emoji_key TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now(),
+  PRIMARY KEY (message_id, user_id, emoji_key)
 );
 
 CREATE TABLE IF NOT EXISTS kiva_reads (
@@ -409,6 +420,9 @@ const SELF_HEAL = `
 ALTER TABLE duels ADD COLUMN IF NOT EXISTS opponent_score INT;
 ALTER TABLE duels ADD COLUMN IF NOT EXISTS opponent_rating INT;
 ALTER TABLE duels ADD COLUMN IF NOT EXISTS opponent_name TEXT;
+ALTER TABLE kiva_messages ADD COLUMN IF NOT EXISTS pinned BOOLEAN DEFAULT false;
+ALTER TABLE kiva_messages ADD COLUMN IF NOT EXISTS pinned_by BIGINT;
+ALTER TABLE kiva_messages ADD COLUMN IF NOT EXISTS pinned_at TIMESTAMPTZ;
 `;
 
 export async function initDb() {

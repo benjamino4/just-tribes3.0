@@ -55,23 +55,40 @@ export function useEmoji() {
 // body. An unknown :token: is left as literal text.
 const TOKEN_RE = /:([a-z0-9_]{2,40}):/gi;
 
+// Parses a body into text/emoji parts against a glyph map.
+export function parseEmoji(text, map) {
+  const out = [];
+  const str = String(text || '');
+  let last = 0; let m; TOKEN_RE.lastIndex = 0;
+  while ((m = TOKEN_RE.exec(str)) !== null) {
+    const key = m[1];
+    const glyph = map[key];
+    if (!glyph) continue; // leave unknown tokens as plain text
+    if (m.index > last) out.push({ t: str.slice(last, m.index) });
+    out.push({ key, svg: glyph.svg, name: glyph.name });
+    last = m.index + m[0].length;
+  }
+  if (last < str.length) out.push({ t: str.slice(last) });
+  return out;
+}
+
+// True when the body is nothing but 1-3 known emoji (so we can render them big,
+// WhatsApp-style). Returns the matched keys, else null.
+export function emojiOnly(text, map) {
+  const parts = parseEmoji(text, map);
+  if (!parts.length) return null;
+  const keys = [];
+  for (const p of parts) {
+    if (p.svg) { keys.push(p.key); continue; }
+    if (String(p.t).trim() !== '') return null; // has real text
+  }
+  return keys.length >= 1 && keys.length <= 3 ? keys : null;
+}
+
 export function EmojiText({ text, glyphs, size = 20 }) {
-  const map = glyphs || useEmoji().glyphs;
-  const parts = useMemo(() => {
-    const out = [];
-    const str = String(text || '');
-    let last = 0; let m; TOKEN_RE.lastIndex = 0;
-    while ((m = TOKEN_RE.exec(str)) !== null) {
-      const key = m[1];
-      const glyph = map[key];
-      if (!glyph) continue; // leave unknown tokens as plain text
-      if (m.index > last) out.push({ t: str.slice(last, m.index) });
-      out.push({ key, svg: glyph.svg, name: glyph.name });
-      last = m.index + m[0].length;
-    }
-    if (last < str.length) out.push({ t: str.slice(last) });
-    return out;
-  }, [text, map]);
+  const store = useEmoji();
+  const map = (glyphs && Object.keys(glyphs).length) ? glyphs : store.glyphs;
+  const parts = useMemo(() => parseEmoji(text, map), [text, map]);
 
   return (
     <>
@@ -88,6 +105,24 @@ export function EmojiText({ text, glyphs, size = 20 }) {
         <span key={i}>{p.t}</span>
       ))}
     </>
+  );
+}
+
+// Renders a single emoji by key at an arbitrary size (used for big bubbles and
+// reaction chips). Falls back to the raw :key: token if the glyph is unknown.
+export function EmojiGlyph({ emojiKey, glyphs, size = 20 }) {
+  const store = useEmoji();
+  const map = (glyphs && Object.keys(glyphs).length) ? glyphs : store.glyphs;
+  const g = map[emojiKey];
+  if (!g) return <span>{`:${emojiKey}:`}</span>;
+  return (
+    <span
+      className="emoji-glyph"
+      title={g.name}
+      aria-label={g.name}
+      style={{ width: size, height: size, display: 'inline-block', verticalAlign: '-0.28em' }}
+      dangerouslySetInnerHTML={{ __html: g.svg }}
+    />
   );
 }
 

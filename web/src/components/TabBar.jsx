@@ -30,7 +30,18 @@ export default function TabBar() {
                 transition={{ type: 'spring', stiffness: 320, damping: 30 }}
               />
             )}
-            <span className="tab-icon-wrap">{t.icon}</span>
+            <motion.span
+              className="tab-icon-wrap"
+              animate={active
+                ? { scale: [1, 1.35, 1], rotate: [0, -12, 10, 0], y: [0, -3, 0] }
+                : { scale: 1, rotate: 0, y: 0 }}
+              transition={active
+                ? { duration: 0.5, ease: 'easeOut' }
+                : { type: 'spring', stiffness: 400, damping: 24 }}
+              whileTap={{ scale: 0.82 }}
+            >
+              {t.icon}
+            </motion.span>
             <span className="tab-label">{t.label}</span>
           </NavLink>
         );

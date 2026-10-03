@@ -11,6 +11,7 @@ import Startup from './screens/Startup.jsx';
 import Hearth from './screens/Hearth.jsx';
 import Arena from './screens/Arena.jsx';
 import ArenaWar from './screens/ArenaWar.jsx';
+import Leaderboard from './screens/Leaderboard.jsx';
 import Tribe from './screens/Tribe.jsx';
 import TribeKiva from './screens/TribeKiva.jsx';
 import Vault from './screens/Vault.jsx';
@@ -56,6 +57,7 @@ function Shell() {
               <Route path="/" element={<Hearth />} />
               <Route path="/arena" element={<Arena />} />
               <Route path="/arena/war" element={<ArenaWar />} />
+              <Route path="/leaderboard" element={<Leaderboard />} />
               <Route path="/tribe" element={<Tribe />} />
               <Route path="/tribe/kiva" element={<TribeKiva />} />
               <Route path="/vault" element={<Vault />} />

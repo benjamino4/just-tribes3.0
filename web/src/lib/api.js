@@ -62,6 +62,9 @@ export const Endpoints = {
   kiva: (since) => apiGet('/api/kiva' + (since ? '?since=' + since : '')),
   kivaPost: (body) => apiPost('/api/kiva', { body }),
   kivaRead: (lastSeenId) => apiPost('/api/kiva/read', { lastSeenId }),
+  kivaReact: (messageId, emojiKey) => apiPost('/api/kiva/react', { messageId, emojiKey }),
+  kivaPin: (messageId) => apiPost('/api/kiva/pin', { messageId }),
+  kivaUnpin: (messageId) => apiPost('/api/kiva/unpin', { messageId }),
   relicsState: () => apiGet('/api/relics/state'),
   relicsEquip: (relicId) => apiPost('/api/relics/equip', { relicId }),
   relicsUnequip: (category) => apiPost('/api/relics/unequip', { category }),
@@ -75,6 +78,7 @@ export const Endpoints = {
   notificationsSeenOne: (id) => apiPost('/api/notifications/seen/' + id),
   content: () => apiGet('/api/content/all'),
   rankTiers: () => apiGet('/api/rank/tiers'),
+  leaderboard: () => apiGet('/api/leaderboard'),
   games: () => apiGet('/api/games'),
   starsInvoice: (itemId) => apiPost('/api/stars/invoice', { itemId }),
 };

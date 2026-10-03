@@ -27,6 +27,7 @@ export const DEFAULTS = {
   terrain_hills:     JSON.stringify({ sort: 40, bloom: 30, lanes: 30 }),
   terrain_swamp:     JSON.stringify({ hands: 40, bid: 30, masks: 30 }),
   kiva_max_messages: 500, kiva_message_max_length: 280,
+  kiva_pin_cost_stars: 50, kiva_pin_max: 3,
   perf_benchmark_enabled: 1, perf_default_tier: 'balanced',
 };
 

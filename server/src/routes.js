@@ -135,7 +135,8 @@ router.get('/kiva', rateLimit('kiva', 240), wrap(async (req) => {
   if (!u.tribe_id) throw new Error('no tribe');
   const since = Number(req.query.since) || 0;
   const rows = since ? await Kiva.listMessages(u.tribe_id, since, 50) : await Kiva.latestMessages(u.tribe_id, 50);
-  return { messages: rows, tribe_id: u.tribe_id };
+  const pinned = since ? undefined : await Kiva.pinnedMessages(u.tribe_id);
+  return { messages: rows, pinned, tribe_id: u.tribe_id };
 }));
 router.post('/kiva', rateLimit('kiva', 40), wrap(async (req) => {
   const u = req.user;
@@ -149,6 +150,23 @@ router.post('/kiva/read', rateLimit('kiva', 240), wrap(async (req) => {
   if (!req.user.tribe_id) return { ok: true };
   await Kiva.markRead(req.user.tribe_id, req.user.id, Number(req.body?.lastSeenId) || 0);
   return { ok: true };
+}));
+router.post('/kiva/react', rateLimit('kiva', 120), wrap(async (req) => {
+  const u = req.user;
+  if (!u.tribe_id) throw new Error('no tribe');
+  return await Kiva.toggleReaction(
+    u.tribe_id, u.id, Number(req.body?.messageId || 0), String(req.body?.emojiKey || '')
+  );
+}));
+router.post('/kiva/pin', rateLimit('kiva', 40), wrap(async (req) => {
+  const u = req.user;
+  if (!u.tribe_id) throw new Error('no tribe');
+  return await Kiva.pinMessage(u.tribe_id, u.id, Number(req.body?.messageId || 0));
+}));
+router.post('/kiva/unpin', rateLimit('kiva', 40), wrap(async (req) => {
+  const u = req.user;
+  if (!u.tribe_id) throw new Error('no tribe');
+  return await Kiva.unpinMessage(u.tribe_id, Number(req.body?.messageId || 0));
 }));
 
 router.get('/relics/state', rateLimit('relics', 60), wrap(async (req) => await Relics.stateFor(req.user.id)));
@@ -191,6 +209,54 @@ router.get('/content/all', rateLimit('content', 60), wrap(async () => {
 router.get('/rank/tiers', rateLimit('rank', 60), wrap(async () => {
   const rows = (await q('SELECT * FROM rank_tiers WHERE active=true ORDER BY sort_order')).rows;
   return { tiers: rows };
+}));
+
+// Live leaderboard — top real players by rank rating, plus the caller's own
+// standing (rank position among all real players). Forgotten bots (negative ids)
+// and guests are excluded so the board shows only real humans.
+router.get('/leaderboard', rateLimit('rank', 120), wrap(async (req) => {
+  const u = req.user;
+  const top = (await q(
+    `SELECT id, first_name, username, name_color, rank_rating, rank_wins, rank_games, tribe_id
+     FROM users
+     WHERE id > 0 AND banned=false AND COALESCE(is_guest,false)=false
+     ORDER BY rank_rating DESC, rank_wins DESC, id ASC
+     LIMIT 50`
+  )).rows;
+  const me = (await q(
+    `SELECT rank_rating, rank_wins, rank_games FROM users WHERE id=$1`, [u.id]
+  )).rows[0] || {};
+  const higher = (await q(
+    `SELECT count(*)::int AS n FROM users
+     WHERE id > 0 AND banned=false AND COALESCE(is_guest,false)=false
+     AND (rank_rating > $1 OR (rank_rating = $1 AND rank_wins > $2))`,
+    [me.rank_rating || 1000, me.rank_wins || 0]
+  )).rows[0];
+  const total = (await q(
+    `SELECT count(*)::int AS n FROM users
+     WHERE id > 0 AND banned=false AND COALESCE(is_guest,false)=false`
+  )).rows[0];
+  const withTier = [];
+  for (const r of top) {
+    const tier = await getTierFor(r.rank_rating);
+    withTier.push({
+      id: r.id, name: r.first_name || r.username || 'Kin',
+      name_color: r.name_color, rank_rating: r.rank_rating,
+      wins: r.rank_wins, games: r.rank_games,
+      tier: tier ? { title: tier.title, emoji: tier.emoji, color_hex: tier.color_hex } : null,
+      me: Number(r.id) === Number(u.id),
+    });
+  }
+  return {
+    top: withTier,
+    me: {
+      rank: (higher?.n || 0) + 1,
+      total: total?.n || withTier.length,
+      rank_rating: me.rank_rating || 1000,
+      wins: me.rank_wins || 0,
+      games: me.rank_games || 0,
+    },
+  };
 }));
 
 // Game defs
