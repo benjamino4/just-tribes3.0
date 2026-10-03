@@ -1,8 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════
-// FILE: web/vite.config.js
-// PURPOSE: Vite config. Outputs to server/public. Proxy /api in dev.
-// DEPENDS ON: nothing
-// ═══════════════════════════════════════════════════════════════════
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';

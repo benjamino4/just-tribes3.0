@@ -4,15 +4,43 @@ import { haptic } from '../lib/haptics.js';
 import ForgottenRune from './ForgottenRune.jsx';
 
 const GAMES = {
-  rune_match: { name: 'Rune Match', engine: 'match3' },
-  stone_stack: { name: 'Stone Stack', engine: 'stacker' },
-  fireflies: { name: 'Fireflies', engine: 'catch' },
-  ember_reflex: { name: 'Ember Reflex', engine: 'reaction' },
-  rite_of_hands: { name: 'Rite of Hands', engine: 'choice' },
-  three_masks: { name: 'Three Masks', engine: 'deduction' },
+  rune_match: { name: 'Rune Match', engine: 'match3', timed: true },
+  stone_stack: { name: 'Stone Stack', engine: 'stacker', timed: true },
+  fireflies: { name: 'Fireflies', engine: 'catch', timed: true },
+  ember_reflex: { name: 'Ember Reflex', engine: 'reaction', timed: false },
+  rite_of_hands: { name: 'Rite of Hands', engine: 'choice', timed: false },
+  three_masks: { name: 'Three Masks', engine: 'deduction', timed: false },
 };
 
-function Match3Game({ onDone }) {
+const clamp = (v, lo = 0, hi = 100) => Math.max(lo, Math.min(hi, v));
+
+// Single source of truth: turn any engine's raw payload into a 0–100 score so the
+// player and the AI are always compared on the same scale.
+export function normFromPayload(p = {}) {
+  switch (p.archetype) {
+    case 'match3': return clamp(Math.round((p.score || 0) / 5));
+    case 'stacker': return clamp((p.height || 0) * 5 + (p.perfects || 0) * 5);
+    case 'catch': return clamp((p.caught || 0) * 5);
+    case 'reaction': {
+      const t = p.times || [];
+      const avg = t.length ? t.reduce((a, b) => a + b, 0) / t.length : 1000;
+      return clamp(Math.round((600 - avg) / 4));
+    }
+    case 'choice': {
+      const w = p.wins || 0, l = p.losses || 0;
+      return Math.round((w * 100) / Math.max(1, w + l));
+    }
+    case 'deduction': {
+      const w = p.rounds_won || 0, l = p.rounds_lost || 0;
+      return Math.round((w * 100) / Math.max(1, w + l));
+    }
+    default: return 0;
+  }
+}
+
+/* ---------------------------------------------------------------- Engines */
+
+function Match3Game({ onDone, report }) {
   const [board, setBoard] = useState(() => {
     const b = [];
     for (let i = 0; i < 42; i++) b.push(Math.floor(Math.random() * 6));
@@ -21,6 +49,8 @@ function Match3Game({ onDone }) {
   const [score, setScore] = useState(0);
   const [selected, setSelected] = useState(null);
   const RUNES = ['🔥', '🌙', '⚔️', '🦴', '💎', '🌿'];
+
+  useEffect(() => { report(clamp(Math.round(score / 5))); }, [score]);
 
   function tap(i) {
     haptic('light');
@@ -62,14 +92,10 @@ function Match3Game({ onDone }) {
   useEffect(() => {
     const t = setTimeout(() => onDone({ score, archetype: 'match3' }), 30000);
     return () => clearTimeout(t);
-  }, []);
+  }, [score]);
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span className="tiny">Best: —</span>
-        <b className="tabular" style={{ fontSize: 24, color: 'var(--ember-300)' }}>{score}</b>
-      </div>
       <div style={{
         display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', gap: 4,
         padding: 12, background: 'rgba(6,5,8,0.5)', borderRadius: 16
@@ -94,12 +120,14 @@ function Match3Game({ onDone }) {
   );
 }
 
-function StackerGame({ onDone }) {
+function StackerGame({ onDone, report }) {
   const [height, setHeight] = useState(0);
   const [perfects, setPerfects] = useState(0);
   const [pos, setPos] = useState(0);
   const [dir, setDir] = useState(1);
   const [speed, setSpeed] = useState(3);
+
+  useEffect(() => { report(clamp(height * 5 + perfects * 5)); }, [height, perfects]);
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -115,10 +143,7 @@ function StackerGame({ onDone }) {
   function drop() {
     haptic('medium');
     const accuracy = 100 - Math.abs(pos - 50) * 2;
-    if (accuracy > 90) {
-      setPerfects((p) => p + 1);
-      haptic('success');
-    }
+    if (accuracy > 90) { setPerfects((p) => p + 1); haptic('success'); }
     setHeight((h) => h + 1);
     setSpeed((s) => Math.min(10, s + 0.3));
   }
@@ -126,14 +151,10 @@ function StackerGame({ onDone }) {
   useEffect(() => {
     const t = setTimeout(() => onDone({ height, perfects, archetype: 'stacker' }), 30000);
     return () => clearTimeout(t);
-  }, []);
+  }, [height, perfects]);
 
   return (
     <div style={{ padding: 16, textAlign: 'center' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span className="tiny">Perfects: {perfects}</span>
-        <b className="tabular" style={{ fontSize: 24, color: 'var(--ember-300)' }}>{height}</b>
-      </div>
       <div style={{
         height: 300, background: 'rgba(6,5,8,0.5)', borderRadius: 16,
         position: 'relative', overflow: 'hidden'
@@ -159,7 +180,7 @@ function StackerGame({ onDone }) {
   );
 }
 
-function CatchGame({ onDone }) {
+function CatchGame({ onDone, report }) {
   const [flies, setFlies] = useState(() =>
     Array.from({ length: 5 }, () => ({
       id: Math.random(), x: Math.random() * 100, y: Math.random() * 100,
@@ -167,6 +188,8 @@ function CatchGame({ onDone }) {
     }))
   );
   const [caught, setCaught] = useState(0);
+
+  useEffect(() => { report(clamp(caught * 5)); }, [caught]);
 
   useEffect(() => {
     const iv = setInterval(() => {
@@ -190,14 +213,10 @@ function CatchGame({ onDone }) {
   useEffect(() => {
     const t = setTimeout(() => onDone({ caught, missed: 0, archetype: 'catch' }), 30000);
     return () => clearTimeout(t);
-  }, []);
+  }, [caught]);
 
   return (
     <div style={{ padding: 16 }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span className="tiny">Catch them all</span>
-        <b className="tabular" style={{ fontSize: 24, color: 'var(--ember-300)' }}>{caught}</b>
-      </div>
       <div style={{
         height: 340, background: 'radial-gradient(circle at 50% 100%, #1a2418, #05080d)',
         borderRadius: 16, position: 'relative', overflow: 'hidden'
@@ -221,12 +240,17 @@ function CatchGame({ onDone }) {
   );
 }
 
-function ReactionGame({ onDone }) {
+function ReactionGame({ onDone, report }) {
   const [phase, setPhase] = useState('idle');
   const [times, setTimes] = useState([]);
   const [round, setRound] = useState(0);
   const liveAt = useRef(0);
   const timer = useRef(0);
+
+  useEffect(() => {
+    const avg = times.length ? times.reduce((a, b) => a + b, 0) / times.length : 1000;
+    report(times.length ? clamp(Math.round((600 - avg) / 4)) : 0);
+  }, [times]);
 
   function start() {
     setPhase('wait');
@@ -254,19 +278,14 @@ function ReactionGame({ onDone }) {
   }
 
   useEffect(() => {
-    if (round >= 5) {
-      setTimeout(() => onDone({ times, archetype: 'reaction' }), 400);
-    }
+    if (round >= 5) setTimeout(() => onDone({ times, archetype: 'reaction' }), 400);
   }, [round]);
 
   const avg = times.length ? Math.round(times.reduce((a, b) => a + b, 0) / times.length) : 0;
 
   return (
     <div style={{ padding: 16, textAlign: 'center' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span className="tiny">Round {round}/5</span>
-        <b className="tabular" style={{ fontSize: 24, color: 'var(--ember-300)' }}>{avg}ms</b>
-      </div>
+      <div className="tiny" style={{ marginBottom: 10 }}>Round {round}/5 · avg {avg}ms</div>
       <button
         onClick={tap}
         style={{
@@ -287,12 +306,14 @@ function ReactionGame({ onDone }) {
   );
 }
 
-function ChoiceGame({ onDone }) {
+function ChoiceGame({ onDone, report }) {
   const [pw, setPw] = useState(0);
   const [bw, setBw] = useState(0);
   const [reveal, setReveal] = useState(null);
   const [history, setHistory] = useState([]);
   const THROWS = ['✊', '✋', '✌️'];
+
+  useEffect(() => { report(Math.round((pw * 100) / Math.max(1, pw + bw))); }, [pw, bw]);
 
   function play(idx) {
     if (reveal) return;
@@ -316,11 +337,6 @@ function ChoiceGame({ onDone }) {
 
   return (
     <div style={{ padding: 16, textAlign: 'center' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span className="tiny">You {pw}</span>
-        <b className="tabular" style={{ fontSize: 24 }}>vs</b>
-        <span className="tiny">{bw} Them</span>
-      </div>
       <div style={{ display: 'flex', gap: 6, justifyContent: 'center', marginBottom: 20, opacity: 0.5 }}>
         {history.map((h, i) => <span key={i} style={{ fontSize: 18 }}>{THROWS[h]}</span>)}
       </div>
@@ -340,13 +356,15 @@ function ChoiceGame({ onDone }) {
   );
 }
 
-function DeductionGame({ onDone }) {
+function DeductionGame({ onDone, report }) {
   const [round, setRound] = useState(1);
   const [wins, setWins] = useState(0);
   const [losses, setLosses] = useState(0);
   const [reveal, setReveal] = useState(null);
   const MASKS = ['war', 'trick', 'guard'];
   const RESPONSES = ['attack', 'wait', 'flee'];
+
+  useEffect(() => { report(Math.round((wins * 100) / Math.max(1, wins + losses))); }, [wins, losses]);
 
   function resolve(mask, response) {
     if (mask === 'war') return response === 'attack' ? 'win' : response === 'wait' ? 'lose' : 'tie';
@@ -365,20 +383,14 @@ function DeductionGame({ onDone }) {
     setTimeout(() => {
       setReveal(null);
       setWins(nw); setLosses(nl);
-      if (round >= 3) {
-        onDone({ rounds_won: nw, rounds_lost: nl, archetype: 'deduction' });
-      } else {
-        setRound(round + 1);
-      }
+      if (round >= 3) onDone({ rounds_won: nw, rounds_lost: nl, archetype: 'deduction' });
+      else setRound(round + 1);
     }, 900);
   }
 
   return (
     <div style={{ padding: 16, textAlign: 'center' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 12 }}>
-        <span className="tiny">Round {round}/3</span>
-        <b>You {wins} — {losses} Them</b>
-      </div>
+      <div className="tiny" style={{ marginBottom: 10 }}>Round {round}/3</div>
       <div style={{
         width: 140, height: 180, margin: '20px auto',
         background: 'linear-gradient(180deg, #1a1010, #0a0608)',
@@ -411,9 +423,105 @@ const ENGINES = {
   deduction: DeductionGame,
 };
 
+/* ------------------------------------------------------------- Scoreboard */
+
+function VsScoreboard({ you, ai, aiName, forgotten, timed, endsIn }) {
+  const total = Math.max(1, you + ai);
+  const youPct = (you / total) * 100;
+  const leading = you > ai ? 'you' : ai > you ? 'ai' : 'tie';
+  return (
+    <div className="glass card" style={{ margin: '0 16px 4px', padding: '12px 14px' }}>
+      <div className="row between" style={{ marginBottom: 8 }}>
+        <div style={{ textAlign: 'left' }}>
+          <div className="tiny" style={{ color: 'var(--ember-300)', fontWeight: 800, letterSpacing: '.08em' }}>YOU</div>
+          <motion.b key={you} initial={{ scale: 1.25 }} animate={{ scale: 1 }}
+            className="tabular" style={{ fontSize: 30, color: 'var(--ember-200)', display: 'block', lineHeight: 1 }}>
+            {you}
+          </motion.b>
+        </div>
+        <div style={{ textAlign: 'center' }}>
+          <span className="chip" style={{
+            fontSize: 10,
+            color: leading === 'you' ? 'var(--jade-300)' : leading === 'ai' ? '#ff9b9b' : 'var(--slate-300)'
+          }}>
+            {leading === 'you' ? 'LEADING' : leading === 'ai' ? 'BEHIND' : 'EVEN'}
+          </span>
+        </div>
+        <div style={{ textAlign: 'right' }}>
+          <div className="tiny" style={{ color: '#c9b0ff', fontWeight: 800, letterSpacing: '.08em' }}>
+            {(aiName || 'AI').toUpperCase()}{forgotten && <ForgottenRune />}
+          </div>
+          <motion.b key={ai} initial={{ scale: 1.15 }} animate={{ scale: 1 }}
+            className="tabular" style={{ fontSize: 30, color: '#c9b0ff', display: 'block', lineHeight: 1 }}>
+            {ai}
+          </motion.b>
+        </div>
+      </div>
+      <div style={{ display: 'flex', height: 12, borderRadius: 999, overflow: 'hidden', background: 'rgba(6,5,8,0.6)' }}>
+        <motion.div animate={{ width: youPct + '%' }} transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+          style={{ background: 'linear-gradient(90deg,#8f3402,#f7a259)' }} />
+        <motion.div animate={{ width: (100 - youPct) + '%' }} transition={{ type: 'spring', stiffness: 120, damping: 20 }}
+          style={{ background: 'linear-gradient(90deg,#8b5cf6,#4c1d95)' }} />
+      </div>
+      {timed && (
+        <div style={{ marginTop: 8, height: 4, borderRadius: 999, background: 'rgba(255,255,255,0.08)', overflow: 'hidden' }}>
+          <motion.div animate={{ width: Math.max(0, endsIn) + '%' }} transition={{ ease: 'linear', duration: 0.2 }}
+            style={{ height: '100%', background: 'var(--ember-400)' }} />
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------------------------------------------------------- Host */
+
 export default function GameHost({ game, opponent, onDone, onExit, mode = 'duel' }) {
-  const meta = GAMES[game] || { name: game, engine: 'reaction' };
+  const meta = GAMES[game] || { name: game, engine: 'reaction', timed: false };
   const Engine = ENGINES[meta.engine] || ReactionGame;
+  const durationMs = meta.timed ? 30000 : (meta.engine === 'reaction' ? 18000 : 14000);
+
+  // AI target reached this match (server-authoritative). Fallback keeps offline/
+  // legacy flows playable.
+  const target = Number.isFinite(Number(opponent?.target_score))
+    ? Math.max(0, Math.min(100, Number(opponent.target_score)))
+    : 45 + Math.round(Math.random() * 25);
+
+  const [you, setYou] = useState(0);
+  const [ai, setAi] = useState(0);
+  const [timePct, setTimePct] = useState(100);
+  const youRef = useRef(0);
+  const report = (v) => { youRef.current = v; setYou(v); };
+
+  // Animate the AI "ghost" toward its target so the player watches the race live.
+  useEffect(() => {
+    const start = Date.now();
+    const id = setInterval(() => {
+      const t = Math.min(1, (Date.now() - start) / durationMs);
+      const eased = t * t * (3 - 2 * t);
+      if (t >= 1) {
+        setAi(target);
+        setTimePct(0);
+        clearInterval(id);
+        return;
+      }
+      const jitter = (Math.random() - 0.5) * 4;
+      setAi(Math.max(0, Math.min(target, Math.round(eased * target + jitter))));
+      if (meta.timed) setTimePct(Math.max(0, 100 - t * 100));
+    }, 150);
+    return () => clearInterval(id);
+  }, []);
+
+  function handleDone(payload) {
+    const youFinal = normFromPayload(payload);
+    setYou(youFinal);
+    setAi(target);
+    onDone({
+      ...payload,
+      score: youFinal,
+      opponent_score: target,
+      opponent_rating: opponent?.rank_rating
+    });
+  }
 
   return (
     <div style={{
@@ -431,13 +539,16 @@ export default function GameHost({ game, opponent, onDone, onExit, mode = 'duel'
           color: 'var(--slate-100)'
         }}>←</button>
         <h1 className="display" style={{ fontSize: 18 }}>{meta.name}</h1>
-        <span className="chip" style={{ fontSize: 11 }}>
-          {opponent?.name || 'Opponent'}
-          {opponent?.forgotten && <ForgottenRune />}
-        </span>
+        <span className="chip" style={{ fontSize: 11 }}>{mode === 'war' ? 'War' : 'Ranked'}</span>
       </header>
+      <VsScoreboard
+        you={you} ai={ai}
+        aiName={opponent?.name}
+        forgotten={opponent?.forgotten}
+        timed={meta.timed} endsIn={timePct}
+      />
       <div style={{ flex: 1, overflow: 'auto' }}>
-        <Engine onDone={onDone} />
+        <Engine onDone={handleDone} report={report} />
       </div>
     </div>
   );

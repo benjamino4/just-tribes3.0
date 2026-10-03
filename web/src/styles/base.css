@@ -1,72 +1,25 @@
-/* ═══════════════════════════════════════════════════════════════════
-FILE: web/src/styles/base.css
-PURPOSE: Reset. Layout skeleton. World ambient background.
-DEPENDS ON: tokens.css
-═══════════════════════════════════════════════════════════════════ */
 *, *::before, *::after { box-sizing: border-box; }
 * { -webkit-tap-highlight-color: transparent; }
 html, body, #root { height: 100%; }
-
 body {
   margin: 0;
   font-family: var(--font-ui);
   color: var(--ink);
-  background: var(--midnight-1);
+  background: var(--bg-0);
   overflow: hidden;
   overscroll-behavior: none;
   -webkit-font-smoothing: antialiased;
 }
-
 button { font-family: inherit; color: inherit; cursor: pointer; border: 0; background: none; padding: 0; }
 input, textarea { font-family: inherit; }
 h1, h2, h3, h4 { margin: 0; font-weight: 800; letter-spacing: -0.022em; }
 p { margin: 0; }
 
-.world {
-  position: fixed; inset: 0; z-index: 0; pointer-events: none; overflow: hidden;
-  background: radial-gradient(120% 80% at 50% 0%, #141c2a 0%, #0a1018 45%, var(--midnight-1) 100%);
-  transition: background 400ms ease;
-}
-.world[data-war="1"] {
-  background: radial-gradient(120% 80% at 50% 0%, #2a1010 0%, #140808 45%, var(--midnight-1) 100%);
-}
-.world .aurora {
-  position: absolute; inset: -25% -15% auto; height: 80%;
-  background:
-    radial-gradient(42% 58% at 22% 32%, rgba(126,163,196,0.14), transparent 62%),
-    radial-gradient(48% 52% at 82% 22%, rgba(127,201,167,0.10), transparent 64%);
-  filter: blur(48px) saturate(120%);
-  animation: auroraDrift 22s var(--ease-soft) infinite alternate;
-}
-.world .heat {
-  position: absolute; inset: auto 0 -14%; height: 52%;
-  background: radial-gradient(60% 120% at 50% 100%, rgba(232,133,58,0.10), transparent 72%);
-  filter: blur(14px);
-  animation: heat 7s var(--ease-soft) infinite alternate;
-}
-.world .ash {
-  position: absolute; inset: 0;
-  background-image:
-    radial-gradient(circle at 20% 30%, rgba(200,212,224,0.04) 0%, transparent 22%),
-    radial-gradient(circle at 68% 62%, rgba(200,212,224,0.03) 0%, transparent 18%);
-  animation: ashDrift 40s linear infinite;
-}
-.world .vig {
-  position: absolute; inset: 0;
-  background: radial-gradient(80% 60% at 50% 40%, transparent 0%, rgba(0,0,0,0.20) 60%, rgba(0,0,0,0.60) 100%);
-}
-@keyframes auroraDrift { 0% { transform: translate3d(-4%, -2%, 0) scale(1.06); } 100% { transform: translate3d(5%, 3%, 0) scale(1.16); } }
-@keyframes heat { 0% { opacity: 0.65; transform: translateY(6px); } 100% { opacity: 1; transform: translateY(-6px); } }
-@keyframes ashDrift { 0%, 100% { transform: translate3d(0, 0, 0); } 50% { transform: translate3d(-2%, -3%, 0); } }
-
-:root[data-fx="reduced"] .world .aurora,
-:root[data-fx="reduced"] .world .heat,
-:root[data-fx="reduced"] .world .ash { animation: none !important; }
-
 .app-frame {
   position: relative; z-index: 1;
   height: 100%; max-width: var(--maxw); margin: 0 auto;
   display: flex; flex-direction: column;
+  background: radial-gradient(120% 80% at 50% 0%, #191424 0%, #0d0a13 45%, var(--bg-0) 100%);
 }
 .scroller {
   flex: 1; overflow-y: auto; overflow-x: hidden; -webkit-overflow-scrolling: touch;
@@ -78,14 +31,17 @@ p { margin: 0; }
 .row { display: flex; align-items: center; gap: 10px; }
 .col { display: flex; flex-direction: column; }
 .between { justify-content: space-between; }
-.center { align-items: center; justify-content: center; }
 .grow { flex: 1; min-width: 0; }
 .tiny { font-size: 12px; color: var(--ink-dim); }
 .muted { color: var(--ink-dim); }
 .tabular { font-variant-numeric: tabular-nums; }
 .display { font-family: var(--font-display); letter-spacing: 0.01em; }
-.mono { font-family: var(--font-mono); }
 
 .sec-h { display: flex; align-items: baseline; gap: 10px; margin: 26px 2px 12px; }
 .sec-h h3 { font-size: 13.5px; letter-spacing: 0.14em; text-transform: uppercase; color: var(--slate-200); font-weight: 800; }
+.sec-h h3::before {
+  content: ''; display: inline-block; width: 3px; height: 3px;
+  border-radius: 50%; background: var(--gold-300); margin-right: 8px;
+  vertical-align: middle; transform: translateY(-2px);
+}
 .sec-h .line { flex: 1; height: 1px; background: linear-gradient(90deg, var(--glass-brd), transparent 70%); }

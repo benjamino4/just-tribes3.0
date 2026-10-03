@@ -1,9 +1,0 @@
-/* ═══════════════════════════════════════════════════════════════════
-FILE: web/src/styles/war/_transition.css
-PURPOSE: War transitions and the pull sequence.
-DEPENDS ON: tokens.css
-═══════════════════════════════════════════════════════════════════ */
-:root[data-war-pull="1"] .world {
-  background: radial-gradient(120% 80% at 50% 0%, #2a1010 0%, #140808 45%, var(--midnight-1) 100%) !important;
-  transition: background 400ms ease;
-}

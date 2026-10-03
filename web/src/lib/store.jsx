@@ -1,8 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════
-// FILE: web/src/lib/store.jsx
-// PURPOSE: Global app state. Loads /api/state once. Exposes reload.
-// DEPENDS ON: api.js
-// ═══════════════════════════════════════════════════════════════════
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import { Endpoints, ApiError } from './api.js';
 

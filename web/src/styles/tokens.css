@@ -1,24 +1,16 @@
-/* ═══════════════════════════════════════════════════════════════════
-FILE: web/src/styles/tokens.css
-PURPOSE: The Midnight Fire palette. Scientifically calming.
-DEPENDS ON: nothing
-═══════════════════════════════════════════════════════════════════ */
 :root {
-  /* Midnight — base backgrounds */
   --midnight-0: #0a0e14;
   --midnight-1: #0f141c;
   --midnight-2: #161c26;
   --midnight-3: #1e242e;
   --midnight-4: #262c38;
 
-  /* Slate — structure, text */
   --slate-50:  #e8eef5;
   --slate-100: #c9d4e0;
   --slate-200: #8e9aaa;
   --slate-300: #5a6675;
   --slate-400: #3a4452;
 
-  /* Ember — precious, focal only */
   --ember-50:  #ffe7c2;
   --ember-100: #ffc78a;
   --ember-200: #f7a259;
@@ -26,91 +18,61 @@ DEPENDS ON: nothing
   --ember-400: #d46f2c;
   --ember-500: #a85420;
 
-  /* Jade — success */
-  --jade-100: #b8e0cd;
-  --jade-200: #7fc9a7;
-  --jade-300: #55a882;
-  --jade-400: #3a7c5e;
+  --jade-100:  #b8e0cd;
+  --jade-200:  #7fc9a7;
+  --jade-300:  #55a882;
+  --jade-400:  #3a7c5e;
 
-  /* Lapis — info */
   --lapis-100: #b8ccdd;
   --lapis-200: #7ea3c4;
   --lapis-300: #5a7fa5;
   --lapis-400: #3f5c78;
 
-  /* Amber — warn */
   --amber-100: #f4d9a0;
   --amber-200: #e0b46a;
   --amber-300: #c49040;
 
-  /* Rose — danger, muted */
-  --rose-100: #e8b5b5;
-  --rose-200: #c98282;
-  --rose-300: #a05858;
+  --rose-100:  #e8b5b5;
+  --rose-200:  #c98282;
+  --rose-300:  #a05858;
 
-  /* Semantic */
-  --ink: var(--slate-100);
-  --ink-dim: var(--slate-200);
-  --ink-faint: var(--slate-300);
-  --good: var(--jade-200);
-  --bad: var(--rose-200);
-  --info: var(--lapis-200);
-  --warn: var(--amber-200);
+  --gold-300:  #f7a259;
+
+  --ink:       var(--slate-100);
+  --ink-dim:   var(--slate-200);
+  --ink-faint: var(--slate-400);
 
   --bg-0: var(--midnight-1);
   --bg-1: var(--midnight-2);
   --bg-2: var(--midnight-3);
-  --bg-3: var(--midnight-4);
 
-  /* Legacy aliases (map old names to new) */
-  --ember-400-old: #ff8324;
-  --gold-300: var(--ember-100);
-  --gold-400: var(--ember-200);
-  --bone-50: var(--slate-50);
-  --bone-100: var(--slate-100);
-  --bone-200: var(--slate-200);
-  --bone-300: var(--slate-300);
-  --bone-400: var(--slate-400);
+  --glass-bg:        rgba(22, 28, 38, 0.62);
+  --glass-bg-strong: rgba(15, 20, 28, 0.82);
+  --glass-bg-hero:   rgba(30, 36, 46, 0.66);
+  --glass-brd:       rgba(201, 212, 224, 0.14);
+  --glass-hi:        rgba(232, 238, 245, 0.14);
+  --glass-blur:      22px;
 
-  /* Glass */
-  --glass-bg: rgba(22, 28, 38, 0.62);
-  --glass-bg-strong: rgba(15, 20, 28, 0.86);
-  --glass-bg-hero: rgba(28, 32, 42, 0.66);
-  --glass-bg-sunken: rgba(6, 10, 14, 0.72);
-  --glass-brd: rgba(142, 154, 170, 0.14);
-  --glass-hi: rgba(232, 238, 245, 0.14);
-  --glass-blur: 22px;
-
-  /* Shadows */
   --sh-1: 0 1px 2px rgba(0,0,0,0.55);
   --sh-2: 0 6px 22px rgba(0,0,0,0.55);
   --sh-3: 0 22px 60px rgba(0,0,0,0.65);
   --sh-ember: 0 12px 40px rgba(212, 111, 44, 0.28);
   --sh-inset-hi: inset 0 1px 0 var(--glass-hi);
 
-  /* Radius */
   --r-xs: 8px; --r-sm: 12px; --r-md: 18px; --r-lg: 26px;
   --r-xl: 34px; --r-2xl: 44px; --r-pill: 999px;
 
-  /* Easing */
   --ease-ember: cubic-bezier(0.34, 1.32, 0.56, 1);
-  --ease-soft: cubic-bezier(0.4, 0, 0.2, 1);
+  --ease-soft:  cubic-bezier(0.4, 0, 0.2, 1);
   --dur-1: 0.16s; --dur-2: 0.28s; --dur-3: 0.48s;
 
-  /* Layout */
   --safe-top: env(safe-area-inset-top, 0px);
   --safe-bot: env(safe-area-inset-bottom, 0px);
-  --tabbar-h: 72px; --topbar-h: 58px; --maxw: 520px;
+  --tabbar-h: 72px;
+  --topbar-h: 58px;
+  --maxw: 520px;
 
-  /* Fonts */
   --font-ui: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
-  --font-display: "Cinzel Decorative", "Trajan Pro", Georgia, serif;
+  --font-display: "Cinzel Decorative", Georgia, serif;
   --font-mono: "JetBrains Mono", "SF Mono", ui-monospace, monospace;
-}
-
-:root[data-perf="potato"], :root[data-perf="low"] {
-  --glass-blur: 0px;
-  --glass-bg: rgba(15, 20, 28, 0.94);
-  --glass-bg-strong: rgba(10, 14, 20, 0.96);
-  --sh-ember: 0 0 0 1px rgba(212, 111, 44, 0.24);
 }

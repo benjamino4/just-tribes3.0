@@ -1,8 +1,3 @@
-// ═══════════════════════════════════════════════════════════════════
-// FILE: web/src/components/TickerHost.jsx
-// PURPOSE: Live tribe feed. Ember chain. SSE-driven.
-// DEPENDS ON: EventProvider, store
-// ═══════════════════════════════════════════════════════════════════
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useEvents } from '../lib/EventProvider.jsx';
@@ -18,8 +13,7 @@ export default function TickerHost() {
     setEvents((e) => [...e.slice(-19), evt]);
   }), [subscribe]);
 
-  if (!data?.tribe) return null;
-  if (!events.length) return null;
+  if (!data?.tribe || !events.length) return null;
 
   return (
     <div className="ticker-host">
@@ -27,7 +21,7 @@ export default function TickerHost() {
         <AnimatePresence initial={false}>
           {events.map((evt) => (
             <motion.div
-              key={(evt.at || 0) + ':' + (evt.kind || '') + ':' + Math.random()}
+              key={evt.at + ':' + evt.kind}
               className="ticker-item"
               data-tone={evt.severity}
               initial={{ opacity: 0, x: 40 }}
