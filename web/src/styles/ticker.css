@@ -1,3 +1,8 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/ticker.css
+PURPOSE: Live feed chain of embers. Horizontal scrolling.
+DEPENDS ON: tokens.css
+═══════════════════════════════════════════════════════════════════ */
 .ticker-host {
   position: fixed;
   top: calc(var(--safe-top) + var(--topbar-h) + 6px);
@@ -28,12 +33,12 @@
   color: var(--slate-200);
   font-variant-numeric: tabular-nums;
 }
-.ticker-item[data-tone="success"] { border-color: rgba(85,168,130,0.5); }
-.ticker-item[data-tone="warn"] { border-color: rgba(196,144,64,0.5); }
-.ticker-item[data-tone="danger"] { border-color: rgba(160,88,88,0.5); }
-.ticker-item[data-tone="war"] { border-color: rgba(212,111,44,0.6); }
-.ticker-dot {
-  width: 6px; height: 6px; border-radius: 50%;
-  background: currentColor;
-  opacity: 0.7;
-}
+.ticker-item[data-tone="success"] { border-color: rgba(127,201,167,0.5); }
+.ticker-item[data-tone="warn"] { border-color: rgba(224,180,106,0.5); }
+.ticker-item[data-tone="danger"] { border-color: rgba(201,130,130,0.5); }
+.ticker-dot { width: 6px; height: 6px; border-radius: 50%; background: currentColor; opacity: 0.7; }
+.ticker-item[data-tone="success"] .ticker-dot { background: var(--jade-200); }
+.ticker-item[data-tone="warn"] .ticker-dot { background: var(--amber-200); }
+.ticker-item[data-tone="danger"] .ticker-dot { background: var(--rose-200); }
+.ticker-text { color: inherit; }
+:root[data-perf="potato"] .ticker-host { display: none; }

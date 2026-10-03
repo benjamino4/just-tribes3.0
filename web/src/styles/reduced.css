@@ -1,0 +1,15 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/reduced.css
+PURPOSE: Reduced-tier overrides. Kill motion but keep information.
+DEPENDS ON: tokens.css
+═══════════════════════════════════════════════════════════════════ */
+:root[data-fx="reduced"] *,
+:root[data-fx="reduced"] *::before,
+:root[data-fx="reduced"] *::after {
+  animation-duration: 0s !important;
+  animation-delay: 0s !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.01s !important;
+}
+:root[data-fx="reduced"] .living-fire canvas { image-rendering: pixelated; }
+:root[data-perf="potato"] .ticker-host { display: none; }

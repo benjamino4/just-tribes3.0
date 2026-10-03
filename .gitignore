@@ -1,0 +1,17 @@
+# ═══════════════════════════════════════════════════════════════════
+# FILE: .gitignore
+# PURPOSE: Prevent committing secrets, builds, dependencies.
+# DEPENDS ON: nothing
+# ═══════════════════════════════════════════════════════════════════
+node_modules/
+.env
+.env.*
+!.env.example
+dist/
+build/
+server/public/assets/
+*.log
+.DS_Store
+coverage/
+.vscode/
+.idea/

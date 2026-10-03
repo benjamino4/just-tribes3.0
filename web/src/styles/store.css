@@ -1,0 +1,6 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/store.css
+PURPOSE: Store card layout.
+DEPENDS ON: tokens.css
+═══════════════════════════════════════════════════════════════════ */
+/* Store card layout handled by shared .glass and .card primitives. */

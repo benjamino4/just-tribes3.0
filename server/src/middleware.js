@@ -1,3 +1,9 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/middleware.js
+// PURPOSE: Auth middleware. Per-key rate limiting. Ban check.
+//          Maintenance mode gate.
+// DEPENDS ON: auth.js, config.js
+// ═══════════════════════════════════════════════════════════════════
 import { resolveUser } from './auth.js';
 import { CFG } from './config.js';
 
@@ -24,11 +30,29 @@ setInterval(() => {
 export async function authMiddleware(req, res, next) {
   try {
     const r = await resolveUser(req);
-    if (!r) return res.status(401).json({ error: 'unauthorized' });
-    if (r.error === 'no_username') return res.status(401).json({ error: 'no_username' });
+    if (!r) {
+      return res.status(401).json({
+        error: 'unauthorized',
+        hint: 'Open this Mini App inside Telegram.',
+      });
+    }
+    if (r.error === 'no_username') {
+      return res.status(401).json({
+        error: 'no_username',
+        hint: 'Set a Telegram username to enter the tribes.',
+        deepLink: 'tg://settings',
+      });
+    }
     const u = r.user;
-    if (u.banned) return res.status(403).json({ error: 'banned', reason: u.ban_reason });
-    if (Number(CFG.maintenance) && req.method !== 'GET') return res.status(503).json({ error: 'maintenance' });
+    if (u.banned) {
+      return res.status(403).json({
+        error: 'banned',
+        reason: u.ban_reason || 'You were banished.',
+      });
+    }
+    if (Number(CFG.maintenance) && req.method !== 'GET') {
+      return res.status(503).json({ error: 'maintenance' });
+    }
     req.user = u;
     next();
   } catch (e) { next(e); }

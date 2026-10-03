@@ -1,4 +1,10 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/lib/haptics.js
+// PURPOSE: Telegram haptics wrapper. Throttled.
+// DEPENDS ON: nothing
+// ═══════════════════════════════════════════════════════════════════
 let last = 0;
+
 export function haptic(kind = 'light') {
   if (typeof window !== 'undefined' && window.__hapticsEnabled === false) return;
   const now = Date.now();

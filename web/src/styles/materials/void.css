@@ -1,0 +1,10 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/materials/void.css
+PURPOSE: Void material. Pure black. Death, reset.
+DEPENDS ON: tokens.css
+═══════════════════════════════════════════════════════════════════ */
+[data-material="void"] {
+  --mat-bg: linear-gradient(180deg, #0a0e14, #000);
+  --mat-border: rgba(142,154,170,0.08);
+  --mat-glow: rgba(126,163,196,0.12);
+}

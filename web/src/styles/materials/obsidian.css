@@ -1,0 +1,10 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/materials/obsidian.css
+PURPOSE: Obsidian material tokens. Cool, deep, glass.
+DEPENDS ON: tokens.css
+═══════════════════════════════════════════════════════════════════ */
+[data-material="obsidian"] {
+  --mat-bg: linear-gradient(180deg, #161c26, #0a0e14);
+  --mat-border: rgba(142,154,170,0.16);
+  --mat-glow: rgba(126,163,196,0.2);
+}

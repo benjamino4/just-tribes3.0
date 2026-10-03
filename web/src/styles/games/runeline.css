@@ -1,0 +1,24 @@
+/* ═══════════════════════════════════════════════════════════════════
+FILE: web/src/styles/games/runeline.css
+PURPOSE: Rune Line grid.
+DEPENDS ON: games/_frame.css
+═══════════════════════════════════════════════════════════════════ */
+.rune-line-hud { display: flex; justify-content: space-between; align-items: center; margin-bottom: 16px; }
+.rune-line-grid {
+  display: grid;
+  gap: 6px;
+  max-width: 320px;
+  width: 100%;
+  margin: 0 auto;
+}
+.rune-line-cell {
+  aspect-ratio: 1;
+  border-radius: 12px;
+  background: linear-gradient(180deg, rgba(30,36,46,0.7), rgba(15,20,28,0.9));
+  border: 1px solid var(--glass-brd);
+}
+.rune-line-cell[data-active="1"] {
+  background: radial-gradient(circle, var(--ember-200), var(--ember-400));
+  box-shadow: 0 0 20px rgba(232,133,58,0.6), inset 0 1px 0 rgba(255,231,194,.5);
+  border-color: var(--ember-100);
+}

@@ -1,16 +1,25 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: web/src/components/TabBar.jsx
+// PURPOSE: Four tabs. Hearth, Arena, Tribe, Vault.
+// DEPENDS ON: react-router, Icon, haptics
+// ═══════════════════════════════════════════════════════════════════
 import { NavLink, useLocation } from 'react-router-dom';
 import { motion } from 'framer-motion';
+import Icon from './Icon.jsx';
+import { useMotionConfig } from '../lib/motion.js';
 import { haptic } from '../lib/haptics.js';
 
 const TABS = [
-  { to: '/',       icon: '🔥', label: 'Hearth' },
-  { to: '/arena',  icon: '⚔️', label: 'Arena' },
-  { to: '/tribe',  icon: '🏛', label: 'Tribe' },
-  { to: '/vault',  icon: '💎', label: 'Vault' }
+  { to: '/',       icon: 'hearth', label: 'Hearth' },
+  { to: '/arena',  icon: 'swords', label: 'Arena' },
+  { to: '/tribe',  icon: 'tribe',  label: 'Tribe' },
+  { to: '/vault',  icon: 'relic',  label: 'Vault' }
 ];
 
 export default function TabBar() {
   const location = useLocation();
+  const M = useMotionConfig();
+
   return (
     <nav className="tabbar" aria-label="Primary">
       {TABS.map((t) => {
@@ -22,15 +31,19 @@ export default function TabBar() {
             className="tab"
             data-active={active}
             onClick={() => haptic('select')}
+            style={{ position: 'relative' }}
           >
             {active && (
               <motion.span
                 layoutId="tab-pill"
                 className="tab-pill"
-                transition={{ type: 'spring', stiffness: 320, damping: 30 }}
+                style={{ left: 6, right: 6 }}
+                transition={M.buoyant}
               />
             )}
-            <span className="tab-icon-wrap">{t.icon}</span>
+            <span className="tab-icon-wrap">
+              <Icon name={t.icon} size={22} className="glyph" />
+            </span>
             <span className="tab-label">{t.label}</span>
           </NavLink>
         );

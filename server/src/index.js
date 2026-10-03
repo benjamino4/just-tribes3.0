@@ -1,3 +1,8 @@
+// ═══════════════════════════════════════════════════════════════════
+// FILE: server/src/index.js
+// PURPOSE: Express app. Boot. SSE endpoints. Static hosting. Cron.
+// DEPENDS ON: everything
+// ═══════════════════════════════════════════════════════════════════
 import './env.js';
 import express from 'express';
 import path from 'path';
@@ -5,24 +10,26 @@ import { fileURLToPath } from 'url';
 import { initDb, pool, q } from './db.js';
 import { loadConfig, CFG } from './config.js';
 import { router } from './routes.js';
+import { emojiRouter } from './routes/emoji.js';
+import { contentRouter } from './routes/content.js';
 import { kivaSse } from './kiva.js';
 import { adminBotWebhook, setupAdminBot } from './admin_bot.js';
+import { startFlusher, flushQueue } from './push.js';
 import { warTick } from './war.js';
 import { subscribe as eventSubscribe } from './events.js';
 import { verifyInitData } from './auth.js';
-import { recalcAllSeats, decayInactiveRanks, seedRankTiers } from './rank.js';
-import * as Forgotten from './forgotten.js';
-import { initLive } from './live.js';
-import { handleWebhook as handleStarsWebhook } from './stars.js';
+import { recalcAllSeats, decayInactiveRanks } from './rank.js';
+import { ensureWorldPopulation } from './forgotten.js';
+import { runSelfEditWatcher } from './admin_edit.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC = path.join(__dirname, '..', 'public');
-
 const app = express();
 app.disable('x-powered-by');
 
-/* SSE */
+// SSE endpoints
 app.get('/api/kiva/stream', (req, res) => kivaSse(req, res));
+
 app.get('/api/events/stream', (req, res) => {
   const initData = req.query.initData || '';
   const u = verifyInitData(initData);
@@ -33,7 +40,7 @@ app.get('/api/events/stream', (req, res) => {
     'Connection': 'keep-alive',
     'X-Accel-Buffering': 'no'
   });
-  res.write('retry: 5000\n');
+  res.write('retry: 5000\n\n');
   eventSubscribe(u.id, res);
 });
 
@@ -47,13 +54,14 @@ app.get('/api/health', async (req, res) => {
     ok: true, db,
     bot: !!process.env.BOT_TOKEN,
     admin: !!process.env.ADMIN_BOT_TOKEN && !!process.env.ADMIN_WEBHOOK_SECRET,
+    ton: !!process.env.TON_RECEIVE_ADDRESS,
+    pyscore: !!process.env.PYSCORE_URL,
     maintenance: Number(CFG.maintenance) ? 1 : 0,
     version: '5.0',
     ts: Date.now()
   });
 });
 
-/* Cron */
 app.get('/api/cron/tick', async (req, res) => {
   const secret = process.env.CRON_SECRET || '';
   if (secret) {
@@ -62,9 +70,12 @@ app.get('/api/cron/tick', async (req, res) => {
   }
   const out = { ok: true, ts: Date.now() };
   try {
+    out.push = await flushQueue(60);
     out.war = await warTick();
+    await q("DELETE FROM push_queue WHERE sent_at IS NOT NULL AND sent_at < now() - interval '7 days'");
     await q("DELETE FROM live_feed WHERE created_at < now() - interval '30 days'");
     await q("DELETE FROM notifications WHERE seen_at IS NOT NULL AND seen_at < now() - interval '30 days'");
+    await q("UPDATE users SET last_seen_at = now() WHERE last_seen_at < now() - interval '10 minutes' AND id IN (SELECT user_id FROM notifications WHERE created_at > now() - interval '15 minutes')");
   } catch (e) { out.error = e.message; }
   res.json(out);
 });
@@ -80,17 +91,6 @@ app.get('/api/cron/seats', async (req, res) => {
   res.json({ ok: true });
 });
 
-app.get('/api/cron/populate', async (req, res) => {
-  const secret = process.env.CRON_SECRET || '';
-  if (secret) {
-    const t = req.get('X-Cron-Secret') || req.query.secret || '';
-    if (t !== secret) return res.status(401).json({ error: 'unauthorized' });
-  }
-  const created = await Forgotten.ensurePopulation(40);
-  res.json({ ok: true, created });
-});
-
-/* Telegram webhooks */
 function checkTgSecret(req, secretEnv) {
   const secret = process.env[secretEnv] || '';
   if (!secret) return false;
@@ -100,8 +100,10 @@ function checkTgSecret(req, secretEnv) {
 
 app.post('/api/tg/webhook', async (req, res) => {
   if (!checkTgSecret(req, 'TG_WEBHOOK_SECRET')) return res.status(401).end();
-  try { await handleStarsWebhook(req.body || {}); }
-  catch (e) { console.error('[webhook]', e.message); }
+  try {
+    const { handleWebhook } = await import('./stars.js');
+    await handleWebhook(req.body || {});
+  } catch (e) { console.error('[webhook]', e.message); }
   res.json({ ok: true });
 });
 
@@ -112,6 +114,8 @@ app.post('/api/admin/webhook', async (req, res) => {
   res.json({ ok: true });
 });
 
+app.use('/api/emoji', emojiRouter);
+app.use('/api/content', contentRouter);
 app.use('/api', router);
 
 app.get('/tonconnect-manifest.json', (req, res) => {
@@ -158,10 +162,10 @@ if (process.env.TRIBES_TEST !== '1') {
     try {
       console.log('[boot] starting');
       await initDb();
-      await loadConfig();
-      await seedRankTiers();
-      await initLive();
-      await Forgotten.ensurePopulation(40);
+      await loadConfig(q);
+      await ensureWorldPopulation(Number(CFG.forgotten_world_min) || 40);
+      startFlusher(Number(process.env.PUSH_FLUSH_SECONDS) || 20);
+      runSelfEditWatcher();
       console.log('[boot] ready');
     } catch (e) { console.error('[boot] FAILED:', e.message); }
     finally {
