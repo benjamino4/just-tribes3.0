@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
+    "build": "echo \"No build step required\"",
     "start": "node server/index.js",
     "bot": "node bot/index.js",
     "migrate": "node -e \"import('./server/db.js').then(m=>m.migrate())\""
