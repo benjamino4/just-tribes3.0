@@ -1,7 +1,10 @@
 import pg from 'pg';
 import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import 'dotenv/config';
 
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const { Pool } = pg;
 
 export const pool = new Pool({
@@ -14,7 +17,8 @@ export const pool = new Pool({
 });
 
 export async function migrate() {
-  const sql = fs.readFileSync('./schema.sql', 'utf8');
+  const schemaPath = path.join(__dirname, '..', 'schema.sql');
+  const sql = fs.readFileSync(schemaPath, 'utf8');
   await pool.query(sql);
   console.log('✓ Migration complete');
 }
