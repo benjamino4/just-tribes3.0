@@ -48,6 +48,7 @@ services:
       - { key: ADMIN_BOT_TOKEN, sync: false }
       - { key: ADMIN_TELEGRAM_ID, sync: false }
       - { key: BOT_TOKEN, sync: false }
+      - { key: MINI_APP_URL, sync: false }
       - { key: GROQ_API_KEY, sync: false }
       - { key: CEREBRAS_API_KEY, sync: false }
       - { key: GEMINI_API_KEY, sync: false }

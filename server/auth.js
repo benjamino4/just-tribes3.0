@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { q } from './db.js';
 
 export function verifyInitData(initData, botToken) {
   if (!initData || !botToken) return null;
@@ -30,10 +31,15 @@ export function verifyInitData(initData, botToken) {
   }
 }
 
-export function requireUser(req, res, next) {
+export async function requireUser(req, res, next) {
   const initData = req.headers['x-init-data'] || req.body?.initData;
   const user = verifyInitData(initData, process.env.BOT_TOKEN);
   if (!user?.id) return res.status(401).json({ error: 'unauthorized' });
+  // The admin can ban a user from the admin bot — blocked here app-wide.
+  try {
+    const { rows } = await q(`SELECT banned FROM users WHERE telegram_id=$1`, [user.id]);
+    if (rows.length && rows[0].banned) return res.status(403).json({ error: 'banned' });
+  } catch { /* if the column/table isn't ready yet, don't block */ }
   req.tgUser = user;
   next();
 }

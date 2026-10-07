@@ -5,23 +5,32 @@ import { q } from '../server/db.js';
 import { judgeWithRanking } from '../server/ai.js';
 import { buildPointsMap } from '../server/scoring.js';
 
-// ═════════════════════════════════════════════════════
+// ═════════════════════════════════════════
 // HUBRIS — ADMIN BOT  (a SEPARATE bot from the public game bot)
-// The creator controls everything from here, in chat:
-//   • create the daily call   • set the reveal time
-//   • resolve + award Ichor    • read live statistics
-//   • manage quests / users    • broadcast to everyone
-// Only ADMIN_TELEGRAM_ID is ever answered. Everyone else sees nothing.
-// ═════════════════════════════════════════════════════
+// The creator controls EVERYTHING about the Mini App from here, in chat:
+//   • create / edit / reschedule / reopen / delete the daily call
+//   • resolve + award Ichor (AI judges or manual ranking)
+//   • announce a call to every player
+//   • give / take / set Ichor, reset streaks, ban / unban, delete users
+//   • create / edit / toggle / delete quests
+//   • broadcast, live stats, mini-app-wide actions, danger zone
+// Only ADMIN_TELEGRAM_ID is ever answered.
+// ═════════════════════════════════════════
 const ADMIN = Number(process.env.ADMIN_TELEGRAM_ID);
+const ADMIN_SET = Number.isFinite(ADMIN) && ADMIN > 0;
+
+if (!process.env.ADMIN_BOT_TOKEN) {
+  console.error('✗ ADMIN_BOT_TOKEN is missing. Set it in your environment (a DIFFERENT bot token from the public game bot) and restart.');
+}
 const bot = new TelegramBot(process.env.ADMIN_BOT_TOKEN, { polling: true });
 
-// Public bot handle (no polling) — used only to broadcast as the game bot.
+// Public bot handle (no polling) — used only to message players as the game bot.
 const publicBot = process.env.BOT_TOKEN
   ? new TelegramBot(process.env.BOT_TOKEN, { polling: false })
   : null;
+const MINI_APP_URL = process.env.MINI_APP_URL || '';
 
-const isAdmin = (msg) => msg?.from?.id === ADMIN;
+const isAdmin = (msg) => ADMIN_SET && msg?.from?.id === ADMIN;
 const UNIT = 'Ichor';
 
 // Single-admin conversation state.
@@ -31,8 +40,8 @@ function reset() { S.mode = null; S.draft = {}; S.ctx = {}; }
 const esc = (s) => String(s ?? '');
 const fmt = (d) => new Date(d).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
 
-// ─── Reveal-time parser ─────────────────────────────────────────
-// Accepts:  +8h  +30m  +2d   |   20:00 (today)   |   2026-10-09 20:00
+// ─── Reveal-time parser ─────────────────────────────
+// Accepts:  +8h  +30m  +2d   |   20:00 (today/tomorrow)   |   2026-10-09 20:00
 function parseReveal(text) {
   const t = text.trim();
   let m;
@@ -56,7 +65,7 @@ function parseReveal(text) {
   return isNaN(d) ? null : d;
 }
 
-// ─── Menus ─────────────────────────────────────────────────
+// ─── Menus ──────────────────────────────
 function homeMenu() {
   return {
     reply_markup: {
@@ -64,7 +73,8 @@ function homeMenu() {
         [{ text: '◈ Statistics', callback_data: 'stats' }],
         [{ text: '＋ New Call', callback_data: 'new' }, { text: '▤ Calls', callback_data: 'calls' }],
         [{ text: '◆ Quests', callback_data: 'quests' }, { text: '● Users', callback_data: 'users' }],
-        [{ text: '▧ Broadcast', callback_data: 'bc' }],
+        [{ text: '▧ Broadcast', callback_data: 'bc' }, { text: '⚙ Mini App', callback_data: 'miniapp' }],
+        [{ text: '⚠ Danger Zone', callback_data: 'danger' }],
       ],
     },
   };
@@ -74,59 +84,134 @@ const backRow = [{ text: '‹ Home', callback_data: 'home' }];
 function send(chatId, text, extra = {}) {
   return bot.sendMessage(chatId, text, { parse_mode: 'Markdown', disable_web_page_preview: true, ...extra });
 }
-// ═══ Guard + entry ══════════════════════════════════════════
+
+// ═══ Guard + entry (onboarding that actually tells you what's wrong) ═══
 function greet(chatId) {
   reset();
   return send(chatId,
-    '◈ *HUBRIS — Control*\n\nYou are the creator. Everything in the Mini App is made here.',
+    '◈ *HUBRIS — Control*\n\nYou are the creator. Everything in the Mini App is made and changed from here.',
     homeMenu());
 }
 
-bot.onText(/\/start|\/home|\/menu/, (msg) => {
-  if (!isAdmin(msg)) return;
+// The #1 reason /start "does nothing": ADMIN_TELEGRAM_ID is unset or wrong,
+// so the old bot silently ignored everyone. Now we always answer /start and
+// tell the sender their numeric id so they can configure it.
+function onboard(msg) {
+  const chatId = msg.chat.id;
+  const id = msg.from.id;
+  if (!ADMIN_SET) {
+    return send(chatId,
+      '⚠ *Admin not configured yet.*\n\n' +
+      'This bot has no `ADMIN_TELEGRAM_ID` set, so nobody can command it.\n\n' +
+      `Your numeric Telegram ID is:\n\u2192 \`${id}\`\n\n` +
+      'Set `ADMIN_TELEGRAM_ID` to that value in your environment (Render → the admin worker → Environment), redeploy, then send /start again.');
+  }
+  // Configured but this isn't the admin.
+  return send(chatId,
+    '⛔ *Not authorized.*\n\n' +
+    `This admin bot only answers the creator.\n\nYour ID is \`${id}\`.\n` +
+    (id !== ADMIN
+      ? `The configured admin ID is \`${ADMIN}\`. If that’s wrong, update \`ADMIN_TELEGRAM_ID\` and redeploy.`
+      : ''));
+}
+
+bot.onText(/^\/(start|home|menu)\b/, (msg) => {
+  if (!isAdmin(msg)) return onboard(msg);
   greet(msg.chat.id);
 });
-bot.onText(/\/cancel/, (msg) => {
+bot.onText(/^\/myid\b/, (msg) => {
+  send(msg.chat.id, `Your Telegram ID: \`${msg.from.id}\``);
+});
+bot.onText(/^\/cancel\b/, (msg) => {
   if (!isAdmin(msg)) return;
   reset();
   send(msg.chat.id, 'Cancelled.', homeMenu());
 });
-
-// ═══ Callback router ═══════════════════════════════════════
+bot.onText(/^\/help\b/, (msg) => {
+  if (!isAdmin(msg)) return onboard(msg);
+  send(msg.chat.id,
+    '*Commands*\n/start — open the control panel\n/cancel — abort the current step\n/myid — show your Telegram ID\n\nEverything else is driven by the on-screen buttons.',
+    homeMenu());
+});
+// ═══ Callback router ═════════════════════════
 bot.on('callback_query', async (query) => {
-  if (query.from.id !== ADMIN) { try { bot.answerCallbackQuery(query.id); } catch {} return; }
+  if (!ADMIN_SET || query.from.id !== ADMIN) { try { bot.answerCallbackQuery(query.id); } catch {} return; }
   const chatId = query.message.chat.id;
   const data = query.data || '';
   try { bot.answerCallbackQuery(query.id); } catch {}
   try {
+    // top level
     if (data === 'home') return greet(chatId);
+    if (data === 'noop') return;
     if (data === 'stats') return showStats(chatId);
     if (data === 'new') return startNewCall(chatId);
     if (data === 'calls') return listCalls(chatId);
     if (data === 'quests') return listQuests(chatId);
     if (data === 'users') return listUsers(chatId);
-    if (data === 'bc') { S.mode = 'broadcast'; return send(chatId, 'Type the broadcast message. It goes to *every* player as the game bot.\n\n/cancel to stop.', { reply_markup: { inline_keyboard: [backRow] } }); }
-    if (data === 'quest_add') { S.mode = 'quest_add'; return send(chatId, 'New quest. Send as:\n`title | reward | description | url`\n(url optional)\n\n/cancel to stop.'); }
+    if (data === 'miniapp') return miniAppMenu(chatId);
+    if (data === 'danger') return dangerMenu(chatId);
+    if (data === 'bc') { S.mode = 'broadcast'; return send(chatId, '▧ Type the broadcast message. It goes to *every* player as the game bot.\n\n/cancel to stop.', { reply_markup: { inline_keyboard: [backRow] } }); }
+
+    // quests
+    if (data === 'quest_add') { S.mode = 'quest_add'; return send(chatId, '◆ New quest. Send as:\n`title | reward | description | url`\n(url optional)\n\n/cancel to stop.'); }
+    if (data.startsWith('qtog:')) return toggleQuest(chatId, data.split(':')[1]);
+    if (data.startsWith('qdel:')) return deleteQuest(chatId, data.split(':')[1]);
+    if (data.startsWith('qrew:')) { S.mode = 'quest_rew'; S.ctx.qid = data.split(':')[1]; return send(chatId, `Send the new reward (number) for quest \`${S.ctx.qid}\`.`); }
+
+    // calls
     if (data.startsWith('resolve:')) return startResolve(chatId, data.split(':')[1]);
     if (data.startsWith('rAI:')) return resolveWithAI(chatId, data.split(':')[1]);
     if (data.startsWith('rMan:')) return startManualResolve(chatId, data.split(':')[1]);
     if (data.startsWith('del:')) return deleteCall(chatId, data.split(':')[1]);
-    if (data.startsWith('qtog:')) return toggleQuest(chatId, data.split(':')[1]);
-    if (data.startsWith('qdel:')) return deleteQuest(chatId, data.split(':')[1]);
-    if (data.startsWith('upts:')) { S.mode = 'user_points'; S.ctx.uid = data.split(':')[1]; return send(chatId, `Send the new ${UNIT} total for user \`${S.ctx.uid}\`.`); }
+    if (data.startsWith('cedit:')) return editCallMenu(chatId, data.split(':')[1]);
+    if (data.startsWith('cedq:')) { S.mode = 'edit_question'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *question* text.'); }
+    if (data.startsWith('cedo:')) { S.mode = 'edit_options'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *options*, one per line (`id|text` or plain). 2–6.\n\n⚠ Existing picks keep their letter; keep ids if picks exist.'); }
+    if (data.startsWith('cedr:')) { S.mode = 'edit_reveal'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *reveal time*: `+8h` · `20:00` · `2026-10-09 20:00`'); }
+    if (data.startsWith('creopen:')) return reopenCall(chatId, data.split(':')[1]);
+    if (data.startsWith('cann:')) return announceCall(chatId, data.split(':')[1]);
+
+    // users
+    if (data.startsWith('user:')) return userDetail(chatId, data.split(':')[1]);
+    if (data === 'ufind') { S.mode = 'user_find'; return send(chatId, 'Send a numeric Telegram id or @username to find a player.'); }
+    if (data === 'giftall') { S.mode = 'gift_all'; return send(chatId, `Send an amount of ${UNIT} to add to *every* player (use a negative number to deduct).`); }
+    if (data.startsWith('uset:')) { S.mode = 'user_points'; S.ctx.uid = data.split(':')[1]; return send(chatId, `Send the new ${UNIT} *total* for user \`${S.ctx.uid}\`.`); }
+    if (data.startsWith('uadd:')) { S.mode = 'user_add'; S.ctx.uid = data.split(':')[1]; return send(chatId, `Send how much ${UNIT} to *add* to \`${S.ctx.uid}\` (negative to deduct).`); }
+    if (data.startsWith('ustk:')) return resetStreak(chatId, data.split(':')[1]);
+    if (data.startsWith('uban:')) return toggleBan(chatId, data.split(':')[1]);
+    if (data.startsWith('udel:')) return deleteUser(chatId, data.split(':')[1]);
+
+    // mini-app-wide
+    if (data === 'ma_streak0') return confirm(chatId, 'ma_streak0', 'reset *every* player’s current streak to 0');
+    if (data === 'ma_remind') { S.mode = 'remind'; return send(chatId, 'Send the reminder message to push to all players (as the game bot).'); }
+
+    // danger zone (two-step confirm)
+    if (data === 'dz_leader') return confirm(chatId, 'dz_leader', `zero out *all* ${UNIT} for every player (reset the leaderboard)`);
+    if (data === 'dz_picks') return confirm(chatId, 'dz_picks', 'delete *all* picks from *all* calls');
+    if (data === 'dz_calls') return confirm(chatId, 'dz_calls', 'delete *all* calls and their picks');
+    if (data === 'dz_users') return confirm(chatId, 'dz_users', 'delete *all* users (full wipe of players)');
+    if (data.startsWith('do:')) return runDanger(chatId, data.split(':')[1]);
   } catch (e) {
     console.error(e);
     send(chatId, '⚠ ' + (e.message || 'error'), homeMenu());
   }
 });
 
-// ═══ Statistics ══════════════════════════════════════════
+function confirm(chatId, action, phrase) {
+  return send(chatId,
+    `⚠ *Confirm*\n\nThis will ${phrase}. This cannot be undone.`,
+    { reply_markup: { inline_keyboard: [
+      [{ text: '✗ Yes, do it', callback_data: 'do:' + action }],
+      backRow,
+    ] } });
+}
+// ═══ Statistics ══════════════════════════
 async function showStats(chatId) {
-  const [u, p, qc, open] = await Promise.all([
+  const [u, p, qc, open, bans] = await Promise.all([
     q(`SELECT COUNT(*)::int c FROM users`),
     q(`SELECT COUNT(*)::int c FROM picks`),
     q(`SELECT COUNT(*)::int c FROM quest_completions`),
     q(`SELECT COUNT(*)::int c FROM challenges WHERE status='open'`),
+    q(`SELECT COUNT(*)::int c FROM users WHERE banned=TRUE`),
   ]);
   const { rows: top } = await q(`SELECT first_name, username, points FROM users ORDER BY points DESC LIMIT 5`);
   const { rows: recent } = await q(`SELECT challenge_date, question, status FROM challenges ORDER BY challenge_date DESC LIMIT 5`);
@@ -138,22 +223,23 @@ async function showStats(chatId) {
     : '_none yet_';
   send(chatId,
     `◈ *Statistics*\n\n` +
-    `Players: *${u.rows[0].c}*\nPicks: *${p.rows[0].c}*\nQuests done: *${qc.rows[0].c}*\nOpen calls: *${open.rows[0].c}*\n\n` +
+    `Players: *${u.rows[0].c}* (banned: ${bans.rows[0].c})\nPicks: *${p.rows[0].c}*\nQuests done: *${qc.rows[0].c}*\nOpen calls: *${open.rows[0].c}*\n\n` +
     `*Top ${UNIT}*\n${leaders}\n\n*Recent calls*\n${calls}`,
-    { reply_markup: { inline_keyboard: [backRow] } });
+    { reply_markup: { inline_keyboard: [[{ text: '↻ Refresh', callback_data: 'stats' }], backRow] } });
 }
 
-// ═══ New call (conversation) ═════════════════════════════════
+// ═══ New call (conversation) ════════════════════
 function startNewCall(chatId) {
   reset();
   S.mode = 'new_question';
   S.draft = {};
   send(chatId, '＋ *New Call* — step 1 / 3\n\nSend the *question* players will decide on.\n\n/cancel to stop.');
 }
-// ═══ Text / conversation handler ══════════════════════════════
+
+// ═══ Text / conversation handler ══════════════════
 bot.on('message', async (msg) => {
-  if (!isAdmin(msg)) return;                 // ignore the whole world but the creator
-  if (!msg.text || msg.text.startsWith('/')) return;  // commands handled elsewhere
+  if (!ADMIN_SET || msg?.from?.id !== ADMIN) return;   // ignore the whole world but the creator
+  if (!msg.text || msg.text.startsWith('/')) return;   // commands handled elsewhere
   if (!S.mode) return;
   const chatId = msg.chat.id;
   const text = msg.text.trim();
@@ -178,6 +264,25 @@ bot.on('message', async (msg) => {
         if (!when || when <= new Date()) return send(chatId, 'Could not read a future time. Try `+8h` or `20:00`.');
         S.draft.reveal_at = when;
         return finalizeNewCall(chatId);
+      }
+      case 'edit_question': {
+        await q(`UPDATE challenges SET question=$1 WHERE id=$2`, [text, S.ctx.id]);
+        const id = S.ctx.id; reset();
+        return send(chatId, `✎ Question updated for call #${id}.`, { reply_markup: { inline_keyboard: [[{ text: '‹ Call', callback_data: 'cedit:' + id }], backRow] } });
+      }
+      case 'edit_options': {
+        const opts = parseOptions(text);
+        if (opts.length < 2 || opts.length > 6) return send(chatId, 'Need 2–6 options. Try again.');
+        await q(`UPDATE challenges SET options=$1 WHERE id=$2`, [JSON.stringify(opts), S.ctx.id]);
+        const id = S.ctx.id; reset();
+        return send(chatId, `✎ Options updated for call #${id}.`, { reply_markup: { inline_keyboard: [[{ text: '‹ Call', callback_data: 'cedit:' + id }], backRow] } });
+      }
+      case 'edit_reveal': {
+        const when = parseReveal(text);
+        if (!when) return send(chatId, 'Could not read that time. Try `+8h` or `20:00`.');
+        await q(`UPDATE challenges SET reveal_at=$1 WHERE id=$2`, [when, S.ctx.id]);
+        const id = S.ctx.id; reset();
+        return send(chatId, `✎ Reveal time set to ${fmt(when)} for call #${id}.`, { reply_markup: { inline_keyboard: [[{ text: '‹ Call', callback_data: 'cedit:' + id }], backRow] } });
       }
       case 'resolve_outcome': {
         await q(`UPDATE challenges SET outcome_text=$1 WHERE id=$2`, [text, S.ctx.id]);
@@ -209,13 +314,51 @@ bot.on('message', async (msg) => {
         reset();
         return send(chatId, `◆ Quest #${rows[0].id} created (+${reward} ${UNIT}).`, homeMenu());
       }
+      case 'quest_rew': {
+        const r = Number(text);
+        if (isNaN(r)) return send(chatId, 'Send a number.');
+        await q(`UPDATE quests SET reward=$1 WHERE id=$2`, [r, S.ctx.qid]);
+        reset();
+        return send(chatId, `◆ Reward updated to +${r} ${UNIT}.`, { reply_markup: { inline_keyboard: [[{ text: '◆ Quests', callback_data: 'quests' }], backRow] } });
+      }
       case 'user_points': {
         const pts = Number(text);
         if (isNaN(pts)) return send(chatId, 'Send a number.');
         const { rows } = await q(`UPDATE users SET points=$1 WHERE telegram_id=$2 RETURNING first_name, username`, [pts, S.ctx.uid]);
-        reset();
+        const uid = S.ctx.uid; reset();
         if (!rows.length) return send(chatId, 'No such user.', homeMenu());
-        return send(chatId, `Set ${esc(rows[0].first_name || rows[0].username || S.ctx.uid)} to *${pts}* ${UNIT}.`, homeMenu());
+        return send(chatId, `Set ${esc(rows[0].first_name || rows[0].username || uid)} to *${pts}* ${UNIT}.`, { reply_markup: { inline_keyboard: [[{ text: '‹ User', callback_data: 'user:' + uid }], backRow] } });
+      }
+      case 'user_add': {
+        const d = Number(text);
+        if (isNaN(d)) return send(chatId, 'Send a number (negative to deduct).');
+        const { rows } = await q(`UPDATE users SET points = GREATEST(0, points + $1) WHERE telegram_id=$2 RETURNING first_name, username, points`, [d, S.ctx.uid]);
+        const uid = S.ctx.uid; reset();
+        if (!rows.length) return send(chatId, 'No such user.', homeMenu());
+        return send(chatId, `${d >= 0 ? 'Added' : 'Deducted'} ${Math.abs(d)} ${UNIT}. ${esc(rows[0].first_name || rows[0].username || uid)} now has *${rows[0].points}*.`, { reply_markup: { inline_keyboard: [[{ text: '‹ User', callback_data: 'user:' + uid }], backRow] } });
+      }
+      case 'user_find': {
+        let uid = text.replace('@', '').trim();
+        let rows;
+        if (/^\d+$/.test(uid)) {
+          ({ rows } = await q(`SELECT telegram_id FROM users WHERE telegram_id=$1`, [uid]));
+        } else {
+          ({ rows } = await q(`SELECT telegram_id FROM users WHERE lower(username)=lower($1)`, [uid]));
+        }
+        reset();
+        if (!rows.length) return send(chatId, 'No matching player.', { reply_markup: { inline_keyboard: [[{ text: '● Users', callback_data: 'users' }], backRow] } });
+        return userDetail(chatId, rows[0].telegram_id);
+      }
+      case 'gift_all': {
+        const d = Number(text);
+        if (isNaN(d) || d === 0) return send(chatId, 'Send a non-zero number.');
+        const { rowCount } = await q(`UPDATE users SET points = GREATEST(0, points + $1)`, [d]);
+        reset();
+        return send(chatId, `◈ ${d >= 0 ? 'Gifted' : 'Deducted'} ${Math.abs(d)} ${UNIT} ${d >= 0 ? 'to' : 'from'} *${rowCount}* players.`, homeMenu());
+      }
+      case 'remind': {
+        reset();
+        return doBroadcast(chatId, text);
       }
       case 'broadcast': {
         reset();
@@ -249,37 +392,58 @@ async function finalizeNewCall(chatId) {
       `INSERT INTO challenges (challenge_date, question, options, use_ai, reveal_at, status)
        VALUES ($1,$2,$3,TRUE,$4,'open') RETURNING id`,
       [today, d.question, JSON.stringify(d.options), d.reveal_at]);
+    const id = rows[0].id;
     reset();
     send(chatId,
-      `◈ *Call #${rows[0].id} is live.*\n\n*${esc(d.question)}*\n` +
+      `◈ *Call #${id} is live.*\n\n*${esc(d.question)}*\n` +
       d.options.map(o => `· *${o.id.toUpperCase()}* — ${esc(o.text)}`).join('\n') +
       `\n\nReveal · ${fmt(d.reveal_at)}`,
-      homeMenu());
+      { reply_markup: { inline_keyboard: [
+        [{ text: '▧ Announce to all players', callback_data: 'cann:' + id }],
+        backRow,
+      ] } });
   } catch (e) {
     reset();
     if (String(e.message).includes('duplicate') || e.code === '23505')
-      return send(chatId, 'A call already exists for today. Delete it first from ▤ Calls.', homeMenu());
+      return send(chatId, 'A call already exists for today. Delete or edit it from ▤ Calls.', homeMenu());
     throw e;
   }
 }
-// ═══ Calls: list / resolve / delete ════════════════════════════
+// ═══ Calls: list / edit / resolve / reopen / announce / delete ═══
 async function listCalls(chatId) {
   const { rows } = await q(
     `SELECT c.id, c.challenge_date, c.question, c.status, c.reveal_at,
        (SELECT COUNT(*)::int FROM picks p WHERE p.challenge_id=c.id) picks
      FROM challenges c ORDER BY c.challenge_date DESC LIMIT 10`);
-  if (!rows.length) return send(chatId, 'No calls yet. Create one with ＋ New Call.', { reply_markup: { inline_keyboard: [backRow] } });
+  if (!rows.length) return send(chatId, 'No calls yet. Create one with ＋ New Call.', { reply_markup: { inline_keyboard: [[{ text: '＋ New Call', callback_data: 'new' }], backRow] } });
   const kb = [];
   for (const r of rows) {
-    const label = `${r.status === 'revealed' ? '✓' : r.status === 'closed' ? '○' : '●'} ${r.challenge_date} · ${r.picks}p · ${esc(r.question).slice(0, 22)}`;
-    const row = [];
-    if (r.status !== 'revealed') row.push({ text: '◈ Resolve', callback_data: 'resolve:' + r.id });
-    row.push({ text: '✕ Del', callback_data: 'del:' + r.id });
-    kb.push([{ text: label, callback_data: 'noop' }]);
-    kb.push(row);
+    const dot = r.status === 'revealed' ? '✓' : r.status === 'closed' ? '○' : '●';
+    kb.push([{ text: `${dot} ${r.challenge_date} · ${r.picks}p · ${esc(r.question).slice(0, 24)}`, callback_data: 'cedit:' + r.id }]);
   }
+  kb.push([{ text: '＋ New Call', callback_data: 'new' }]);
   kb.push(backRow);
-  send(chatId, '▤ *Calls* — newest first', { reply_markup: { inline_keyboard: kb } });
+  send(chatId, '▤ *Calls* — tap one to manage', { reply_markup: { inline_keyboard: kb } });
+}
+
+async function editCallMenu(chatId, id) {
+  const { rows } = await q(`SELECT * FROM challenges WHERE id=$1`, [id]);
+  if (!rows.length) return send(chatId, 'Gone.', homeMenu());
+  const c = rows[0];
+  const picks = (await q(`SELECT COUNT(*)::int c FROM picks WHERE challenge_id=$1`, [id])).rows[0].c;
+  const kb = [];
+  if (c.status !== 'revealed') kb.push([{ text: '◈ Resolve + award', callback_data: 'resolve:' + id }]);
+  if (c.status === 'revealed' || c.status === 'closed') kb.push([{ text: '↺ Reopen for picks', callback_data: 'creopen:' + id }]);
+  kb.push([{ text: '✎ Question', callback_data: 'cedq:' + id }, { text: '✎ Options', callback_data: 'cedo:' + id }]);
+  kb.push([{ text: '✎ Reveal time', callback_data: 'cedr:' + id }, { text: '▧ Announce', callback_data: 'cann:' + id }]);
+  kb.push([{ text: '✗ Delete call', callback_data: 'del:' + id }]);
+  kb.push([{ text: '‹ Calls', callback_data: 'calls' }, ...backRow]);
+  send(chatId,
+    `*Call #${id}* · _${c.status}_ · ${picks} picks\n\n*${esc(c.question)}*\n` +
+    c.options.map(o => `· *${o.id.toUpperCase()}* — ${esc(o.text)}`).join('\n') +
+    `\n\nReveal · ${fmt(c.reveal_at)}` +
+    (c.outcome_text ? `\nOutcome · ${esc(c.outcome_text)}` : ''),
+    { reply_markup: { inline_keyboard: kb } });
 }
 
 async function startResolve(chatId, id) {
@@ -344,7 +508,27 @@ async function applyResolution(chatId, id, ranking, ai_votes, ai_reason) {
     `◈ *Call #${id} resolved.*\n\nConsensus: ${ranking.map(x => x.toUpperCase()).join(' › ')}\n\n${line}` +
     (ai_reason ? `\n\n_“${esc(ai_reason)}”_` : '') +
     `\n\n${UNIT} awarded and streaks updated.`,
-    homeMenu());
+    { reply_markup: { inline_keyboard: [[{ text: '▧ Announce result', callback_data: 'cann:' + id }], backRow] } });
+}
+
+async function reopenCall(chatId, id) {
+  await q(`UPDATE challenges SET status='open', winner_id=NULL, ranking=NULL, ai_votes=NULL, ai_reason=NULL, outcome_text=NULL, resolved_at=NULL WHERE id=$1`, [id]);
+  await q(`UPDATE picks SET points_earned=0 WHERE challenge_id=$1`, [id]);
+  send(chatId, `↺ Call #${id} reopened for picks. (Awarded ${UNIT} is not clawed back automatically — adjust users if needed.)`, { reply_markup: { inline_keyboard: [[{ text: '‹ Call', callback_data: 'cedit:' + id }], backRow] } });
+}
+
+async function announceCall(chatId, id) {
+  const { rows } = await q(`SELECT * FROM challenges WHERE id=$1`, [id]);
+  if (!rows.length) return send(chatId, 'Gone.', homeMenu());
+  const c = rows[0];
+  let text;
+  if (c.status === 'revealed') {
+    text = `◈ HUBRIS — result is in.\n\n${c.question}\n\nBest call: ${String(c.winner_id || '').toUpperCase()}. Open the app to see where you ranked.`;
+  } else {
+    text = `◈ HUBRIS — today's call is live.\n\n${c.question}\n\nLock in your pick before ${fmt(c.reveal_at)}. The sharpest call pays the most ${UNIT}.`;
+  }
+  const extra = MINI_APP_URL ? { reply_markup: { inline_keyboard: [[{ text: '◈ Open HUBRIS', url: MINI_APP_URL }]] } } : {};
+  return doBroadcast(chatId, text, extra);
 }
 
 async function deleteCall(chatId, id) {
@@ -352,8 +536,7 @@ async function deleteCall(chatId, id) {
   await q(`DELETE FROM challenges WHERE id=$1`, [id]);
   send(chatId, `Call #${id} deleted.`, { reply_markup: { inline_keyboard: [[{ text: '▤ Calls', callback_data: 'calls' }], backRow] } });
 }
-
-// ═══ Quests ════════════════════════════════════════════
+// ═══ Quests ════════════════════════════
 async function listQuests(chatId) {
   const { rows } = await q(
     `SELECT q.*, (SELECT COUNT(*)::int FROM quest_completions c WHERE c.quest_id=q.id) done
@@ -363,55 +546,123 @@ async function listQuests(chatId) {
     kb.push([{ text: `${r.is_active ? '●' : '○'} ${esc(r.title).slice(0, 24)} · +${r.reward} · ${r.done}✓`, callback_data: 'noop' }]);
     kb.push([
       { text: r.is_active ? 'Deactivate' : 'Activate', callback_data: 'qtog:' + r.id },
-      { text: '✕ Delete', callback_data: 'qdel:' + r.id },
+      { text: '✎ Reward', callback_data: 'qrew:' + r.id },
+      { text: '✗ Delete', callback_data: 'qdel:' + r.id },
     ]);
   }
   kb.push(backRow);
   send(chatId, '◆ *Quests*', { reply_markup: { inline_keyboard: kb } });
 }
-async function toggleQuest(chatId, id) {
-  await q(`UPDATE quests SET is_active = NOT is_active WHERE id=$1`, [id]);
-  listQuests(chatId);
-}
+async function toggleQuest(chatId, id) { await q(`UPDATE quests SET is_active = NOT is_active WHERE id=$1`, [id]); listQuests(chatId); }
 async function deleteQuest(chatId, id) {
   await q(`DELETE FROM quest_completions WHERE quest_id=$1`, [id]);
   await q(`DELETE FROM quests WHERE id=$1`, [id]);
   listQuests(chatId);
 }
 
-// ═══ Users ═══════════════════════════════════════════
+// ═══ Users ════════════════════════════
 async function listUsers(chatId) {
   const { rows } = await q(
-    `SELECT telegram_id, first_name, username, points, streak FROM users ORDER BY points DESC LIMIT 12`);
-  if (!rows.length) return send(chatId, 'No players yet.', { reply_markup: { inline_keyboard: [backRow] } });
-  const kb = rows.map(u => [{
-    text: `${esc(u.first_name || u.username || u.telegram_id)} · ${u.points} ${UNIT} · ✎`,
-    callback_data: 'upts:' + u.telegram_id,
-  }]);
+    `SELECT telegram_id, first_name, username, points, banned FROM users ORDER BY points DESC LIMIT 12`);
+  const kb = [[{ text: '◌ Find player', callback_data: 'ufind' }, { text: `◈ Gift all`, callback_data: 'giftall' }]];
+  for (const u of rows) {
+    kb.push([{
+      text: `${u.banned ? '⛔ ' : ''}${esc(u.first_name || u.username || u.telegram_id)} · ${u.points} ${UNIT}`,
+      callback_data: 'user:' + u.telegram_id,
+    }]);
+  }
   kb.push(backRow);
-  send(chatId, `● *Users* — tap to adjust ${UNIT}`, { reply_markup: { inline_keyboard: kb } });
+  if (!rows.length) return send(chatId, 'No players yet.', { reply_markup: { inline_keyboard: [[{ text: '◌ Find player', callback_data: 'ufind' }], backRow] } });
+  send(chatId, `● *Users* — tap a player to manage`, { reply_markup: { inline_keyboard: kb } });
 }
 
-// ═══ Broadcast (via the public game bot) ═══════════════════════
-async function doBroadcast(chatId, message) {
+async function userDetail(chatId, uid) {
+  const { rows } = await q(`SELECT * FROM users WHERE telegram_id=$1`, [uid]);
+  if (!rows.length) return send(chatId, 'No such user.', { reply_markup: { inline_keyboard: [[{ text: '● Users', callback_data: 'users' }], backRow] } });
+  const u = rows[0];
+  const picks = (await q(`SELECT COUNT(*)::int c FROM picks WHERE telegram_id=$1`, [uid])).rows[0].c;
+  const kb = [
+    [{ text: `◈ Set ${UNIT}`, callback_data: 'uset:' + uid }, { text: '± Adjust', callback_data: 'uadd:' + uid }],
+    [{ text: '↺ Reset streak', callback_data: 'ustk:' + uid }, { text: u.banned ? '✓ Unban' : '⛔ Ban', callback_data: 'uban:' + uid }],
+    [{ text: '✗ Delete player', callback_data: 'udel:' + uid }],
+    [{ text: '● Users', callback_data: 'users' }, ...backRow],
+  ];
+  send(chatId,
+    `● *${esc(u.first_name || u.username || uid)}*${u.banned ? '  ⛔ _banned_' : ''}\n\n` +
+    `ID: \`${u.telegram_id}\`\n${u.username ? '@' + esc(u.username) + '\n' : ''}` +
+    `${UNIT}: *${u.points}*\nStreak: *${u.streak}* (best ${u.best_streak})\nPicks: *${picks}*`,
+    { reply_markup: { inline_keyboard: kb } });
+}
+async function resetStreak(chatId, uid) {
+  await q(`UPDATE users SET streak=0 WHERE telegram_id=$1`, [uid]);
+  userDetail(chatId, uid);
+}
+async function toggleBan(chatId, uid) {
+  await q(`UPDATE users SET banned = NOT COALESCE(banned,FALSE) WHERE telegram_id=$1`, [uid]);
+  userDetail(chatId, uid);
+}
+async function deleteUser(chatId, uid) {
+  await q(`DELETE FROM picks WHERE telegram_id=$1`, [uid]);
+  await q(`DELETE FROM quest_completions WHERE telegram_id=$1`, [uid]);
+  await q(`DELETE FROM users WHERE telegram_id=$1`, [uid]);
+  send(chatId, `Player \`${uid}\` deleted.`, { reply_markup: { inline_keyboard: [[{ text: '● Users', callback_data: 'users' }], backRow] } });
+}
+
+// ═══ Mini-app-wide controls ═══════════════════
+function miniAppMenu(chatId) {
+  send(chatId,
+    '⚙ *Mini App controls*\n\nActions that touch the whole app at once.',
+    { reply_markup: { inline_keyboard: [
+      [{ text: `◈ Gift ${UNIT} to everyone`, callback_data: 'giftall' }],
+      [{ text: '↺ Reset all streaks', callback_data: 'ma_streak0' }],
+      [{ text: '▧ Push a reminder', callback_data: 'ma_remind' }],
+      backRow,
+    ] } });
+}
+
+// ═══ Danger zone ════════════════════════
+function dangerMenu(chatId) {
+  send(chatId,
+    '⚠ *Danger Zone*\n\nDestructive, irreversible actions. Each asks for confirmation.',
+    { reply_markup: { inline_keyboard: [
+      [{ text: `Reset leaderboard (${UNIT} → 0)`, callback_data: 'dz_leader' }],
+      [{ text: 'Wipe all picks', callback_data: 'dz_picks' }],
+      [{ text: 'Delete all calls', callback_data: 'dz_calls' }],
+      [{ text: 'Delete all players', callback_data: 'dz_users' }],
+      backRow,
+    ] } });
+}
+async function runDanger(chatId, action) {
+  let msg = 'Done.';
+  if (action === 'ma_streak0') { await q(`UPDATE users SET streak=0`); msg = 'All streaks reset to 0.'; }
+  else if (action === 'dz_leader') { await q(`UPDATE users SET points=0`); msg = `Leaderboard reset — all ${UNIT} set to 0.`; }
+  else if (action === 'dz_picks') { await q(`DELETE FROM picks`); msg = 'All picks wiped.'; }
+  else if (action === 'dz_calls') { await q(`DELETE FROM picks`); await q(`DELETE FROM challenges`); msg = 'All calls and picks deleted.'; }
+  else if (action === 'dz_users') { await q(`DELETE FROM picks`); await q(`DELETE FROM quest_completions`); await q(`DELETE FROM users`); msg = 'All players deleted.'; }
+  send(chatId, '✓ ' + msg, homeMenu());
+}
+
+// ═══ Broadcast (via the public game bot) ══════════════
+async function doBroadcast(chatId, message, extra = {}) {
   const sender = publicBot || bot;
-  const { rows } = await q(`SELECT telegram_id FROM users`);
+  const { rows } = await q(`SELECT telegram_id FROM users WHERE COALESCE(banned,FALSE)=FALSE`);
   let sent = 0, failed = 0;
   send(chatId, `▧ Sending to ${rows.length} players…`);
   for (const u of rows) {
-    try { await sender.sendMessage(u.telegram_id, message); sent++; }
+    try { await sender.sendMessage(u.telegram_id, message, extra); sent++; }
     catch { failed++; }
     await new Promise(r => setTimeout(r, 40));
   }
   send(chatId, `▧ Done. Sent ${sent}, failed ${failed}.`, homeMenu());
 }
 
-// ═══ Auto-close at reveal time + nudge the creator ═════════════════
+// ═══ Auto-close at reveal time + nudge the creator ═══════════
 cron.schedule('* * * * *', async () => {
   try {
     const { rows } = await q(`SELECT id, question FROM challenges WHERE status='open' AND reveal_at <= NOW()`);
     for (const ch of rows) {
       await q(`UPDATE challenges SET status='closed' WHERE id=$1`, [ch.id]);
+      if (!ADMIN_SET) continue;
       try {
         await send(ADMIN,
           `○ *Call #${ch.id} closed* — entries are in.\n\n_${esc(ch.question).slice(0, 60)}_\n\nResolve it to award ${UNIT}.`,
@@ -421,5 +672,12 @@ cron.schedule('* * * * *', async () => {
   } catch (e) { console.error(e); }
 });
 
+// ═══ Boot: self-heal columns (legacy DBs) ══════════════
+(async () => {
+  try {
+    await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned BOOLEAN DEFAULT FALSE`);
+  } catch (e) { console.error('self-heal skipped:', e.message); }
+})();
+
 bot.on('polling_error', (e) => console.error('admin polling_error', e.code || e.message));
-console.log('✓ HUBRIS admin bot running');
+console.log('✓ HUBRIS admin bot running' + (ADMIN_SET ? ` (admin ${ADMIN})` : ' — ⚠ ADMIN_TELEGRAM_ID not set'));

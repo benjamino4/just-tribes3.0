@@ -1,4 +1,4 @@
-import { quoteOfTheDay } from './quotes.js';
+import { randomQuote } from './quotes.js';
 
 const tg = window.Telegram?.WebApp;
 tg?.ready();
@@ -48,7 +48,7 @@ function runSplash() {
   const quoteEl = document.getElementById('splash-quote');
   const authorEl = document.getElementById('splash-author');
 
-  const quote = quoteOfTheDay();
+  const quote = randomQuote();
 
   let html = '';
   let idx = 0;

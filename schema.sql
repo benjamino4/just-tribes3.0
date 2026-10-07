@@ -6,8 +6,15 @@ CREATE TABLE IF NOT EXISTS users (
   streak        INTEGER DEFAULT 0,
   best_streak   INTEGER DEFAULT 0,
   last_pick     TEXT,
+  banned        BOOLEAN DEFAULT FALSE,
   created_at    TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Self-heal: legacy tables created before these columns existed.
+-- CREATE TABLE IF NOT EXISTS never adds columns, so add them idempotently.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS banned BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS best_streak INTEGER DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_pick TEXT;
 
 CREATE TABLE IF NOT EXISTS challenges (
   id              SERIAL PRIMARY KEY,

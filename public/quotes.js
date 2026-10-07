@@ -375,9 +375,59 @@ export const QUOTES = [
   { text: "Reading furnishes the mind only with materials of knowledge; it is thinking that makes what we read ours.", author: "John Locke" },
   { text: "The marksman hitteth the mark partly by pulling, partly by letting go.", author: "Egyptian proverb" },
   { text: "Dripping water hollows out stone, not through force but through persistence.", author: "Ovid" },
+
+  // ── Solomon · Proverbs ────────────────────────
+  { text: "Trust in the LORD with all your heart, and lean not on your own understanding.", author: "Proverbs 3:5" },
+  { text: "In all your ways acknowledge Him, and He will make your paths straight.", author: "Proverbs 3:6" },
+  { text: "The fear of the LORD is the beginning of knowledge, but fools despise wisdom and instruction.", author: "Proverbs 1:7" },
+  { text: "Pride goes before destruction, and a haughty spirit before a fall.", author: "Proverbs 16:18" },
+  { text: "A soft answer turns away wrath, but a harsh word stirs up anger.", author: "Proverbs 15:1" },
+  { text: "The plans of the diligent lead surely to abundance, but everyone who is hasty comes only to poverty.", author: "Proverbs 21:5" },
+  { text: "As iron sharpens iron, so one person sharpens another.", author: "Proverbs 27:17" },
+  { text: "A good name is more desirable than great riches; to be esteemed is better than silver or gold.", author: "Proverbs 22:1" },
+  { text: "Hope deferred makes the heart sick, but a longing fulfilled is a tree of life.", author: "Proverbs 13:12" },
+  { text: "The heart of man plans his way, but the LORD establishes his steps.", author: "Proverbs 16:9" },
+  { text: "Commit to the LORD whatever you do, and your plans will succeed.", author: "Proverbs 16:3" },
+  { text: "Whoever walks with the wise becomes wise, but the companion of fools will suffer harm.", author: "Proverbs 13:20" },
+  { text: "A wise man is full of strength, and a man of knowledge enhances his might.", author: "Proverbs 24:5" },
+  { text: "Do not boast about tomorrow, for you do not know what a day may bring.", author: "Proverbs 27:1" },
+  { text: "The way of a fool is right in his own eyes, but a wise man listens to advice.", author: "Proverbs 12:15" },
+  { text: "He who guards his mouth preserves his life, but he who opens wide his lips comes to ruin.", author: "Proverbs 13:3" },
+  { text: "A false balance is an abomination to the LORD, but a just weight is His delight.", author: "Proverbs 11:1" },
+  { text: "Where there is no guidance, a people falls, but in an abundance of counselors there is safety.", author: "Proverbs 11:14" },
+  { text: "The fear of man lays a snare, but whoever trusts in the LORD is safe.", author: "Proverbs 29:25" },
+  { text: "A gentle tongue is a tree of life, but perverseness in it breaks the spirit.", author: "Proverbs 15:4" },
+  { text: "Buy the truth and do not sell it — wisdom, instruction and insight as well.", author: "Proverbs 23:23" },
+  { text: "The righteous choose their friends carefully, but the way of the wicked leads them astray.", author: "Proverbs 12:26" },
+  { text: "Better a little with the fear of the LORD than great wealth with turmoil.", author: "Proverbs 15:16" },
+  { text: "A patient person has great understanding, but one who is quick-tempered displays folly.", author: "Proverbs 14:29" },
+  { text: "Whoever is slow to anger is better than the mighty, and he who rules his spirit than he who takes a city.", author: "Proverbs 16:32" },
+  { text: "Train up a child in the way he should go; even when he is old he will not depart from it.", author: "Proverbs 22:6" },
+  { text: "The LORD detests lying lips, but He delights in people who are trustworthy.", author: "Proverbs 12:22" },
+  { text: "A wise son brings joy to his father, but a foolish son brings grief to his mother.", author: "Proverbs 10:1" },
+  { text: "Lazy hands make for poverty, but diligent hands bring wealth.", author: "Proverbs 10:4" },
+  { text: "Hatred stirs up conflict, but love covers over all wrongs.", author: "Proverbs 10:12" },
+  { text: "The name of the LORD is a strong tower; the righteous run to it and are safe.", author: "Proverbs 18:10" },
+  { text: "Death and life are in the power of the tongue, and those who love it will eat its fruits.", author: "Proverbs 18:21" },
+  { text: "Iron and bronze may wear away, but a diligent soul is enriched.", author: "Proverbs (paraphrase)" },
+  { text: "Wisdom is the principal thing; therefore get wisdom: and with all thy getting get understanding.", author: "Proverbs 4:7" },
+  { text: "Go to the ant, you sluggard; consider its ways and be wise.", author: "Proverbs 6:6" },
+
+  // ── Solomon · Ecclesiastes ───────────────────
+  { text: "To every thing there is a season, and a time to every purpose under heaven.", author: "Ecclesiastes 3:1" },
+  { text: "Whatever your hand finds to do, do it with all your might.", author: "Ecclesiastes 9:10" },
+  { text: "Two are better than one, because they have a good return for their labor.", author: "Ecclesiastes 4:9" },
+  { text: "Cast your bread upon the waters, for you will find it after many days.", author: "Ecclesiastes 11:1" },
+  { text: "The race is not to the swift, nor the battle to the strong, but time and chance happen to them all.", author: "Ecclesiastes 9:11" },
+  { text: "A good name is better than precious ointment, and the day of death than the day of one's birth.", author: "Ecclesiastes 7:1" },
+  { text: "There is nothing better for a person than to enjoy their work, because that is their lot.", author: "Ecclesiastes 3:22" },
 ];
 
+export function randomQuote() {
+  return QUOTES[Math.floor(Math.random() * QUOTES.length)];
+}
+
+// A fresh, random quote every time the app opens (no longer day-locked).
 export function quoteOfTheDay() {
-  const day = Math.floor(Date.now() / 86400000);
-  return QUOTES[day % QUOTES.length];
+  return randomQuote();
 }
