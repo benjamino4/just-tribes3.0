@@ -1,15 +1,21 @@
 {
-  "name": "tribes",
-  "version": "5.0.0",
-  "private": true,
+  "name": "daily-call-mini-app",
+  "version": "1.0.0",
   "type": "module",
-  "engines": { "node": ">=20" },
-  "workspaces": ["server", "web"],
   "scripts": {
-    "build": "npm --prefix web install && npm --prefix web run build && npm --prefix server install",
-    "start": "npm --prefix server start",
-    "dev:web": "npm --prefix web run dev",
-    "dev:server": "npm --prefix server start",
-    "migrate": "MIGRATE=1 npm --prefix server start"
+    "start": "node server/index.js",
+    "bot": "node bot/index.js",
+    "migrate": "node -e \"import('./server/db.js').then(m=>m.migrate())\""
+  },
+  "dependencies": {
+    "express": "^4.19.2",
+    "pg": "^8.11.5",
+    "node-telegram-bot-api": "^0.66.0",
+    "node-cron": "^3.0.3",
+    "dotenv": "^16.4.5",
+    "cors": "^2.8.5"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }

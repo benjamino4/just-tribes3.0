@@ -1,0 +1,211 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
+  <title>Admin · Daily Call</title>
+  <link rel="stylesheet" href="/__ADMIN_PATH__/admin.css" id="admin-css" />
+  <script src="https://telegram.org/js/telegram-web-app.js"></script>
+</head>
+<body>
+  <!-- Mobile topbar -->
+  <header class="mobile-topbar">
+    <div class="brand-mark">◈</div>
+    <div class="title">Admin</div>
+    <button class="logout" id="btn-logout-mobile">Log out</button>
+  </header>
+
+  <!-- Sidebar (desktop) -->
+  <aside class="sidebar">
+    <div class="brand">
+      <div class="brand-mark">◈</div>
+      <div class="brand-text">
+        <div class="brand-title">Daily Call</div>
+        <div class="brand-sub">Admin Console</div>
+      </div>
+    </div>
+
+    <nav>
+      <button class="nav-item active" data-view="dashboard"><span class="nav-icon">▤</span> Dashboard</button>
+      <button class="nav-item" data-view="challenges"><span class="nav-icon">◈</span> Challenges</button>
+      <button class="nav-item" data-view="quests"><span class="nav-icon">◆</span> Quests</button>
+      <button class="nav-item" data-view="ai"><span class="nav-icon">✦</span> AI Console</button>
+      <button class="nav-item" data-view="users"><span class="nav-icon">◇</span> Users</button>
+      <button class="nav-item" data-view="broadcast"><span class="nav-icon">◉</span> Broadcast</button>
+    </nav>
+
+    <div class="sidebar-foot">
+      <div class="who" id="admin-who">—</div>
+      <button class="btn-ghost" id="btn-logout">Log out</button>
+    </div>
+  </aside>
+
+  <!-- Main -->
+  <main class="main">
+    <section class="view active" id="view-dashboard">
+      <header class="view-head">
+        <h1>Dashboard</h1>
+        <p class="muted">Overview of your game's health.</p>
+      </header>
+      <div class="stats-grid">
+        <div class="stat-card"><div class="stat-label">Players</div><div class="stat-value" id="stat-users">—</div></div>
+        <div class="stat-card"><div class="stat-label">Total Picks</div><div class="stat-value" id="stat-picks">—</div></div>
+        <div class="stat-card"><div class="stat-label">Quests Done</div><div class="stat-value" id="stat-quests">—</div></div>
+        <div class="stat-card accent"><div class="stat-label">Open Challenges</div><div class="stat-value" id="stat-open">—</div></div>
+      </div>
+      <div class="panel">
+        <h3>Recent Challenges</h3>
+        <div id="recent-list" class="list"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-challenges">
+      <header class="view-head">
+        <h1>Challenges</h1>
+        <button class="btn-primary" id="btn-new-challenge">+ New Challenge</button>
+      </header>
+      <div id="challenges-list" class="grid"></div>
+    </section>
+
+    <section class="view" id="view-quests">
+      <header class="view-head">
+        <h1>Side Quests</h1>
+        <button class="btn-primary" id="btn-new-quest">+ New Quest</button>
+      </header>
+      <div id="quests-list" class="grid"></div>
+    </section>
+
+    <section class="view" id="view-ai">
+      <header class="view-head">
+        <h1>AI Console</h1>
+        <p class="muted">Send a prompt to all providers at once.</p>
+      </header>
+      <div class="panel">
+        <label>Prompt</label>
+        <textarea id="ai-prompt" rows="6" placeholder="e.g. Given this outcome..."></textarea>
+        <div class="row">
+          <button class="btn-primary" id="btn-ask-all">Ask All AIs</button>
+          <button class="btn-ghost" id="btn-ask-groq">Groq</button>
+          <button class="btn-ghost" id="btn-ask-cerebras">Cerebras</button>
+          <button class="btn-ghost" id="btn-ask-gemini">Gemini</button>
+        </div>
+      </div>
+      <div id="ai-responses" class="ai-responses"></div>
+      <div class="panel">
+        <h3>Recent Prompts</h3>
+        <div id="ai-history" class="list"></div>
+      </div>
+    </section>
+
+    <section class="view" id="view-users">
+      <header class="view-head">
+        <h1>Users</h1>
+        <input id="user-search" type="search" placeholder="Search by name or ID…" class="search" />
+      </header>
+      <div class="panel">
+        <div class="table-wrap">
+          <table class="table">
+            <thead>
+              <tr><th>ID</th><th>Name</th><th>Points</th><th>Streak</th><th>Joined</th><th></th></tr>
+            </thead>
+            <tbody id="users-tbody"></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <section class="view" id="view-broadcast">
+      <header class="view-head">
+        <h1>Broadcast</h1>
+        <p class="muted">Send a message to every player. Use sparingly.</p>
+      </header>
+      <div class="panel">
+        <label>Message</label>
+        <textarea id="broadcast-msg" rows="5" placeholder="Today's challenge is live."></textarea>
+        <button class="btn-primary" id="btn-broadcast">Send to all</button>
+      </div>
+    </section>
+  </main>
+
+  <!-- Mobile bottom nav -->
+  <nav class="mobile-nav">
+    <div class="mobile-nav-inner">
+      <button class="mobile-nav-item active" data-view="dashboard"><span class="mobile-icon">▤</span><span>Home</span></button>
+      <button class="mobile-nav-item" data-view="challenges"><span class="mobile-icon">◈</span><span>Games</span></button>
+      <button class="mobile-nav-item" data-view="quests"><span class="mobile-icon">◆</span><span>Quests</span></button>
+      <button class="mobile-nav-item" data-view="ai"><span class="mobile-icon">✦</span><span>AI</span></button>
+      <button class="mobile-nav-item" data-view="users"><span class="mobile-icon">◇</span><span>Users</span></button>
+    </div>
+  </nav>
+
+  <!-- New Challenge Modal -->
+  <dialog id="modal-challenge" class="modal">
+    <form method="dialog" id="form-challenge">
+      <h2 id="modal-ch-title">New Challenge</h2>
+      <label>Date</label>
+      <input type="date" name="challenge_date" required />
+      <label>Question</label>
+      <textarea name="question" rows="3" required></textarea>
+      <label>Options (one per line, id|text)</label>
+      <textarea name="options_raw" rows="4" placeholder="a|Harvest energy&#10;b|Scout sector" required></textarea>
+      <label>Outcome text</label>
+      <textarea name="outcome_text" rows="2"></textarea>
+      <div class="row">
+        <label class="check"><input type="checkbox" name="use_ai" checked /> Use AI to pick winner</label>
+      </div>
+      <label>Reveal at</label>
+      <input type="datetime-local" name="reveal_at" required />
+      <div class="modal-foot">
+        <button type="button" class="btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- New Quest Modal -->
+  <dialog id="modal-quest" class="modal">
+    <form method="dialog" id="form-quest">
+      <h2 id="modal-quest-title">New Quest</h2>
+      <label>Title</label>
+      <input type="text" name="title" required />
+      <label>Description</label>
+      <textarea name="description" rows="2"></textarea>
+      <label>Reward (points)</label>
+      <input type="number" name="reward" min="1" required />
+      <label>Action URL (optional)</label>
+      <input type="url" name="action_url" placeholder="https://…" />
+      <label>Verify text (optional)</label>
+      <input type="text" name="verify_text" placeholder="Did you follow the channel?" />
+      <label>Expires at (optional)</label>
+      <input type="datetime-local" name="expires_at" />
+      <div class="modal-foot">
+        <button type="button" class="btn-ghost" data-close>Cancel</button>
+        <button type="submit" class="btn-primary">Save</button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- Resolve Modal -->
+  <dialog id="modal-resolve" class="modal">
+    <h2>Resolve Challenge</h2>
+    <div id="resolve-body"></div>
+    <div class="modal-foot">
+      <button class="btn-ghost" data-close>Close</button>
+    </div>
+  </dialog>
+
+  <script>
+    // Inject admin secret + path before loading admin.js
+    const params = new URLSearchParams(location.search);
+    const secret = params.get('secret') || sessionStorage.getItem('admin_secret') || '';
+    if (secret) {
+      sessionStorage.setItem('admin_secret', secret);
+      document.getElementById('admin-css').href = location.pathname + '/admin.css?secret=' + encodeURIComponent(secret);
+    }
+    const s = document.createElement('script');
+    s.type = 'module';
+    s.src = location.pathname + '/admin.js' + (secret ? '?secret=' + encodeURIComponent(secret) : '');
+    document.body.appendChild(s);
+  </script>
+</body>
+</html>
