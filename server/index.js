@@ -1,6 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
+import crypto from 'crypto';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import TelegramBot from 'node-telegram-bot-api';
@@ -9,6 +10,7 @@ import { requireUser, verifyInitData } from './auth.js';
 import adminRouter from './routes/admin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
+
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
@@ -16,27 +18,43 @@ app.use(express.json({ limit: '1mb' }));
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
 app.set('bot', bot);
 
-// ─── Public API ─────────────────────────────────────────────
-// ─── Public API ─────────────────────────────────────────────
-app.get('/api/health', (_, res) => res.json({ ok: true }));
+// ═══════════════════════════════════════════════════════════
+// Admin session tokens — shared with routes/admin.js
+// ═══════════════════════════════════════════════════════════
+const adminSessions = new Map();
+global.__aurum_adminSessions = adminSessions;   // ← shared with the admin router
 
-app.get('/api/db-check', async (req, res) => {
-  try {
-    const info = await q('SELECT current_database() AS db, current_user AS u');
-    const tables = await q(
-      `SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename`
-    );
-    res.json({
-      ok: true,
-      db: info.rows[0].db,
-      user: info.rows[0].u,
-      tables: tables.rows.map(r => r.tablename),
-      hasUsers: tables.rows.some(r => r.tablename === 'users'),
-    });
-  } catch (e) {
-    res.json({ ok: false, error: e.message, code: e.code });
+function issueAdminToken(telegramId) {
+  const token = crypto.randomBytes(24).toString('hex');
+  adminSessions.set(token, {
+    telegramId: String(telegramId),
+    expiresAt: Date.now() + 30 * 60 * 1000,
+  });
+  return token;
+}
+
+function validateAdminToken(token) {
+  if (!token) return null;
+  const s = adminSessions.get(token);
+  if (!s) return null;
+  if (Date.now() > s.expiresAt) {
+    adminSessions.delete(token);
+    return null;
   }
-});
+  return s.telegramId;
+}
+
+setInterval(() => {
+  const now = Date.now();
+  for (const [t, s] of adminSessions.entries()) {
+    if (now > s.expiresAt) adminSessions.delete(t);
+  }
+}, 60_000);
+
+// ═══════════════════════════════════════════════════════════
+// Public API
+// ═══════════════════════════════════════════════════════════
+app.get('/api/health', (_, res) => res.json({ ok: true }));
 
 app.get('/api/today', async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
@@ -52,24 +70,34 @@ app.get('/api/today', async (req, res) => {
 
 app.get('/api/me', requireUser, async (req, res) => {
   const id = req.tgUser.id;
-  const isAdmin = String(id) === String(process.env.ADMIN_TELEGRAM_ID);
+  const adminId = String(process.env.ADMIN_TELEGRAM_ID || '').trim();
+  const isAdmin = String(id).trim() === adminId;
 
   const { rows } = await q(
     `SELECT telegram_id, username, first_name, points, streak, best_streak
      FROM users WHERE telegram_id = $1`,
     [id]
   );
+
+  let user;
   if (!rows.length) {
     await q(
       `INSERT INTO users (telegram_id, username, first_name)
        VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
       [id, req.tgUser.username, req.tgUser.first_name]
     );
-    return res.json({
-      user: { telegram_id: id, points: 0, streak: 0, best_streak: 0, is_admin: isAdmin },
-    });
+    user = { telegram_id: id, points: 0, streak: 0, best_streak: 0 };
+  } else {
+    user = rows[0];
   }
-  res.json({ user: { ...rows[0], is_admin: isAdmin } });
+
+  if (isAdmin) {
+    user.is_admin = true;
+    user.admin_path = '/' + (process.env.ADMIN_PATH || 'aurum-console-x7k2');
+    user.admin_token = issueAdminToken(id);
+  }
+
+  res.json({ user });
 });
 
 app.get('/api/me/pick', requireUser, async (req, res) => {
@@ -131,7 +159,6 @@ app.get('/api/challenge/:id/stats', async (req, res) => {
   res.json({ total, stats });
 });
 
-// Full breakdown used on Home after reveal
 app.get('/api/challenge/:id/breakdown', async (req, res) => {
   const { rows: ch } = await q(
     `SELECT id, question, options, ranking, winner_id, ai_reason, outcome_text, status
@@ -201,56 +228,93 @@ app.post('/api/quests/:id/complete', requireUser, async (req, res) => {
   res.json({ ok: true, reward: quest[0].reward });
 });
 
-// ─── Admin API ──────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// Admin API — mounted, but the router enforces auth
+// ═══════════════════════════════════════════════════════════
 app.use('/api/admin', adminRouter);
 
-// ─── Static ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// Public static
+// ═══════════════════════════════════════════════════════════
 app.use(express.static('public'));
 
+// ═══════════════════════════════════════════════════════════
+// Admin panel — Telegram-only, admin-only, token-gated
+// ═══════════════════════════════════════════════════════════
 const ADMIN_PATH = '/' + (process.env.ADMIN_PATH || 'aurum-console-x7k2');
 
 const adminAttempts = new Map();
 function adminRateLimit(req, res, next) {
-  const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
+  const ip =
+    req.headers['x-forwarded-for']?.split(',')[0]?.trim() ||
+    req.socket.remoteAddress ||
+    'unknown';
   const now = Date.now();
-  const record = adminAttempts.get(ip) || { count: 0, resetAt: now + 60000 };
-  if (now > record.resetAt) { record.count = 0; record.resetAt = now + 60000; }
+  const record = adminAttempts.get(ip) || { count: 0, resetAt: now + 60_000 };
+
+  if (now > record.resetAt) {
+    record.count = 0;
+    record.resetAt = now + 60_000;
+  }
   record.count++;
   adminAttempts.set(ip, record);
-  if (record.count > 20) return res.status(429).send('Too many attempts');
+
+  if (record.count > 20) return res.status(404).send('Not found');
   next();
 }
 
-function checkAdminAccess(req) {
-  const secret = req.query.secret || req.headers['x-admin-secret'];
-  if (secret && secret === process.env.ADMIN_SECRET) return true;
-  const initData = req.headers['x-init-data'] || req.query.initData;
-  if (initData) {
-    const user = verifyInitData(initData, process.env.BOT_TOKEN);
-    if (user && String(user.id) === String(process.env.ADMIN_TELEGRAM_ID)) return true;
-  }
-  return false;
+function requireAdminAccess(req) {
+  const initData = req.headers['x-init-data'] || req.query.i;
+  if (!initData) return false;
+
+  const user = verifyInitData(initData, process.env.BOT_TOKEN);
+  if (!user) return false;
+
+  const expected = String(process.env.ADMIN_TELEGRAM_ID || '').trim();
+  const actual = String(user.id || '').trim();
+  if (!expected || !actual || expected !== actual) return false;
+
+  const token = req.query.t || req.headers['x-admin-token'];
+  const tokenOwner = validateAdminToken(token);
+  if (!tokenOwner || tokenOwner !== actual) return false;
+
+  return true;
 }
 
+app.get(`${ADMIN_PATH}/admin.css`, adminRateLimit, (req, res) => {
+  if (!requireAdminAccess(req)) return res.status(404).send('Not found');
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, '../admin/admin.css'));
+});
+
+app.get(`${ADMIN_PATH}/admin.js`, adminRateLimit, (req, res) => {
+  if (!requireAdminAccess(req)) return res.status(404).send('Not found');
+  res.set('Cache-Control', 'no-store');
+  res.sendFile(path.join(__dirname, '../admin/admin.js'));
+});
+
 app.get(ADMIN_PATH, adminRateLimit, (req, res) => {
-  if (!checkAdminAccess(req)) return res.status(404).send('Not found');
+  if (!requireAdminAccess(req)) return res.status(404).send('Not found');
+  res.set('Cache-Control', 'no-store');
   res.sendFile(path.join(__dirname, '../admin/admin.html'));
 });
 
-app.get(`${ADMIN_PATH}/:file`, adminRateLimit, (req, res) => {
-  const file = req.params.file;
-  if (!['admin.css', 'admin.js'].includes(file)) return res.status(404).end();
-  if (!checkAdminAccess(req)) return res.status(404).end();
-  res.sendFile(path.join(__dirname, '../admin/' + file));
+app.get(`${ADMIN_PATH}/*`, adminRateLimit, (req, res) => {
+  res.status(404).send('Not found');
 });
 
+// ═══════════════════════════════════════════════════════════
+// SPA fallback
+// ═══════════════════════════════════════════════════════════
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found' });
   if (req.path.startsWith(ADMIN_PATH)) return res.status(404).send('Not found');
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// ─── Auto-migrate + start ─────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// Auto-migrate + start
+// ═══════════════════════════════════════════════════════════
 const PORT = process.env.PORT || 3000;
 
 (async () => {
@@ -258,10 +322,7 @@ const PORT = process.env.PORT || 3000;
     const { migrate } = await import('./db.js');
     await migrate();
   } catch (e) {
-    console.error('⚠ Migration failed:', e.message);
-    console.error('⚠ Continuing anyway — check /api/db-check');
+    console.error('⚠ Migration skipped:', e.message);
   }
-  app.listen(PORT, () =>
-    console.log(`✓ AURUM on :${PORT}  ·  console at ${ADMIN_PATH}`)
-  );
+  app.listen(PORT, () => console.log(`✓ AURUM on :${PORT}`));
 })();

@@ -1154,36 +1154,7 @@ body {
 }
 @keyframes spin { to { transform: rotate(360deg); } }
 
-/* ═══════════════════════════════════════════════════════════ */
-/* ADMIN FAB                                                    */
-/* ═══════════════════════════════════════════════════════════ */
-#admin-fab {
-  position: fixed;
-  z-index: 9999;
-  width: 52px; height: 52px;
-  border-radius: 16px;
-  background: var(--ink);
-  border: 2.5px solid var(--ink);
-  color: var(--gold);
-  font-size: 22px;
-  font-weight: 900;
-  display: grid;
-  place-items: center;
-  cursor: grab;
-  touch-action: none;
-  user-select: none;
-  box-shadow: var(--shadow-hard);
-  transition: transform 0.15s var(--ease-spring);
-}
-#admin-fab:active:not(.dragging) {
-  transform: translate(3px, 3px);
-  box-shadow: 3px 3px 0 var(--ink);
-}
-#admin-fab.dragging {
-  cursor: grabbing;
-  transform: scale(1.1);
-  box-shadow: var(--shadow-hard-lg);
-}
+
 
 /* ═══════════════════════════════════════════════════════════ */
 /* REDUCED MOTION                                               */

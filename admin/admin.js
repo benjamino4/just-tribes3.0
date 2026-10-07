@@ -5,50 +5,50 @@ tg?.setHeaderColor('#F2EFE9');
 tg?.setBackgroundColor('#F2EFE9');
 
 const initData = tg?.initData || '';
-const urlSecret = new URLSearchParams(location.search).get('secret') || '';
-const SECRET = urlSecret || sessionStorage.getItem('admin_secret') || '';
-if (urlSecret) sessionStorage.setItem('admin_secret', urlSecret);
+const adminToken = new URLSearchParams(location.search).get('t') || '';
+
+// If we're not inside Telegram with a token, refuse to load.
+if (!initData || !adminToken) {
+  document.body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center;font-family:-apple-system,sans-serif;color:#8A7F70;background:#F2EFE9;">
+      <div>
+        <div style="font-size:42px;margin-bottom:18px;">🔒</div>
+        <div style="font-size:18px;font-weight:800;color:#14100C;margin-bottom:10px;">Not found</div>
+        <div style="font-size:13px;">This page does not exist.</div>
+      </div>
+    </div>`;
+  throw new Error('no_auth');
+}
 
 async function api(path, options = {}) {
   const headers = {
     'Content-Type': 'application/json',
     'X-Init-Data': initData,
+    'X-Admin-Token': adminToken,
   };
-  if (SECRET) headers['X-Admin-Secret'] = SECRET;
 
   const res = await fetch(`/api/admin${path}`, { ...options, headers });
-  if (res.status === 403) {
-    document.body.innerHTML = `<div style="padding:60px;text-align:center;font-family:-apple-system;">
-      <div style="font-size:48px;margin-bottom:16px;">🔒</div>
-      <h2>Access denied</h2>
-      <p style="color:#8A7F70;">Open from the admin Telegram account.</p>
-    </div>`;
-    throw new Error('forbidden');
+
+  if (res.status === 404) {
+    document.body.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center;font-family:-apple-system,sans-serif;color:#8A7F70;background:#F2EFE9;">
+        <div>
+          <div style="font-size:42px;margin-bottom:18px;">🔒</div>
+          <div style="font-size:18px;font-weight:800;color:#14100C;margin-bottom:10px;">Not found</div>
+          <div style="font-size:13px;">This page does not exist.</div>
+        </div>
+      </div>`;
+    throw new Error('not_found');
+  }
+  if (res.status === 429) {
+    toast('Too many attempts. Try again in a minute.', 'warn');
+    throw new Error('rate_limited');
   }
   if (!res.ok) {
     const err = await res.json().catch(() => ({}));
     throw new Error(err.error || 'request_failed');
   }
   return res.json();
-}
-
-function toast(msg, type = 'info') {
-  let stack = document.getElementById('toast-stack');
-  if (!stack) {
-    stack = document.createElement('div');
-    stack.id = 'toast-stack';
-    stack.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:10px;';
-    document.body.appendChild(stack);
-  }
-  const el = document.createElement('div');
-  el.style.cssText = `
-    background:${type === 'error' ? '#C33A28' : type === 'success' ? '#1D7B48' : '#14100C'};
-    color:#F2EFE9;padding:14px 18px;border-radius:100px;
-    font-family:ui-rounded,sans-serif;font-size:13px;font-weight:800;
-    box-shadow:4px 4px 0 #14100C;border:2px solid #14100C;`;
-  el.textContent = msg;
-  stack.appendChild(el);
-  setTimeout(() => el.remove(), 3200);
 }
 
 // ─── Nav ────────────────────────────────────────────────────
@@ -397,7 +397,10 @@ document.getElementById('btn-broadcast')?.addEventListener('click', async () => 
 });
 
 // ─── Logout ─────────────────────────────────────────────────
-function doLogout() { sessionStorage.removeItem('admin_secret'); location.reload(); }
+function doLogout() {
+  // No session to clear — just close the admin panel and return to the mini app.
+  location.href = location.origin;
+}
 document.getElementById('btn-logout')?.onclick = doLogout;
 document.getElementById('btn-logout-mobile')?.onclick = doLogout;
 
@@ -418,7 +421,10 @@ function debounce(fn, ms) {
 loadDashboard();
 const who = document.getElementById('admin-who');
 if (tg?.initDataUnsafe?.user) {
-  who.textContent = tg.initDataUnsafe.user.first_name || tg.initDataUnsafe.user.username || 'Admin';
-} else if (SECRET) {
-  who.textContent = 'via secret';
+  who.textContent =
+    tg.initDataUnsafe.user.first_name ||
+    tg.initDataUnsafe.user.username ||
+    'Admin';
+} else {
+  who.textContent = 'Admin';
 }

@@ -7,18 +7,14 @@
   <title>AURUM</title>
   <link rel="stylesheet" href="/style.css" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/eruda"></script>
-<script>eruda.init();</script>
 </head>
 <body>
-  <!-- Quote splash -->
   <section id="splash" class="splash">
     <div class="splash-mark">A</div>
     <blockquote id="splash-quote"></blockquote>
     <cite id="splash-author"></cite>
   </section>
 
-  <!-- App shell -->
   <main id="app" class="app hidden">
     <header class="topbar">
       <div class="user-name" id="user-name">Guest</div>
@@ -28,21 +24,17 @@
       </div>
     </header>
 
-    <!-- Tab panes -->
     <div class="tab-viewport" id="tab-viewport">
-      <!-- HOME TAB -->
       <section class="tab-pane" data-pane="home">
         <div class="streak-row">
           <span class="flame">🔥</span>
           <span class="streak-num" id="streak">0</span>
           <span class="streak-label">day streak</span>
         </div>
-
         <div id="challenge-mount" class="challenge-mount"></div>
         <div id="quests-mount" class="quests-mount"></div>
       </section>
 
-      <!-- LEADERBOARD TAB -->
       <section class="tab-pane" data-pane="board">
         <div class="pane-head">
           <h1 class="pane-title">The Circle</h1>
@@ -52,7 +44,6 @@
       </section>
     </div>
 
-    <!-- Bottom pill tab bar -->
     <nav class="tabbar" id="tabbar">
       <div class="tabbar-pill"></div>
       <button class="tab-item active" data-tab="home">
@@ -71,7 +62,6 @@
     </nav>
   </main>
 
-  <!-- Result reveal overlay (check back later) -->
   <div id="reveal-overlay" class="reveal-overlay hidden">
     <div class="reveal-card">
       <div class="reveal-ring"></div>
@@ -83,7 +73,6 @@
     </div>
   </div>
 
-  <!-- Reward burst overlay (correct pick) -->
   <div id="reward-overlay" class="reward-overlay hidden">
     <canvas id="reward-canvas"></canvas>
     <div class="reward-content">

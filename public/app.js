@@ -642,14 +642,60 @@ function renderBoard() {
   // (already done via data-rank styling — could add outline later)
 }
 
-// ─── Admin FAB (draggable) ──────────────────────────────────
+// ─── Admin FAB — only rendered for the verified admin ──────
+// Nothing about this exists for non-admin users:
+//   - No CSS is shipped mentioning #admin-fab
+//   - No path is hardcoded; it comes from /api/me for the admin only
+//   - Requires a valid, unexpired session token from /api/me
+//   - Long-press (700ms) to open; plain taps do nothing
 function renderAdminFab() {
   if (!state.user?.is_admin) return;
+  if (!state.user?.admin_token) return;
+  if (!state.user?.admin_path) return;
   if (document.getElementById('admin-fab')) return;
+
+  // Inject styles dynamically — never shipped to non-admins
+  if (!document.getElementById('admin-fab-styles')) {
+    const style = document.createElement('style');
+    style.id = 'admin-fab-styles';
+    style.textContent = `
+      #admin-fab {
+        position: fixed;
+        z-index: 9999;
+        width: 52px; height: 52px;
+        border-radius: 16px;
+        background: #14100C;
+        border: 2.5px solid #14100C;
+        color: #E8A22B;
+        font-size: 22px;
+        font-weight: 900;
+        display: grid;
+        place-items: center;
+        cursor: grab;
+        touch-action: none;
+        user-select: none;
+        box-shadow: 6px 6px 0 #14100C;
+        transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
+                    opacity 0.25s ease;
+        opacity: 0.55;
+      }
+      #admin-fab:active:not(.dragging) {
+        transform: translate(3px, 3px);
+        box-shadow: 3px 3px 0 #14100C;
+      }
+      #admin-fab.dragging {
+        cursor: grabbing;
+        transform: scale(1.1);
+        box-shadow: 10px 10px 0 #14100C;
+        opacity: 1;
+      }
+    `;
+    document.head.appendChild(style);
+  }
 
   const fab = document.createElement('button');
   fab.id = 'admin-fab';
-  fab.setAttribute('aria-label', 'Admin');
+  fab.setAttribute('aria-label', 'System');
   fab.textContent = '◈';
 
   const saved = JSON.parse(localStorage.getItem('aurum_fab_pos') || 'null');
@@ -666,47 +712,101 @@ function renderAdminFab() {
   let dragging = false;
   let moved = false;
   let sx = 0, sy = 0, ox = 0, oy = 0;
+  let pressTimer = null;
 
-  fab.addEventListener('pointerdown', (e) => {
-    dragging = true; moved = false;
+  function startPress(e) {
+    dragging = true;
+    moved = false;
     fab.classList.add('dragging');
+
     const r = fab.getBoundingClientRect();
-    sx = e.clientX; sy = e.clientY;
-    ox = e.clientX - r.left; oy = e.clientY - r.top;
+    sx = e.clientX;
+    sy = e.clientY;
+    ox = e.clientX - r.left;
+    oy = e.clientY - r.top;
+
     fab.setPointerCapture?.(e.pointerId);
-  });
-  fab.addEventListener('pointermove', (e) => {
+
+    // Long-press to open. Plain taps do nothing.
+    pressTimer = setTimeout(() => {
+      if (!moved) openAdmin();
+      pressTimer = null;
+    }, 700);
+  }
+
+  function movePress(e) {
     if (!dragging) return;
-    if (Math.abs(e.clientX - sx) > 4 || Math.abs(e.clientY - sy) > 4) moved = true;
+    const dx = e.clientX - sx;
+    const dy = e.clientY - sy;
+
+    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
+      moved = true;
+      if (pressTimer) {
+        clearTimeout(pressTimer);
+        pressTimer = null;
+      }
+    }
+
     pos.x = Math.min(Math.max(4, e.clientX - ox), window.innerWidth - 56);
     pos.y = Math.min(Math.max(4, e.clientY - oy), window.innerHeight - 56);
     fab.style.left = pos.x + 'px';
     fab.style.top = pos.y + 'px';
-  });
-  fab.addEventListener('pointerup', () => {
+  }
+
+  function endPress() {
+    if (pressTimer) {
+      clearTimeout(pressTimer);
+      pressTimer = null;
+    }
     if (!dragging) return;
     dragging = false;
     fab.classList.remove('dragging');
+
+    // Snap to nearest edge
     pos.x = pos.x + 26 < window.innerWidth / 2 ? 16 : window.innerWidth - 68;
     pos.y = Math.min(Math.max(16, pos.y), window.innerHeight - 68);
+
+    fab.style.transition =
+      'left 260ms cubic-bezier(0.2,0.9,0.2,1), top 260ms cubic-bezier(0.2,0.9,0.2,1)';
     fab.style.left = pos.x + 'px';
     fab.style.top = pos.y + 'px';
+    setTimeout(() => { fab.style.transition = ''; }, 280);
+
     localStorage.setItem('aurum_fab_pos', JSON.stringify(pos));
-    if (!moved) openAdmin();
+  }
+
+  fab.addEventListener('pointerdown', startPress);
+  fab.addEventListener('pointermove', movePress);
+  fab.addEventListener('pointerup', endPress);
+  fab.addEventListener('pointercancel', endPress);
+
+  // Fade out when Telegram is backgrounded (screenshot hygiene)
+  document.addEventListener('visibilitychange', () => {
+    fab.style.opacity = document.hidden ? '0' : '0.55';
   });
-  fab.addEventListener('pointercancel', () => {
-    dragging = false;
-    fab.classList.remove('dragging');
+
+  // Stay inside viewport on rotate/resize
+  window.addEventListener('resize', () => {
+    pos.x = Math.min(Math.max(6, pos.x), window.innerWidth - 58);
+    pos.y = Math.min(Math.max(6, pos.y), window.innerHeight - 58);
+    fab.style.left = pos.x + 'px';
+    fab.style.top = pos.y + 'px';
   });
 
   document.body.appendChild(fab);
 }
 
+// ─── Open admin — stays inside the same Telegram webview ───
 function openAdmin() {
   haptic('success');
-  const url = `${location.origin}/aurum-console-x7k2`;
-  if (tg?.openLink) tg.openLink(url);
-  else window.open(url, '_blank');
+
+  // Use location.href (NOT tg.openLink) so Telegram.WebApp.initData
+  // is preserved. tg.openLink opens Chrome/Safari where initData is
+  // empty, and the server would return 404.
+  const path = state.user?.admin_path || '/aurum-console-x7k2';
+  const token = state.user?.admin_token || '';
+  const url = `${location.origin}${path}?t=${encodeURIComponent(token)}`;
+  location.href = url;
 }
 
 // ─── Helpers ────────────────────────────────────────────────

@@ -6,18 +6,46 @@ import { buildPointsMap } from '../scoring.js';
 
 const router = express.Router();
 
+// ═══════════════════════════════════════════════════════════
+// Admin auth — Telegram initData + admin ID + session token
+// Returns 404 for every failure. No hints. No bypasses.
+// ═══════════════════════════════════════════════════════════
 function requireAdmin(req, res, next) {
-  const secret = req.headers['x-admin-secret'];
-  if (secret && secret === process.env.ADMIN_SECRET) return next();
+  // 1. Must present Telegram initData
   const initData = req.headers['x-init-data'];
+  if (!initData) return res.status(404).json({ error: 'not_found' });
+
   const user = verifyInitData(initData, process.env.BOT_TOKEN);
-  if (!user || String(user.id) !== String(process.env.ADMIN_TELEGRAM_ID)) {
-    return res.status(403).json({ error: 'forbidden' });
+  if (!user) return res.status(404).json({ error: 'not_found' });
+
+  // 2. Must be the configured admin Telegram ID
+  const expected = String(process.env.ADMIN_TELEGRAM_ID || '').trim();
+  const actual = String(user.id || '').trim();
+  if (!expected || !actual || expected !== actual) {
+    return res.status(404).json({ error: 'not_found' });
   }
+
+  // 3. Must present a valid, unexpired session token issued by /api/me
+  const token = req.headers['x-admin-token'];
+  if (!token) return res.status(404).json({ error: 'not_found' });
+
+  const shared = global.__aurum_adminSessions;
+  if (!shared) return res.status(404).json({ error: 'not_found' });
+
+  const s = shared.get(token);
+  if (!s || Date.now() > s.expiresAt || s.telegramId !== actual) {
+    return res.status(404).json({ error: 'not_found' });
+  }
+
+  req.adminUser = user;
   next();
 }
+
 router.use(requireAdmin);
 
+// ═══════════════════════════════════════════════════════════
+// Dashboard stats
+// ═══════════════════════════════════════════════════════════
 router.get('/stats', async (req, res) => {
   const [users, picks, quests, open] = await Promise.all([
     q(`SELECT COUNT(*)::int AS c FROM users`),
@@ -38,11 +66,15 @@ router.get('/stats', async (req, res) => {
   });
 });
 
+// ═══════════════════════════════════════════════════════════
+// Challenges
+// ═══════════════════════════════════════════════════════════
 router.get('/challenges', async (req, res) => {
   const { rows } = await q(
     `SELECT c.*,
       (SELECT COUNT(*)::int FROM picks p WHERE p.challenge_id = c.id) AS pick_count
-     FROM challenges c ORDER BY challenge_date DESC LIMIT 100`
+     FROM challenges c
+     ORDER BY challenge_date DESC LIMIT 100`
   );
   res.json({ challenges: rows });
 });
@@ -67,8 +99,14 @@ router.post('/challenges', async (req, res) => {
       `INSERT INTO challenges
         (challenge_date, question, options, outcome_text, use_ai, reveal_at)
        VALUES ($1,$2,$3,$4,$5,$6) RETURNING *`,
-      [challenge_date, question, JSON.stringify(options),
-       outcome_text || null, use_ai !== false, reveal_at]
+      [
+        challenge_date,
+        question,
+        JSON.stringify(options),
+        outcome_text || null,
+        use_ai !== false,
+        reveal_at,
+      ]
     );
     res.json({ challenge: rows[0] });
   } catch (e) {
@@ -78,14 +116,19 @@ router.post('/challenges', async (req, res) => {
 
 router.patch('/challenges/:id', async (req, res) => {
   const { question, options, outcome_text, use_ai, reveal_at, status } = req.body;
-  const fields = []; const values = []; let i = 1;
+  const fields = [];
+  const values = [];
+  let i = 1;
+
   if (question !== undefined) { fields.push(`question=$${i++}`); values.push(question); }
   if (options !== undefined) { fields.push(`options=$${i++}`); values.push(JSON.stringify(options)); }
   if (outcome_text !== undefined) { fields.push(`outcome_text=$${i++}`); values.push(outcome_text); }
   if (use_ai !== undefined) { fields.push(`use_ai=$${i++}`); values.push(use_ai); }
   if (reveal_at !== undefined) { fields.push(`reveal_at=$${i++}`); values.push(reveal_at); }
   if (status !== undefined) { fields.push(`status=$${i++}`); values.push(status); }
+
   if (!fields.length) return res.status(400).json({ error: 'nothing_to_update' });
+
   values.push(req.params.id);
   const { rows } = await q(
     `UPDATE challenges SET ${fields.join(', ')} WHERE id=$${i} RETURNING *`,
@@ -100,7 +143,9 @@ router.delete('/challenges/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── Resolve with FULL RANKING ──────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// Resolve — builds full ranking, awards tiered points
+// ═══════════════════════════════════════════════════════════
 router.post('/challenges/:id/resolve', async (req, res) => {
   const id = req.params.id;
   const { ranking: manualRanking } = req.body;
@@ -169,13 +214,17 @@ router.post('/challenges/:id/resolve', async (req, res) => {
   res.json({ ok: true, ranking, winner_id, ai_votes, ai_reason, pointsMap: map });
 });
 
-// ─── AI Console ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// AI Console
+// ═══════════════════════════════════════════════════════════
 router.post('/ai/ask-all', async (req, res) => {
   const { prompt } = req.body;
   if (!prompt) return res.status(400).json({ error: 'no_prompt' });
   const responses = await askAllAIs(prompt);
-  await q(`INSERT INTO ai_chats (prompt, response) VALUES ($1, $2)`,
-    [prompt, JSON.stringify(responses)]);
+  await q(
+    `INSERT INTO ai_chats (prompt, response) VALUES ($1, $2)`,
+    [prompt, JSON.stringify(responses)]
+  );
   res.json({ responses });
 });
 
@@ -194,7 +243,9 @@ router.get('/ai/history', async (req, res) => {
   res.json({ history: rows });
 });
 
-// ─── Quests ────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// Quests
+// ═══════════════════════════════════════════════════════════
 router.get('/quests', async (req, res) => {
   const { rows } = await q(
     `SELECT q.*,
@@ -211,8 +262,15 @@ router.post('/quests', async (req, res) => {
     `INSERT INTO quests
       (title, description, reward, action_url, action_type, verify_text, expires_at)
      VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-    [title, description || '', reward, action_url || null,
-     action_type || 'link', verify_text || null, expires_at || null]
+    [
+      title,
+      description || '',
+      reward,
+      action_url || null,
+      action_type || 'link',
+      verify_text || null,
+      expires_at || null,
+    ]
   );
   res.json({ quest: rows[0] });
 });
@@ -231,7 +289,9 @@ router.delete('/quests/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── Users ─────────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// Users
+// ═══════════════════════════════════════════════════════════
 router.get('/users', async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 500);
   const search = req.query.search;
@@ -257,20 +317,28 @@ router.patch('/users/:id/points', async (req, res) => {
   res.json({ user: rows[0] });
 });
 
-// ─── Broadcast ─────────────────────────────────────────────
+// ═══════════════════════════════════════════════════════════
+// Broadcast
+// ═══════════════════════════════════════════════════════════
 router.post('/broadcast', async (req, res) => {
   const { message } = req.body;
   if (!message) return res.status(400).json({ error: 'no_message' });
+
   const { rows } = await q(`SELECT telegram_id FROM users`);
   const bot = req.app.get('bot');
   if (!bot) return res.status(500).json({ error: 'bot_not_attached' });
-  let sent = 0, failed = 0;
+
+  let sent = 0;
+  let failed = 0;
   for (const u of rows) {
     try {
       await bot.sendMessage(u.telegram_id, message);
       sent++;
+      // small delay to respect Telegram rate limits
       await new Promise(r => setTimeout(r, 40));
-    } catch { failed++; }
+    } catch {
+      failed++;
+    }
   }
   res.json({ ok: true, sent, failed });
 });
