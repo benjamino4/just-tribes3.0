@@ -800,12 +800,18 @@ function renderAdminFab() {
 function openAdmin() {
   haptic('success');
 
-  // Use location.href (NOT tg.openLink) so Telegram.WebApp.initData
-  // is preserved. tg.openLink opens Chrome/Safari where initData is
-  // empty, and the server would return 404.
+  // A page navigation cannot send custom headers, so both the token
+  // and the Telegram initData must travel in the query string.
+  // The server reads initData from req.query.i as a fallback.
   const path = state.user?.admin_path || '/aurum-console-x7k2';
   const token = state.user?.admin_token || '';
-  const url = `${location.origin}${path}?t=${encodeURIComponent(token)}`;
+  const initData = window.Telegram?.WebApp?.initData || '';
+
+  const url =
+    `${location.origin}${path}` +
+    `?t=${encodeURIComponent(token)}` +
+    `&i=${encodeURIComponent(initData)}`;
+
   location.href = url;
 }
 

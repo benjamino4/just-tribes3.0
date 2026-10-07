@@ -1,22 +1,16 @@
 const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
-tg?.setHeaderColor('#F2EFE9');
-tg?.setBackgroundColor('#F2EFE9');
 
-const initData = tg?.initData || '';
-const adminToken = new URLSearchParams(location.search).get('t') || '';
+const params = new URLSearchParams(location.search);
+const adminToken = params.get('t') || '';
 
-// If we're not inside Telegram with a token, refuse to load.
+// Prefer the live initData from the Telegram SDK. Fall back to the
+// initData that was passed in the URL by the FAB if the SDK is empty.
+const initData = tg?.initData || params.get('i') || '';
+
 if (!initData || !adminToken) {
-  document.body.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center;font-family:-apple-system,sans-serif;color:#8A7F70;background:#F2EFE9;">
-      <div>
-        <div style="font-size:42px;margin-bottom:18px;">🔒</div>
-        <div style="font-size:18px;font-weight:800;color:#14100C;margin-bottom:10px;">Not found</div>
-        <div style="font-size:13px;">This page does not exist.</div>
-      </div>
-    </div>`;
+  document.body.innerHTML = `...locked screen...`;
   throw new Error('no_auth');
 }
 
