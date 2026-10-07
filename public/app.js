@@ -3,8 +3,8 @@ import { quoteOfTheDay } from './quotes.js';
 const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
-tg?.setHeaderColor('#F2EFE9');
-tg?.setBackgroundColor('#F2EFE9');
+tg?.setHeaderColor('#08080A');
+tg?.setBackgroundColor('#08080A');
 
 // ─── State ──────────────────────────────────────────────────
 const state = {
@@ -381,7 +381,7 @@ async function renderRevealed(mount, ch) {
     const amBest = myRank?.rank === 1;
 
     if (amBest && myRank.points > 0) {
-      const seenKey = `aurum_reward_${ch.id}`;
+      const seenKey = `hubris_reward_${ch.id}`;
       if (!sessionStorage.getItem(seenKey)) {
         sessionStorage.setItem(seenKey, '1');
         setTimeout(() => showRewardOverlay('Best Call', myRank.points), 400);
@@ -412,7 +412,7 @@ async function renderRevealed(mount, ch) {
                   <div class="result-text">${escapeHtml(opt.text)}</div>
                   <div class="result-meta">
                     <span>Rank #${r.rank}</span>
-                    <span>+${r.points} aurum</span>
+                    <span>+${r.points} Ichor</span>
                     <span>${dist.count} picks</span>
                   </div>
                   <div class="result-bar">
@@ -444,7 +444,7 @@ function showRewardOverlay(label, points) {
   const canvas = document.getElementById('reward-canvas');
   document.getElementById('reward-label').textContent = label;
   document.getElementById('reward-points').textContent = `+${points}`;
-  document.getElementById('reward-sub').textContent = 'Aurum added to your vault';
+  document.getElementById('reward-sub').textContent = 'Ichor added to your vault';
 
   overlay.classList.remove('hidden');
   overlay.classList.add('active');
@@ -456,7 +456,7 @@ function showRewardOverlay(label, points) {
   canvas.height = window.innerHeight * dpr;
   ctx.scale(dpr, dpr);
 
-  const COLORS = ['#E8A22B', '#B4F8C8', '#FF7A6B', '#C9B6FF', '#14100C'];
+  const COLORS = ['#FFFFFF', '#D8D8DE', '#9A9AA6', '#6A6A78', '#C4C4CE'];
   const parts = [];
   const W = window.innerWidth;
   const H = window.innerHeight;
@@ -616,141 +616,6 @@ function renderBoard() {
   `;
 }
 
-// ─── Admin FAB ──────────────────────────────────────────────
-function renderAdminFab() {
-  if (!state.user?.is_admin) return;
-  if (!state.user?.admin_token) return;
-  if (!state.user?.admin_path) return;
-  if (document.getElementById('admin-fab')) return;
-
-  if (!document.getElementById('admin-fab-styles')) {
-    const style = document.createElement('style');
-    style.id = 'admin-fab-styles';
-    style.textContent = `
-      #admin-fab {
-        position: fixed;
-        z-index: 9999;
-        width: 52px; height: 52px;
-        border-radius: 16px;
-        background: #14100C;
-        border: 2.5px solid #14100C;
-        color: #E8A22B;
-        font-size: 22px;
-        font-weight: 900;
-        display: grid;
-        place-items: center;
-        cursor: grab;
-        touch-action: none;
-        user-select: none;
-        box-shadow: 6px 6px 0 #14100C;
-        transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
-        opacity: 0.55;
-      }
-      #admin-fab:active:not(.dragging) {
-        transform: translate(3px, 3px);
-        box-shadow: 3px 3px 0 #14100C;
-      }
-      #admin-fab.dragging {
-        cursor: grabbing;
-        transform: scale(1.1);
-        box-shadow: 10px 10px 0 #14100C;
-        opacity: 1;
-      }
-    `;
-    document.head.appendChild(style);
-  }
-
-  const fab = document.createElement('button');
-  fab.id = 'admin-fab';
-  fab.setAttribute('aria-label', 'System');
-  fab.textContent = '◈';
-
-  const saved = JSON.parse(localStorage.getItem('aurum_fab_pos') || 'null');
-  const defaultPos = { x: window.innerWidth - 68, y: window.innerHeight - 160 };
-  let pos = saved || defaultPos;
-  pos.x = Math.min(Math.max(6, pos.x), window.innerWidth - 58);
-  pos.y = Math.min(Math.max(6, pos.y), window.innerHeight - 58);
-  fab.style.left = pos.x + 'px';
-  fab.style.top = pos.y + 'px';
-
-  let dragging = false, moved = false;
-  let sx = 0, sy = 0, ox = 0, oy = 0;
-  let pressTimer = null;
-
-  function startPress(e) {
-    dragging = true;
-    moved = false;
-    fab.classList.add('dragging');
-    const r = fab.getBoundingClientRect();
-    sx = e.clientX; sy = e.clientY;
-    ox = e.clientX - r.left; oy = e.clientY - r.top;
-    fab.setPointerCapture?.(e.pointerId);
-
-    pressTimer = setTimeout(() => {
-      if (!moved) openAdmin();
-      pressTimer = null;
-    }, 700);
-  }
-
-  function movePress(e) {
-    if (!dragging) return;
-    const dx = e.clientX - sx;
-    const dy = e.clientY - sy;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
-      moved = true;
-      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-    }
-    pos.x = Math.min(Math.max(4, e.clientX - ox), window.innerWidth - 56);
-    pos.y = Math.min(Math.max(4, e.clientY - oy), window.innerHeight - 56);
-    fab.style.left = pos.x + 'px';
-    fab.style.top = pos.y + 'px';
-  }
-
-  function endPress() {
-    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
-    if (!dragging) return;
-    dragging = false;
-    fab.classList.remove('dragging');
-    pos.x = pos.x + 26 < window.innerWidth / 2 ? 16 : window.innerWidth - 68;
-    pos.y = Math.min(Math.max(16, pos.y), window.innerHeight - 68);
-    fab.style.transition = 'left 260ms cubic-bezier(0.2,0.9,0.2,1), top 260ms cubic-bezier(0.2,0.9,0.2,1)';
-    fab.style.left = pos.x + 'px';
-    fab.style.top = pos.y + 'px';
-    setTimeout(() => { fab.style.transition = ''; }, 280);
-    localStorage.setItem('aurum_fab_pos', JSON.stringify(pos));
-  }
-
-  fab.addEventListener('pointerdown', startPress);
-  fab.addEventListener('pointermove', movePress);
-  fab.addEventListener('pointerup', endPress);
-  fab.addEventListener('pointercancel', endPress);
-
-  document.addEventListener('visibilitychange', () => {
-    fab.style.opacity = document.hidden ? '0' : '0.55';
-  });
-
-  window.addEventListener('resize', () => {
-    pos.x = Math.min(Math.max(6, pos.x), window.innerWidth - 58);
-    pos.y = Math.min(Math.max(6, pos.y), window.innerHeight - 58);
-    fab.style.left = pos.x + 'px';
-    fab.style.top = pos.y + 'px';
-  });
-
-  document.body.appendChild(fab);
-}
-
-function openAdmin() {
-  haptic('success');
-  const path = state.user?.admin_path || '/aurum-console-x7k2';
-  const token = state.user?.admin_token || '';
-  const initData = window.Telegram?.WebApp?.initData || '';
-  const url =
-    `${location.origin}${path}` +
-    `?t=${encodeURIComponent(token)}` +
-    `&i=${encodeURIComponent(initData)}`;
-  location.href = url;
-}
-
 // ─── Helpers ────────────────────────────────────────────────
 function dayIndex() {
   const start = new Date('2026-01-01');
@@ -793,7 +658,6 @@ async function boot() {
     renderChallenge();
     renderQuests();
     renderBoard();
-    renderAdminFab();
   } catch (e) {
     console.error(e);
   }

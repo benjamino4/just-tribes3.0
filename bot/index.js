@@ -1,54 +1,44 @@
 import TelegramBot from 'node-telegram-bot-api';
-import cron from 'node-cron';
 import 'dotenv/config';
 import { q } from '../server/db.js';
 
+// ─── Public game bot ────────────────────────────────────
+// This bot ONLY opens the Mini App and shows the daily call.
+// Everything creative / administrative lives in the separate admin bot.
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: true });
-const ADMIN = Number(process.env.ADMIN_TELEGRAM_ID);
-const isAdmin = msg => msg.from.id === ADMIN;
 
 function mainMenu() {
   return {
     reply_markup: {
       inline_keyboard: [
-        [{ text: '◈ Open AURUM', web_app: { url: process.env.MINI_APP_URL } }],
-        [{ text: '📊 Today\'s Challenge', callback_data: 'today' }],
-        [{ text: '🌐 Admin Console', web_app: { url: `${process.env.MINI_APP_URL}/${process.env.ADMIN_PATH}` } }],
+        [{ text: '◈  Enter HUBRIS', web_app: { url: process.env.MINI_APP_URL } }],
+        [{ text: "▸  Today's Call", callback_data: 'today' }],
       ],
     },
   };
 }
 
 bot.onText(/\/start/, msg => {
-  bot.sendMessage(msg.chat.id,
-    '◈ *AURUM*\n\nThe daily call. Every option is a path — the best one pays the most.',
+  bot.sendMessage(
+    msg.chat.id,
+    '◈ *HUBRIS*\n\nOne call a day. Back your nerve, outread the room, and let the judges weigh every path — the sharpest call earns the most *Ichor*.',
     { parse_mode: 'Markdown', ...mainMenu() }
   );
 });
 
 bot.on('callback_query', async (query) => {
   const chatId = query.message.chat.id;
+  try { bot.answerCallbackQuery(query.id); } catch {}
   if (query.data === 'today') {
     const today = new Date().toISOString().split('T')[0];
-    const { rows } = await q(`SELECT question FROM challenges WHERE challenge_date=$1`, [today]);
-    if (!rows.length) return bot.sendMessage(chatId, 'No challenge today.');
-    return bot.sendMessage(chatId, `▸ ${rows[0].question}`, mainMenu());
+    const { rows } = await q(`SELECT question, reveal_at FROM challenges WHERE challenge_date=$1`, [today]);
+    if (!rows.length) return bot.sendMessage(chatId, 'No call on the table today. Come back soon.');
+    const r = rows[0];
+    const t = new Date(r.reveal_at).toLocaleString();
+    return bot.sendMessage(chatId, `▸ *${r.question}*\n\nReveal · ${t}`, { parse_mode: 'Markdown', ...mainMenu() });
   }
 });
 
-// Every minute: close challenges whose reveal_at has passed
-cron.schedule('* * * * *', async () => {
-  try {
-    const { rows } = await q(
-      `SELECT id, question FROM challenges WHERE status='open' AND reveal_at <= NOW()`
-    );
-    for (const ch of rows) {
-      await q(`UPDATE challenges SET status='closed' WHERE id=$1`, [ch.id]);
-      try {
-        await bot.sendMessage(ADMIN, `🔒 Challenge #${ch.id} closed. Send outcome to resolve.`);
-      } catch {}
-    }
-  } catch (e) { console.error(e); }
-});
+bot.on('polling_error', (e) => console.error('polling_error', e.code || e.message));
 
-console.log('✓ AURUM bot running');
+console.log('✓ HUBRIS game bot running');

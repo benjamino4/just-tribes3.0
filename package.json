@@ -1,11 +1,12 @@
 {
-  "name": "aurum",
-  "version": "1.0.0",
+  "name": "hubris",
+  "version": "2.0.0",
   "type": "module",
   "scripts": {
     "build": "npm install",
     "start": "node server/index.js",
     "bot": "node bot/index.js",
+    "admin": "node admin-bot/index.js",
     "migrate": "node -e \"import('./server/db.js').then(m=>m.migrate())\""
   },
   "dependencies": {

@@ -1,6 +1,7 @@
 services:
+  # ── Public web + Mini App API ─────────────────────────────
   - type: web
-    name: aurum
+    name: hubris
     runtime: node
     plan: free
     region: oregon
@@ -13,10 +14,40 @@ services:
       - { key: NODE_ENV, value: production }
       - { key: DATABASE_URL, sync: false }
       - { key: BOT_TOKEN, sync: false }
-      - { key: ADMIN_TELEGRAM_ID, sync: false }
-      - { key: ADMIN_SECRET, sync: false }
-      - { key: ADMIN_PATH, value: "aurum-console-x7k2" }
       - { key: MINI_APP_URL, sync: false }
+
+  # ── Public game bot (polling) ─────────────────────────────
+  - type: worker
+    name: hubris-bot
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: npm run bot
+    autoDeploy: true
+    envVars:
+      - { key: NODE_VERSION, value: "20" }
+      - { key: NODE_ENV, value: production }
+      - { key: DATABASE_URL, sync: false }
+      - { key: BOT_TOKEN, sync: false }
+      - { key: MINI_APP_URL, sync: false }
+
+  # ── Private admin bot (polling, separate token) ─────────────
+  - type: worker
+    name: hubris-admin-bot
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm install
+    startCommand: npm run admin
+    autoDeploy: true
+    envVars:
+      - { key: NODE_VERSION, value: "20" }
+      - { key: NODE_ENV, value: production }
+      - { key: DATABASE_URL, sync: false }
+      - { key: ADMIN_BOT_TOKEN, sync: false }
+      - { key: ADMIN_TELEGRAM_ID, sync: false }
+      - { key: BOT_TOKEN, sync: false }
       - { key: GROQ_API_KEY, sync: false }
       - { key: CEREBRAS_API_KEY, sync: false }
       - { key: GEMINI_API_KEY, sync: false }
