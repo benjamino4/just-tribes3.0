@@ -3,42 +3,93 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover" />
-  <title>Daily Call</title>
+  <meta name="theme-color" content="#F2EFE9" />
+  <title>AURUM</title>
   <link rel="stylesheet" href="/style.css" />
   <script src="https://telegram.org/js/telegram-web-app.js"></script>
 </head>
 <body>
-  <!-- Quote Reveal -->
-  <section id="entry" class="entry">
-    <div class="quote-line"></div>
-    <blockquote id="quote-text"></blockquote>
-    <cite id="quote-author"></cite>
+  <!-- Quote splash -->
+  <section id="splash" class="splash">
+    <div class="splash-mark">A</div>
+    <blockquote id="splash-quote"></blockquote>
+    <cite id="splash-author"></cite>
   </section>
 
-  <!-- Home -->
-  <section id="home" class="hidden">
+  <!-- App shell -->
+  <main id="app" class="app hidden">
     <header class="topbar">
-      <div class="user-info" id="user-name">Guest</div>
+      <div class="user-name" id="user-name">Guest</div>
       <div class="points-pill">
-        <span class="icon">★</span>
+        <span class="coin">◈</span>
         <span id="points">0</span>
       </div>
     </header>
 
-    <div class="streak-row">
-      <span class="streak-flame">🔥</span>
-      <span class="streak-num" id="streak">0</span>
-      <span>day streak</span>
+    <!-- Tab panes -->
+    <div class="tab-viewport" id="tab-viewport">
+      <!-- HOME TAB -->
+      <section class="tab-pane" data-pane="home">
+        <div class="streak-row">
+          <span class="flame">🔥</span>
+          <span class="streak-num" id="streak">0</span>
+          <span class="streak-label">day streak</span>
+        </div>
+
+        <div id="challenge-mount" class="challenge-mount"></div>
+        <div id="quests-mount" class="quests-mount"></div>
+      </section>
+
+      <!-- LEADERBOARD TAB -->
+      <section class="tab-pane" data-pane="board">
+        <div class="pane-head">
+          <h1 class="pane-title">The Circle</h1>
+          <p class="pane-sub">Top 100 · sorted by Aurum</p>
+        </div>
+        <div id="board-mount" class="board-mount"></div>
+      </section>
     </div>
 
-    <div id="challenge-wrap" class="challenge-wrap"></div>
-    <div id="quests-wrap" class="quests-wrap"></div>
+    <!-- Bottom pill tab bar -->
+    <nav class="tabbar" id="tabbar">
+      <div class="tabbar-pill"></div>
+      <button class="tab-item active" data-tab="home">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>
+        </svg>
+        <span>Home</span>
+      </button>
+      <button class="tab-item" data-tab="board">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M8 21h8M12 17v4M17 4h3v3a4 4 0 0 1-4 4M7 4H4v3a4 4 0 0 0 4 4"/>
+          <path d="M7 4h10v7a5 5 0 0 1-10 0z"/>
+        </svg>
+        <span>Circle</span>
+      </button>
+    </nav>
+  </main>
 
-    <div class="board">
-      <div class="board-title">The Circle</div>
-      <div id="board-list"></div>
+  <!-- Result reveal overlay (check back later) -->
+  <div id="reveal-overlay" class="reveal-overlay hidden">
+    <div class="reveal-card">
+      <div class="reveal-ring"></div>
+      <div class="reveal-icon">◈</div>
+      <h2 class="reveal-title" id="reveal-title">Locked In</h2>
+      <p class="reveal-sub" id="reveal-sub">The AIs are deliberating. Come back at reveal time.</p>
+      <div class="reveal-time" id="reveal-time">—</div>
+      <button class="reveal-btn" id="reveal-btn">Got it</button>
     </div>
-  </section>
+  </div>
+
+  <!-- Reward burst overlay (correct pick) -->
+  <div id="reward-overlay" class="reward-overlay hidden">
+    <canvas id="reward-canvas"></canvas>
+    <div class="reward-content">
+      <div class="reward-label" id="reward-label">Best Call</div>
+      <div class="reward-points" id="reward-points">+100</div>
+      <div class="reward-sub" id="reward-sub">Aurum added to your vault</div>
+    </div>
+  </div>
 
   <script type="module" src="/app.js"></script>
 </body>

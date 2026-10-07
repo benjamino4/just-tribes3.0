@@ -1,32 +1,22 @@
 services:
   - type: web
-    name: tribes
+    name: aurum
     runtime: node
     plan: free
     region: oregon
-    buildCommand: npm run build
+    buildCommand: npm install
     startCommand: npm start
     healthCheckPath: /api/health
     autoDeploy: true
-    disk:
-      name: tribes-data
-      mountPath: /var/data
-      sizeGB: 1
     envVars:
       - { key: NODE_VERSION, value: "20" }
       - { key: NODE_ENV, value: production }
       - { key: DATABASE_URL, sync: false }
       - { key: BOT_TOKEN, sync: false }
-      - { key: ADMIN_BOT_TOKEN, sync: false }
-      - { key: ADMIN_IDS, sync: false }
-      - { key: ADMIN_WEBHOOK_SECRET, sync: false }
-      - { key: TG_WEBHOOK_SECRET, sync: false }
-      - { key: CRON_SECRET, sync: false }
-      - { key: APP_URL, sync: false }
-      - { key: DATA_DIR, value: "/var/data" }
-      - { key: RENDER_API_KEY, sync: false }
-      - { key: RENDER_SERVICE_ID, sync: false }
-      - { key: PYSCORE_URL, sync: false }
-      - { key: PUSH_ENABLED, value: "0" }
-      - { key: ALLOW_GUEST, value: "0" }
-      - { key: MIGRATE, value: "0" }
+      - { key: ADMIN_TELEGRAM_ID, sync: false }
+      - { key: ADMIN_SECRET, sync: false }
+      - { key: ADMIN_PATH, value: "aurum-console-x7k2" }
+      - { key: MINI_APP_URL, sync: false }
+      - { key: GROQ_API_KEY, sync: false }
+      - { key: CEREBRAS_API_KEY, sync: false }
+      - { key: GEMINI_API_KEY, sync: false }

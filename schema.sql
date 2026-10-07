@@ -13,14 +13,15 @@ CREATE TABLE IF NOT EXISTS challenges (
   id              SERIAL PRIMARY KEY,
   challenge_date  DATE UNIQUE NOT NULL,
   question        TEXT NOT NULL,
-  options         JSONB NOT NULL,
+  options         JSONB NOT NULL,      -- [{ id, text }]
   outcome_text    TEXT,
   use_ai          BOOLEAN DEFAULT TRUE,
   reveal_at       TIMESTAMPTZ NOT NULL,
-  winner_id       TEXT,
+  winner_id       TEXT,                 -- best option
+  ranking         JSONB,                -- [{ id, rank, points }] full ordered ranking
   ai_votes        JSONB,
   ai_reason       TEXT,
-  status          TEXT DEFAULT 'open',
+  status          TEXT DEFAULT 'open',  -- open | closed | revealed
   resolved_at     TIMESTAMPTZ,
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );

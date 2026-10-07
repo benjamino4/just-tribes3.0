@@ -1,5 +1,5 @@
 {
-  "name": "daily-call-mini-app",
+  "name": "aurum",
   "version": "1.0.0",
   "type": "module",
   "scripts": {
@@ -16,7 +16,5 @@
     "node-telegram-bot-api": "^0.66.0",
     "pg": "^8.11.5"
   },
-  "engines": {
-    "node": ">=20"
-  }
+  "engines": { "node": ">=20" }
 }

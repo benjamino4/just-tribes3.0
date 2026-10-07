@@ -1,14 +1,14 @@
 import express from 'express';
 import { q } from '../db.js';
 import { verifyInitData } from '../auth.js';
-import { askAllAIs, askAI, judgeWithVoting } from '../ai.js';
+import { askAllAIs, askAI, judgeWithRanking } from '../ai.js';
+import { buildPointsMap } from '../scoring.js';
 
 const router = express.Router();
 
 function requireAdmin(req, res, next) {
   const secret = req.headers['x-admin-secret'];
   if (secret && secret === process.env.ADMIN_SECRET) return next();
-
   const initData = req.headers['x-init-data'];
   const user = verifyInitData(initData, process.env.BOT_TOKEN);
   if (!user || String(user.id) !== String(process.env.ADMIN_TELEGRAM_ID)) {
@@ -16,10 +16,8 @@ function requireAdmin(req, res, next) {
   }
   next();
 }
-
 router.use(requireAdmin);
 
-// ─── Dashboard stats ──────────────────────────────────────
 router.get('/stats', async (req, res) => {
   const [users, picks, quests, open] = await Promise.all([
     q(`SELECT COUNT(*)::int AS c FROM users`),
@@ -40,13 +38,11 @@ router.get('/stats', async (req, res) => {
   });
 });
 
-// ─── Challenges ──────────────────────────────────────────
 router.get('/challenges', async (req, res) => {
   const { rows } = await q(
     `SELECT c.*,
       (SELECT COUNT(*)::int FROM picks p WHERE p.challenge_id = c.id) AS pick_count
-     FROM challenges c
-     ORDER BY challenge_date DESC LIMIT 100`
+     FROM challenges c ORDER BY challenge_date DESC LIMIT 100`
   );
   res.json({ challenges: rows });
 });
@@ -82,19 +78,14 @@ router.post('/challenges', async (req, res) => {
 
 router.patch('/challenges/:id', async (req, res) => {
   const { question, options, outcome_text, use_ai, reveal_at, status } = req.body;
-  const fields = [];
-  const values = [];
-  let i = 1;
-
+  const fields = []; const values = []; let i = 1;
   if (question !== undefined) { fields.push(`question=$${i++}`); values.push(question); }
   if (options !== undefined) { fields.push(`options=$${i++}`); values.push(JSON.stringify(options)); }
   if (outcome_text !== undefined) { fields.push(`outcome_text=$${i++}`); values.push(outcome_text); }
   if (use_ai !== undefined) { fields.push(`use_ai=$${i++}`); values.push(use_ai); }
   if (reveal_at !== undefined) { fields.push(`reveal_at=$${i++}`); values.push(reveal_at); }
   if (status !== undefined) { fields.push(`status=$${i++}`); values.push(status); }
-
   if (!fields.length) return res.status(400).json({ error: 'nothing_to_update' });
-
   values.push(req.params.id);
   const { rows } = await q(
     `UPDATE challenges SET ${fields.join(', ')} WHERE id=$${i} RETURNING *`,
@@ -109,43 +100,51 @@ router.delete('/challenges/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── Resolve ──────────────────────────────────────────────
+// ─── Resolve with FULL RANKING ──────────────────────────────
 router.post('/challenges/:id/resolve', async (req, res) => {
   const id = req.params.id;
-  const { winner_id: manualWinner } = req.body;
+  const { ranking: manualRanking } = req.body;
 
   const { rows } = await q(`SELECT * FROM challenges WHERE id=$1`, [id]);
   if (!rows.length) return res.status(404).json({ error: 'not_found' });
   const ch = rows[0];
 
-  let winner_id = manualWinner;
+  let ranking = manualRanking;
   let ai_votes = [];
   let ai_reason = '';
 
-  if (ch.use_ai && !manualWinner) {
+  if (!ranking && ch.use_ai) {
     if (!ch.outcome_text) return res.status(400).json({ error: 'no_outcome_text' });
-    const verdict = await judgeWithVoting(ch.question, ch.outcome_text, ch.options);
-    winner_id = verdict.winner_id;
+    const verdict = await judgeWithRanking(ch.question, ch.outcome_text, ch.options);
+    ranking = verdict.ranking;
     ai_votes = verdict.votes || [];
     ai_reason = verdict.reason || '';
   }
 
-  if (!winner_id) return res.status(400).json({ error: 'no_winner' });
+  if (!Array.isArray(ranking) || !ranking.length) {
+    return res.status(400).json({ error: 'no_ranking' });
+  }
+
+  const { map, ordered } = buildPointsMap(ranking);
+  const winner_id = ranking[0];
 
   await q(
     `UPDATE challenges
-     SET winner_id=$1, ai_votes=$2, ai_reason=$3,
+     SET winner_id=$1, ranking=$2, ai_votes=$3, ai_reason=$4,
          status='revealed', resolved_at=NOW()
-     WHERE id=$4`,
-    [winner_id, JSON.stringify(ai_votes), ai_reason, id]
+     WHERE id=$5`,
+    [winner_id, JSON.stringify(ordered), JSON.stringify(ai_votes), ai_reason, id]
   );
 
-  await q(
-    `UPDATE picks SET points_earned=10
-     WHERE challenge_id=$1 AND choice=$2`,
-    [id, winner_id]
-  );
+  // Award points per-pick according to the ranking
+  for (const [optionId, points] of Object.entries(map)) {
+    await q(
+      `UPDATE picks SET points_earned=$1 WHERE challenge_id=$2 AND choice=$3`,
+      [points, id, optionId]
+    );
+  }
 
+  // Credit user balances
   await q(
     `UPDATE users u
      SET points = u.points + COALESCE(p.points_earned, 0)
@@ -154,26 +153,29 @@ router.post('/challenges/:id/resolve', async (req, res) => {
     [id]
   );
 
-  await q(`
-    UPDATE users u
-    SET streak = CASE WHEN p.choice=$2 THEN u.streak+1 ELSE 0 END,
-        best_streak = GREATEST(u.best_streak, u.streak + CASE WHEN p.choice=$2 THEN 1 ELSE 0 END)
-    FROM picks p
-    WHERE p.telegram_id=u.telegram_id AND p.challenge_id=$1
-  `, [id, winner_id]);
+  // Streak: only players who picked the #1 option keep/increase streak
+  await q(
+    `UPDATE users u
+     SET streak = CASE WHEN p.choice=$2 THEN u.streak+1 ELSE 0 END,
+         best_streak = GREATEST(
+           u.best_streak,
+           u.streak + CASE WHEN p.choice=$2 THEN 1 ELSE 0 END
+         )
+     FROM picks p
+     WHERE p.telegram_id = u.telegram_id AND p.challenge_id = $1`,
+    [id, winner_id]
+  );
 
-  res.json({ ok: true, winner_id, ai_votes, ai_reason });
+  res.json({ ok: true, ranking, winner_id, ai_votes, ai_reason, pointsMap: map });
 });
 
-// ─── AI Console ───────────────────────────────────────────
+// ─── AI Console ─────────────────────────────────────────────
 router.post('/ai/ask-all', async (req, res) => {
   const { prompt } = req.body;
   if (!prompt) return res.status(400).json({ error: 'no_prompt' });
   const responses = await askAllAIs(prompt);
-  await q(
-    `INSERT INTO ai_chats (prompt, response) VALUES ($1, $2)`,
-    [prompt, JSON.stringify(responses)]
-  );
+  await q(`INSERT INTO ai_chats (prompt, response) VALUES ($1, $2)`,
+    [prompt, JSON.stringify(responses)]);
   res.json({ responses });
 });
 
@@ -192,7 +194,7 @@ router.get('/ai/history', async (req, res) => {
   res.json({ history: rows });
 });
 
-// ─── Quests ──────────────────────────────────────────────
+// ─── Quests ────────────────────────────────────────────────
 router.get('/quests', async (req, res) => {
   const { rows } = await q(
     `SELECT q.*,
@@ -215,26 +217,6 @@ router.post('/quests', async (req, res) => {
   res.json({ quest: rows[0] });
 });
 
-router.patch('/quests/:id', async (req, res) => {
-  const allowed = ['title','description','reward','action_url','action_type','verify_text','expires_at','is_active'];
-  const fields = [];
-  const values = [];
-  let i = 1;
-  for (const k of allowed) {
-    if (req.body[k] !== undefined) {
-      fields.push(`${k}=$${i++}`);
-      values.push(req.body[k]);
-    }
-  }
-  if (!fields.length) return res.status(400).json({ error: 'nothing' });
-  values.push(req.params.id);
-  const { rows } = await q(
-    `UPDATE quests SET ${fields.join(', ')} WHERE id=$${i} RETURNING *`,
-    values
-  );
-  res.json({ quest: rows[0] });
-});
-
 router.patch('/quests/:id/toggle', async (req, res) => {
   const { rows } = await q(
     `UPDATE quests SET is_active = NOT is_active WHERE id=$1 RETURNING *`,
@@ -249,7 +231,7 @@ router.delete('/quests/:id', async (req, res) => {
   res.json({ ok: true });
 });
 
-// ─── Users ────────────────────────────────────────────────
+// ─── Users ─────────────────────────────────────────────────
 router.get('/users', async (req, res) => {
   const limit = Math.min(Number(req.query.limit) || 100, 500);
   const search = req.query.search;
@@ -275,20 +257,19 @@ router.patch('/users/:id/points', async (req, res) => {
   res.json({ user: rows[0] });
 });
 
-// ─── Broadcast ────────────────────────────────────────────
+// ─── Broadcast ─────────────────────────────────────────────
 router.post('/broadcast', async (req, res) => {
   const { message } = req.body;
   if (!message) return res.status(400).json({ error: 'no_message' });
-
   const { rows } = await q(`SELECT telegram_id FROM users`);
   const bot = req.app.get('bot');
   if (!bot) return res.status(500).json({ error: 'bot_not_attached' });
-
   let sent = 0, failed = 0;
   for (const u of rows) {
     try {
       await bot.sendMessage(u.telegram_id, message);
       sent++;
+      await new Promise(r => setTimeout(r, 40));
     } catch { failed++; }
   }
   res.json({ ok: true, sent, failed });

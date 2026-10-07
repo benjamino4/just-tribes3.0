@@ -3,8 +3,8 @@ import { quoteOfTheDay } from './quotes.js';
 const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
-tg?.setHeaderColor('#05070C');
-tg?.setBackgroundColor('#05070C');
+tg?.setHeaderColor('#F2EFE9');
+tg?.setBackgroundColor('#F2EFE9');
 
 // ─── State ──────────────────────────────────────────────────
 const state = {
@@ -13,10 +13,10 @@ const state = {
   quests: [],
   board: [],
   myPick: null,
-  stats: null,
+  tab: 'home',
 };
 
-// ─── API helper ────────────────────────────────────────────
+// ─── API ────────────────────────────────────────────────────
 async function api(path, options = {}) {
   const initData = tg?.initData || '';
   const res = await fetch(path, {
@@ -34,7 +34,6 @@ async function api(path, options = {}) {
   return res.json();
 }
 
-// ─── Haptics ───────────────────────────────────────────────
 function haptic(type = 'light') {
   try {
     if (type === 'success') tg?.HapticFeedback.notificationOccurred('success');
@@ -43,274 +42,301 @@ function haptic(type = 'light') {
   } catch {}
 }
 
-// ─── Entry animation (per-char reveal) ─────────────────────
-function runEntryAnimation() {
-  const entry = document.getElementById('entry');
-  const quoteEl = document.getElementById('quote-text');
-  const authorEl = document.getElementById('quote-author');
+// ─── Splash ─────────────────────────────────────────────────
+function runSplash() {
+  const splash = document.getElementById('splash');
+  const quoteEl = document.getElementById('splash-quote');
+  const authorEl = document.getElementById('splash-author');
 
-  const q = quoteOfTheDay();
+  const quote = quoteOfTheDay();
 
   let html = '';
   let idx = 0;
-  for (const ch of q.text) {
-    if (ch === ' ') {
-      html += ' ';
-    } else {
-      html += `<span class="char" style="animation-delay:${900 + idx * 28}ms">${escapeHtml(ch)}</span>`;
-      idx++;
-    }
+  for (const word of quote.text.split(' ')) {
+    html += `<span class="w" style="animation-delay:${600 + idx * 90}ms">${escapeHtml(word)}</span> `;
+    idx++;
   }
-  quoteEl.innerHTML = html;
+  quoteEl.innerHTML = html.trim();
+  authorEl.textContent = `— ${quote.author}`;
 
-  authorEl.textContent = `— ${q.author}`;
-
-  const readingMs = Math.max(2600, q.text.length * 42);
+  const readMs = Math.max(2800, quote.text.length * 45);
   setTimeout(() => {
-    entry.classList.add('exit');
+    splash.classList.add('exit');
     setTimeout(() => {
-      entry.classList.add('hidden');
-      document.getElementById('home').classList.remove('hidden');
-    }, 700);
-  }, readingMs);
+      splash.classList.add('hidden');
+      document.getElementById('app').classList.remove('hidden');
+      boot();
+    }, 720);
+  }, readMs);
 }
 
-// ─── Render: User header ───────────────────────────────────
+// ─── Tab bar ────────────────────────────────────────────────
+function setupTabBar() {
+  const tabbar = document.getElementById('tabbar');
+  const viewport = document.getElementById('tab-viewport');
+  const panes = {
+    home: viewport.querySelector('[data-pane="home"]'),
+    board: viewport.querySelector('[data-pane="board"]'),
+  };
+
+  function setPaneHeight() {
+    const active = viewport.querySelector('.tab-pane.active');
+    if (active) viewport.style.height = active.offsetHeight + 'px';
+  }
+
+  function switchTab(next, dir = null) {
+    if (state.tab === next) return;
+    const prev = state.tab;
+    state.tab = next;
+    tabbar.dataset.active = next;
+
+    document.querySelectorAll('.tab-item').forEach(b => {
+      b.classList.toggle('active', b.dataset.tab === next);
+    });
+
+    const from = panes[prev];
+    const to = panes[next];
+    const goRight = dir ? dir === 'right' : (next === 'board');
+
+    to.classList.remove('from-left', 'from-right', 'leaving-left', 'leaving-right');
+    to.classList.add(goRight ? 'from-right' : 'from-left');
+    // force layout
+    void to.offsetWidth;
+    to.classList.remove('from-right', 'from-left');
+    to.classList.add('active');
+
+    from.classList.remove('active');
+    from.classList.add(goRight ? 'leaving-left' : 'leaving-right');
+
+    setTimeout(() => {
+      from.classList.remove('leaving-left', 'leaving-right');
+      setPaneHeight();
+    }, 420);
+  }
+
+  document.querySelectorAll('.tab-item').forEach(btn => {
+    btn.addEventListener('click', () => {
+      haptic('light');
+      switchTab(btn.dataset.tab);
+    });
+  });
+
+  // Swipe between tabs
+  let sx = 0, sy = 0, tracking = false;
+  viewport.addEventListener('touchstart', (e) => {
+    sx = e.touches[0].clientX;
+    sy = e.touches[0].clientY;
+    tracking = true;
+  }, { passive: true });
+
+  viewport.addEventListener('touchend', (e) => {
+    if (!tracking) return;
+    tracking = false;
+    const dx = e.changedTouches[0].clientX - sx;
+    const dy = e.changedTouches[0].clientY - sy;
+    if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
+    if (dx < 0 && state.tab === 'home') switchTab('board', 'right');
+    if (dx > 0 && state.tab === 'board') switchTab('home', 'left');
+  }, { passive: true });
+
+  setPaneHeight();
+  window.addEventListener('resize', setPaneHeight);
+
+  return { setPaneHeight };
+}
+
+// ─── Render: user header ────────────────────────────────────
 function renderUser() {
   const name = state.user?.first_name || state.user?.username || 'Guest';
   document.getElementById('user-name').textContent = name;
   document.getElementById('points').textContent = state.user?.points ?? 0;
-
-  const streakEl = document.getElementById('streak');
-  if (streakEl) streakEl.textContent = state.user?.streak ?? 0;
+  document.getElementById('streak').textContent = state.user?.streak ?? 0;
 }
 
-// ─── Render: Challenge ─────────────────────────────────────
+// ─── Render: challenge (stacked deck) ───────────────────────
 function renderChallenge() {
-  const wrap = document.getElementById('challenge-wrap');
+  const mount = document.getElementById('challenge-mount');
   const ch = state.challenge;
 
   if (!ch) {
-    wrap.innerHTML = `<div class="empty-state">NO CHALLENGE TODAY · COME BACK TOMORROW</div>`;
+    mount.innerHTML = `<div class="empty">No challenge today<br/>come back tomorrow</div>`;
     return;
   }
 
   const revealTime = new Date(ch.reveal_at);
   const now = new Date();
-  const isRevealed = ch.status === 'revealed' || (ch.winner_id && now >= revealTime);
-  const isClosed = ch.status === 'closed' || (now >= revealTime && !ch.winner_id);
+  const revealed = ch.status === 'revealed' && ch.winner_id;
+  const closed = ch.status === 'closed' || (now >= revealTime && !ch.winner_id);
 
-  if (isRevealed && ch.winner_id) {
-    renderRevealed(wrap, ch);
-    return;
-  }
+  if (revealed) return renderRevealed(mount, ch);
 
-  if (isClosed) {
-    wrap.innerHTML = `
-      <div class="challenge-day">DAY ${dayIndex()}</div>
-      <div class="challenge-question">${escapeHtml(ch.question)}</div>
-      <div class="sealed-card">
-        <span class="sealed-icon">◈</span>
-        <div class="sealed-title">Locked</div>
-        <div class="sealed-text">Entries are closed. The result will be revealed shortly.</div>
+  if (closed) {
+    mount.innerHTML = `
+      <div class="day-badge">Day ${dayIndex()}</div>
+      <h2 class="q">${escapeHtml(ch.question)}</h2>
+      <div class="sealed">
+        <div class="sealed-ring"></div>
+        <div class="sealed-icon">◈</div>
+        <div class="sealed-title">Sealed</div>
+        <div class="sealed-text">Entries closed. Results drop shortly.</div>
       </div>
     `;
     return;
   }
 
   if (state.myPick) {
-    wrap.innerHTML = `
-      <div class="challenge-day">DAY ${dayIndex()}</div>
-      <div class="challenge-question">${escapeHtml(ch.question)}</div>
-      <div class="sealed-card">
-        <span class="sealed-icon">◈</span>
-        <div class="sealed-title">Sealed</div>
-        <div class="sealed-text">Your choice has been recorded. The AIs will judge at the reveal time.</div>
-        <div class="sealed-time">REVEAL · ${formatTime(revealTime)}</div>
+    mount.innerHTML = `
+      <div class="day-badge">Day ${dayIndex()}</div>
+      <h2 class="q">${escapeHtml(ch.question)}</h2>
+      <div class="sealed">
+        <div class="sealed-ring"></div>
+        <div class="sealed-icon">◈</div>
+        <div class="sealed-title">Called it</div>
+        <div class="sealed-text">You locked in <strong>${escapeHtml(state.myPick.choice.toUpperCase())}</strong>. The AIs will rank every path at reveal time — the sharpest one pays the most.</div>
+        <div class="sealed-time">Reveal · ${formatTime(revealTime)}</div>
       </div>
     `;
     return;
   }
 
+  // Open — stacked deck
   const options = ch.options || [];
-  wrap.innerHTML = `
-    <div class="challenge-day">DAY ${dayIndex()}</div>
-    <div class="challenge-question">${escapeHtml(ch.question)}</div>
-    <div class="options-list" id="options-list">
-      ${options.map(o => `
-        <div class="option-card" data-id="${escapeAttr(o.id)}">
-          <div class="option-id">${escapeHtml(o.id.toUpperCase())}</div>
-          <div class="option-text">${escapeHtml(o.text)}</div>
-        </div>
-      `).join('')}
+  mount.innerHTML = `
+    <div class="day-badge">Day ${dayIndex()}</div>
+    <h2 class="q">${escapeHtml(ch.question)}</h2>
+    <div class="deck" id="deck"></div>
+    <div class="deck-pager" id="deck-pager">
+      ${options.map((_, i) => `<div class="deck-dot ${i === 0 ? 'active' : ''}"></div>`).join('')}
     </div>
-    <div class="sealed-time" style="text-align:center;margin-top:18px;">
-      CLOSES · ${formatTime(revealTime)}
+    <div class="empty" style="padding:0;font-size:10px;">
+      Swipe to browse · tap LOCK IN to commit
     </div>
   `;
 
-  document.querySelectorAll('.option-card').forEach(card => {
-    card.addEventListener('click', (e) => {
-      spawnRipple(card, e);
-      onPick(card.dataset.id);
-    });
-    // Subtle parallax tilt on pointer move
-    card.addEventListener('pointermove', (e) => {
-      if (card.classList.contains('disabled') || card.classList.contains('selected')) return;
-      const rect = card.getBoundingClientRect();
-      const x = (e.clientX - rect.left) / rect.width - 0.5;
-      const y = (e.clientY - rect.top) / rect.height - 0.5;
-      card.style.transform = `perspective(600px) rotateY(${x * 4}deg) rotateX(${-y * 4}deg) scale(1.008)`;
-    });
-    card.addEventListener('pointerleave', () => {
-      card.style.transform = '';
-    });
-  });
+  buildDeck(options);
 }
 
-function spawnRipple(card, e) {
-  const rect = card.getBoundingClientRect();
-  const size = Math.max(rect.width, rect.height) * 2.2;
-  const ripple = document.createElement('span');
-  ripple.className = 'ripple';
-  ripple.style.width = ripple.style.height = `${size}px`;
-  ripple.style.left = `${e.clientX - rect.left}px`;
-  ripple.style.top = `${e.clientY - rect.top}px`;
-  card.appendChild(ripple);
-  setTimeout(() => ripple.remove(), 650);
-}
+// ─── Stacked deck builder ───────────────────────────────────
+function buildDeck(options) {
+  const deck = document.getElementById('deck');
+  const pager = document.getElementById('deck-pager');
+  const COLORS = ['gold', 'mint', 'coral', 'lav', 'paper'];
 
-// ─── Reveal view ───────────────────────────────────────────
-function renderRevealed(wrap, ch) {
-  const options = ch.options || [];
-  const myChoice = state.myPick?.choice;
-  const correct = myChoice === ch.winner_id;
-
-  wrap.innerHTML = `
-    <div class="challenge-day">DAY ${dayIndex()} · RESULT</div>
-    <div class="result-banner ${correct ? 'correct' : 'wrong'}">
-      ${correct ? '✓ YOU CALLED IT' : '✗ NOT THIS TIME'}
-    </div>
-    <div class="challenge-question">${escapeHtml(ch.question)}</div>
-    <div class="options-list" id="options-list">
-      ${options.map(o => {
-        let cls = 'option-card disabled';
-        if (o.id === ch.winner_id) cls += ' winner';
-        else if (o.id === myChoice) cls += ' loser';
-        return `
-          <div class="${cls}" data-id="${escapeAttr(o.id)}">
-            <div class="option-id">${escapeHtml(o.id.toUpperCase())}</div>
-            <div class="option-text">${escapeHtml(o.text)}</div>
-          </div>
-        `;
-      }).join('')}
-    </div>
-    ${ch.ai_reason ? `<div class="ai-reason">${escapeHtml(ch.ai_reason)}</div>` : ''}
-    <div class="stats-block" id="stats-block">
-      <div class="stats-title">HOW EVERYONE CHOSE</div>
-      <div id="stats-content"><div class="loading"></div></div>
-    </div>
-  `;
-
-  const winnerEl = wrap.querySelector('.option-card.winner');
-  if (winnerEl) {
-    spawnBurst(winnerEl);
-    setTimeout(() => spawnBurst(winnerEl), 220);
-  }
-
-  if (correct) {
-    haptic('success');
-    spawnConfetti();
-  } else {
-    haptic('error');
-  }
-
-  loadStats(ch.id);
-}
-
-// ─── Burst particles on winning option ─────────────────────
-function spawnBurst(el) {
-  const ring = document.createElement('span');
-  ring.className = 'burst-ring';
-  el.appendChild(ring);
-  setTimeout(() => ring.remove(), 950);
-
-  for (let i = 0; i < 10; i++) {
-    const dot = document.createElement('span');
-    dot.className = 'burst-dot';
-    const angle = (i / 10) * Math.PI * 2;
-    const dist = 60 + Math.random() * 40;
-    dot.style.setProperty('--dx', `${Math.cos(angle) * dist}px`);
-    dot.style.setProperty('--dy', `${Math.sin(angle) * dist}px`);
-    dot.style.left = '50%';
-    dot.style.top = '50%';
-    el.appendChild(dot);
-    setTimeout(() => dot.remove(), 850);
-  }
-}
-
-// ─── Confetti on correct pick ──────────────────────────────
-function spawnConfetti() {
-  const colors = ['#00F0FF', '#FFB800', '#FF006E', '#00FF88'];
-  const cx = window.innerWidth / 2;
-  const cy = window.innerHeight / 2;
-
-  for (let i = 0; i < 28; i++) {
-    const p = document.createElement('span');
-    p.className = 'confetti-piece';
-    p.style.background = colors[i % colors.length];
-    p.style.left = `${cx}px`;
-    p.style.top = `${cy}px`;
-    p.style.boxShadow = `0 0 10px ${colors[i % colors.length]}`;
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 120 + Math.random() * 220;
-    p.style.setProperty('--cx', `${Math.cos(angle) * dist}px`);
-    p.style.setProperty('--cy', `${Math.sin(angle) * dist + 120}px`);
-    p.style.setProperty('--cr', `${Math.random() * 720 - 360}deg`);
-    document.body.appendChild(p);
-    setTimeout(() => p.remove(), 1900);
-  }
-}
-
-// ─── Stats ─────────────────────────────────────────────────
-async function loadStats(challengeId) {
-  try {
-    const { stats } = await api(`/api/challenge/${challengeId}/stats`);
-    const container = document.getElementById('stats-content');
-    if (!container) return;
-    if (!stats.length) {
-      container.innerHTML = `<div class="empty-state">NO PICKS RECORDED</div>`;
-      return;
-    }
-    container.innerHTML = stats.map((s, i) => `
-      <div class="stat-row" style="--i:${i}">
-        <span class="stat-label">${escapeHtml(s.choice.toUpperCase())}</span>
-        <div class="stat-bar">
-          <div class="stat-fill" style="--target:${s.percent}%"></div>
-        </div>
-        <span class="stat-pct">${s.percent}%</span>
+  let activeIdx = 0;
+  const cards = options.map((opt, i) => {
+    const card = document.createElement('div');
+    card.className = 'deck-card';
+    card.dataset.id = opt.id;
+    card.dataset.color = COLORS[i % COLORS.length];
+    card.style.zIndex = String(100 - i);
+    card.innerHTML = `
+      <div class="card-letter">${escapeHtml(opt.id.toUpperCase())}</div>
+      <div class="card-text">${escapeHtml(opt.text)}</div>
+      <div class="card-hint">
+        <span>${i + 1} / ${options.length}</span>
+        <span class="lock">Lock In</span>
       </div>
-    `).join('');
-  } catch {
-    const c = document.getElementById('stats-content');
-    if (c) c.innerHTML = '';
-  }
-}
-
-// ─── Pick handler ──────────────────────────────────────────
-async function onPick(choiceId) {
-  if (state.myPick) return;
-
-  document.querySelectorAll('.option-card').forEach(c => {
-    c.style.pointerEvents = 'none';
-    c.classList.add('disabled');
+    `;
+    return card;
   });
 
-  const chosen = document.querySelector(`.option-card[data-id="${choiceId}"]`);
-  if (chosen) {
-    chosen.classList.remove('disabled');
-    chosen.classList.add('selected');
+  // Initial stacked transform
+  function layout() {
+    cards.forEach((card, i) => {
+      const offset = i - activeIdx;
+      if (offset < 0) {
+        // Swiped away (shouldn't normally happen since we cycle)
+        card.style.transform = `translateX(-120%) rotate(-20deg)`;
+        card.style.opacity = '0';
+        card.style.pointerEvents = 'none';
+      } else if (offset === 0) {
+        card.style.transform = `translateY(0) rotate(0deg) scale(1)`;
+        card.style.opacity = '1';
+        card.style.pointerEvents = 'auto';
+      } else if (offset === 1) {
+        card.style.transform = `translateY(10px) scale(0.96) rotate(2deg)`;
+        card.style.opacity = '0.7';
+        card.style.pointerEvents = 'none';
+      } else if (offset === 2) {
+        card.style.transform = `translateY(18px) scale(0.92) rotate(-2deg)`;
+        card.style.opacity = '0.4';
+        card.style.pointerEvents = 'none';
+      } else {
+        card.style.transform = `translateY(24px) scale(0.88)`;
+        card.style.opacity = '0';
+        card.style.pointerEvents = 'none';
+      }
+    });
+    // Pager
+    pager.querySelectorAll('.deck-dot').forEach((d, i) => {
+      d.classList.toggle('active', i === activeIdx);
+    });
   }
+
+  cards.forEach((card, i) => {
+    deck.appendChild(card);
+    if (i === 0) layout();
+
+    // Pointer drag
+    let sx = 0, sy = 0, dx = 0, dy = 0, dragging = false;
+
+    card.addEventListener('pointerdown', (e) => {
+      if (i !== activeIdx) return;
+      if (e.target.closest('.lock')) return; // let button handle
+      dragging = true;
+      sx = e.clientX;
+      sy = e.clientY;
+      card.classList.add('dragging');
+      card.setPointerCapture?.(e.pointerId);
+    });
+
+    card.addEventListener('pointermove', (e) => {
+      if (!dragging) return;
+      dx = e.clientX - sx;
+      dy = e.clientY - sy;
+      const rot = dx * 0.06;
+      card.style.transform = `translate(${dx}px, ${dy * 0.4}px) rotate(${rot}deg)`;
+    });
+
+    card.addEventListener('pointerup', () => {
+      if (!dragging) return;
+      dragging = false;
+      card.classList.remove('dragging');
+      const threshold = 90;
+      if (Math.abs(dx) > threshold) {
+        const dir = dx > 0 ? 1 : -1;
+        card.style.transform = `translate(${dir * 500}px, ${dy}px) rotate(${dir * 30}deg)`;
+        card.style.opacity = '0';
+        haptic('light');
+        setTimeout(() => {
+          activeIdx = (activeIdx + 1) % cards.length;
+          dx = 0; dy = 0;
+          layout();
+        }, 260);
+      } else {
+        layout();
+      }
+    });
+
+    card.addEventListener('pointercancel', () => {
+      dragging = false;
+      card.classList.remove('dragging');
+      layout();
+    });
+
+    // Lock In button
+    card.querySelector('.lock').addEventListener('click', (e) => {
+      e.stopPropagation();
+      commitPick(opt.id);
+    });
+  });
+
+  layout();
+}
+
+// ─── Commit pick + reveal overlay ───────────────────────────
+async function commitPick(choiceId) {
+  if (state.myPick) return;
   haptic('medium');
 
   try {
@@ -323,14 +349,11 @@ async function onPick(choiceId) {
     });
     state.myPick = { choice: choiceId };
 
-    setTimeout(() => {
-      const wrap = document.getElementById('challenge-wrap');
-      wrap.style.animation = 'sealFlip 0.6s cubic-bezier(0.4,0,0.2,1)';
-      setTimeout(() => {
-        renderChallenge();
-        wrap.style.animation = '';
-      }, 300);
-    }, 500);
+    // Show reveal overlay
+    showRevealOverlay(choiceId);
+
+    // Re-render behind the overlay
+    setTimeout(() => renderChallenge(), 400);
   } catch (err) {
     if (err.error === 'already_picked') {
       state.myPick = { choice: choiceId };
@@ -339,23 +362,195 @@ async function onPick(choiceId) {
     }
     haptic('error');
     alert('Could not submit. Try again.');
-    renderChallenge();
   }
 }
 
-// ─── Quests ────────────────────────────────────────────────
-function renderQuests() {
-  const wrap = document.getElementById('quests-wrap');
-  if (!state.quests.length) {
-    wrap.innerHTML = '';
-    return;
+function showRevealOverlay(choiceId) {
+  const overlay = document.getElementById('reveal-overlay');
+  const timeEl = document.getElementById('reveal-time');
+  const subEl = document.getElementById('reveal-sub');
+  const titleEl = document.getElementById('reveal-title');
+
+  const revealTime = new Date(state.challenge.reveal_at);
+  timeEl.textContent = `Reveal at ${formatTime(revealTime)}`;
+
+  subEl.textContent = 'You locked in ' + choiceId.toUpperCase() +
+    '. The AIs are ranking every path. The best call pays the most.';
+
+  overlay.classList.remove('hidden');
+
+  document.getElementById('reveal-btn').onclick = () => {
+    haptic('light');
+    overlay.classList.add('hidden');
+  };
+}
+
+// ─── Revealed view (full breakdown) ─────────────────────────
+async function renderRevealed(mount, ch) {
+  mount.innerHTML = `<div class="empty"><span class="loader"></span></div>`;
+
+  try {
+    const { challenge, distribution, total, pointsMap } = await api(`/api/challenge/${ch.id}/breakdown`);
+    const ranking = challenge.ranking || []; // [{ id, rank, points }]
+    const optionsById = Object.fromEntries((challenge.options || []).map(o => [o.id, o]));
+    const myChoice = state.myPick?.choice;
+    const myRank = ranking.find(r => r.id === myChoice);
+    const amBest = myRank?.rank === 1;
+
+    // Trigger reward if user got the best option AND hasn't been shown it yet for this challenge
+    if (amBest && myRank.points > 0) {
+      const seenKey = `aurum_reward_${ch.id}`;
+      if (!sessionStorage.getItem(seenKey)) {
+        sessionStorage.setItem(seenKey, '1');
+        setTimeout(() => showRewardOverlay('Best Call', myRank.points), 400);
+      }
+    }
+
+    mount.innerHTML = `
+      <div class="day-badge">Day ${dayIndex()} · Result</div>
+      <h2 class="q">${escapeHtml(challenge.question)}</h2>
+
+      <div class="result-card">
+        <div class="result-head">
+          <div class="result-q">${escapeHtml(challenge.outcome_text || 'Outcome recorded.')}</div>
+          <div class="result-badge ${amBest ? 'best' : myRank?.rank === ranking.length ? 'low' : 'mid'}">
+            ${myRank ? (amBest ? 'Best' : `#${myRank.rank}`) : '—'}
+          </div>
+        </div>
+
+        <div class="result-options">
+          ${ranking.map((r, i) => {
+            const opt = optionsById[r.id] || { text: r.id };
+            const dist = distribution[r.id] || { percent: 0, count: 0 };
+            const mine = r.id === myChoice;
+            return `
+              <div class="result-row ${r.rank === 1 ? 'best' : ''} ${mine ? 'mine' : ''}" style="--i:${i}">
+                <div class="result-letter">${escapeHtml(r.id.toUpperCase())}</div>
+                <div class="result-info">
+                  <div class="result-text">${escapeHtml(opt.text)}</div>
+                  <div class="result-meta">
+                    <span>Rank #${r.rank}</span>
+                    <span>+${r.points} aurum</span>
+                    <span>${dist.count} picks</span>
+                  </div>
+                  <div class="result-bar">
+                    <div class="result-bar-fill" style="--w:${dist.percent}%"></div>
+                  </div>
+                </div>
+                <div class="result-pct">${dist.percent}%</div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+
+        ${challenge.ai_reason ? `
+          <div class="result-reason">
+            <strong>Why</strong>
+            ${escapeHtml(challenge.ai_reason)}
+          </div>
+        ` : ''}
+      </div>
+    `;
+  } catch (e) {
+    mount.innerHTML = `<div class="empty">Could not load result</div>`;
+    console.error(e);
+  }
+}
+
+// ─── Reward overlay + confetti ──────────────────────────────
+function showRewardOverlay(label, points) {
+  const overlay = document.getElementById('reward-overlay');
+  const canvas = document.getElementById('reward-canvas');
+  document.getElementById('reward-label').textContent = label;
+  document.getElementById('reward-points').textContent = `+${points}`;
+  document.getElementById('reward-sub').textContent = 'Aurum added to your vault';
+
+  overlay.classList.remove('hidden');
+  overlay.classList.add('active');
+  haptic('success');
+
+  // Confetti
+  const ctx = canvas.getContext('2d');
+  const dpr = window.devicePixelRatio || 1;
+  canvas.width = window.innerWidth * dpr;
+  canvas.height = window.innerHeight * dpr;
+  ctx.scale(dpr, dpr);
+
+  const COLORS = ['#E8A22B', '#B4F8C8', '#FF7A6B', '#C9B6FF', '#14100C'];
+  const parts = [];
+  const W = window.innerWidth;
+  const H = window.innerHeight;
+  const cx = W / 2;
+  const cy = H / 2;
+
+  for (let i = 0; i < 90; i++) {
+    const angle = Math.random() * Math.PI * 2;
+    const speed = 6 + Math.random() * 12;
+    parts.push({
+      x: cx, y: cy,
+      vx: Math.cos(angle) * speed,
+      vy: Math.sin(angle) * speed - 4,
+      w: 6 + Math.random() * 8,
+      h: 6 + Math.random() * 8,
+      color: COLORS[(Math.random() * COLORS.length) | 0],
+      rot: Math.random() * Math.PI * 2,
+      vr: (Math.random() - 0.5) * 0.4,
+      life: 1,
+    });
   }
 
-  wrap.innerHTML = `
-    <div class="section-title">SIDE QUESTS</div>
-    ${state.quests.map((q, i) => `
-      <div class="quest-card" data-id="${q.id}" style="--i:${i}">
-        <div class="quest-icon">🎯</div>
+  let raf;
+  function tick() {
+    ctx.clearRect(0, 0, W, H);
+    let alive = false;
+    for (const p of parts) {
+      p.vy += 0.45;      // gravity
+      p.vx *= 0.99;
+      p.x += p.vx;
+      p.y += p.vy;
+      p.rot += p.vr;
+      p.life -= 0.008;
+      if (p.life > 0 && p.y < H + 40) {
+        alive = true;
+        ctx.save();
+        ctx.translate(p.x, p.y);
+        ctx.rotate(p.rot);
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.color;
+        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
+        ctx.restore();
+      }
+    }
+    if (alive) {
+      raf = requestAnimationFrame(tick);
+    } else {
+      setTimeout(() => {
+        overlay.classList.add('hidden');
+        overlay.classList.remove('active');
+        cancelAnimationFrame(raf);
+      }, 300);
+    }
+  }
+  tick();
+
+  // Auto dismiss after 3s
+  setTimeout(() => {
+    overlay.classList.add('hidden');
+    overlay.classList.remove('active');
+    cancelAnimationFrame(raf);
+  }, 3200);
+}
+
+// ─── Quests ─────────────────────────────────────────────────
+function renderQuests() {
+  const mount = document.getElementById('quests-mount');
+  if (!state.quests.length) { mount.innerHTML = ''; return; }
+
+  mount.innerHTML = `
+    <div class="section-label">Side Quests</div>
+    ${state.quests.map(q => `
+      <div class="quest" data-id="${q.id}">
+        <div class="quest-icon">◆</div>
         <div class="quest-body">
           <div class="quest-title">${escapeHtml(q.title)}</div>
           <div class="quest-desc">${escapeHtml(q.description)}</div>
@@ -365,8 +560,8 @@ function renderQuests() {
     `).join('')}
   `;
 
-  document.querySelectorAll('.quest-card').forEach(card => {
-    card.addEventListener('click', () => onQuestClick(card.dataset.id));
+  mount.querySelectorAll('.quest').forEach(el => {
+    el.addEventListener('click', () => onQuestClick(el.dataset.id));
   });
 }
 
@@ -379,181 +574,158 @@ async function onQuestClick(questId) {
     if (tg?.openLink) tg.openLink(quest.action_url);
     else window.open(quest.action_url, '_blank');
   }
-
-  if (quest.verify_text) {
-    const ok = confirm(quest.verify_text);
-    if (!ok) return;
-  }
+  if (quest.verify_text && !confirm(quest.verify_text)) return;
 
   try {
     const res = await api(`/api/quests/${questId}/complete`, { method: 'POST' });
     haptic('success');
     if (state.user) state.user.points += res.reward || quest.reward;
     renderUser();
+    document.querySelector('.points-pill')?.classList.add('pulse');
+    setTimeout(() => document.querySelector('.points-pill')?.classList.remove('pulse'), 600);
     state.quests = state.quests.filter(q => String(q.id) !== String(questId));
     renderQuests();
   } catch (err) {
     if (err.error === 'done') {
       state.quests = state.quests.filter(q => String(q.id) !== String(questId));
       renderQuests();
-    } else {
-      haptic('error');
-    }
+    } else haptic('error');
   }
 }
 
-// ─── Leaderboard ───────────────────────────────────────────
+// ─── Leaderboard ────────────────────────────────────────────
 function renderBoard() {
-  const el = document.getElementById('board-list');
+  const mount = document.getElementById('board-mount');
   if (!state.board.length) {
-    el.innerHTML = `<div class="empty-state">BE THE FIRST TO CALL IT</div>`;
+    mount.innerHTML = `<div class="empty">Be the first to call it</div>`;
     return;
   }
 
-  el.innerHTML = state.board.map((u, i) => {
-    const rank = i + 1;
-    const isMe = String(u.telegram_id) === String(state.user?.telegram_id);
-    const topClass = rank <= 3 ? `top-${rank}` : '';
-    return `
-      <div class="board-row ${topClass} ${isMe ? 'me' : ''}">
-        <div class="board-rank">${rank}</div>
-        <div class="board-name">${escapeHtml(u.first_name || u.username || 'Anon')}</div>
-        <div class="board-points">${u.points}</div>
-      </div>
-    `;
-  }).join('');
+  const top3 = state.board.slice(0, 3);
+  const rest = state.board.slice(3);
+  const myId = String(state.user?.telegram_id);
+  const nameOf = u => u.first_name || u.username || 'Anon';
+
+  // Podium (2, 1, 3)
+  const podiumOrder = [top3[1], top3[0], top3[2]].filter(Boolean);
+
+  mount.innerHTML = `
+    <div class="podium">
+      ${podiumOrder.map((u, idx) => {
+        const realRank = top3.indexOf(u) + 1;
+        return `
+          <div class="podium-slot" data-rank="${realRank}">
+            <div class="podium-rank">${realRank === 1 ? 'Champion' : realRank === 2 ? 'Runner-up' : 'Third'}</div>
+            <div class="podium-name">${escapeHtml(nameOf(u))}</div>
+            <div class="podium-pts">${u.points}</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+
+    <div class="board-list">
+      ${rest.map((u, i) => {
+        const rank = i + 4;
+        const isMe = String(u.telegram_id) === myId;
+        return `
+          <div class="board-row ${isMe ? 'me' : ''} ${rank <= 10 ? 'top' : ''}" style="--i:${i}">
+            <div class="board-rank">${rank}</div>
+            <div class="board-name">${escapeHtml(nameOf(u))}</div>
+            <div class="board-points">${u.points}</div>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+
+  // If me is in top 3, highlight
+  // (already done via data-rank styling — could add outline later)
 }
 
-// ─── Floating Admin FAB ────────────────────────────────────
+// ─── Admin FAB (draggable) ──────────────────────────────────
 function renderAdminFab() {
   if (!state.user?.is_admin) return;
   if (document.getElementById('admin-fab')) return;
 
   const fab = document.createElement('button');
   fab.id = 'admin-fab';
-  fab.setAttribute('aria-label', 'Admin panel');
-  fab.innerHTML = '◈';
+  fab.setAttribute('aria-label', 'Admin');
+  fab.textContent = '◈';
 
-  // Restore position
-  const saved = JSON.parse(localStorage.getItem('admin_fab_pos') || 'null');
+  const saved = JSON.parse(localStorage.getItem('aurum_fab_pos') || 'null');
   const defaultPos = {
-    x: window.innerWidth - 70,
-    y: window.innerHeight - 130,
+    x: window.innerWidth - 68,
+    y: window.innerHeight - 160,
   };
   let pos = saved || defaultPos;
-  pos.x = Math.min(Math.max(8, pos.x), window.innerWidth - 60);
-  pos.y = Math.min(Math.max(8, pos.y), window.innerHeight - 60);
-
+  pos.x = Math.min(Math.max(6, pos.x), window.innerWidth - 58);
+  pos.y = Math.min(Math.max(6, pos.y), window.innerHeight - 58);
   fab.style.left = pos.x + 'px';
   fab.style.top = pos.y + 'px';
 
   let dragging = false;
   let moved = false;
-  let startX = 0, startY = 0;
-  let offsetX = 0, offsetY = 0;
-  let lastTap = 0;
+  let sx = 0, sy = 0, ox = 0, oy = 0;
 
-  function pointerDown(e) {
-    dragging = true;
-    moved = false;
+  fab.addEventListener('pointerdown', (e) => {
+    dragging = true; moved = false;
     fab.classList.add('dragging');
-    const rect = fab.getBoundingClientRect();
-    startX = e.clientX;
-    startY = e.clientY;
-    offsetX = e.clientX - rect.left;
-    offsetY = e.clientY - rect.top;
+    const r = fab.getBoundingClientRect();
+    sx = e.clientX; sy = e.clientY;
+    ox = e.clientX - r.left; oy = e.clientY - r.top;
     fab.setPointerCapture?.(e.pointerId);
-  }
-
-  function pointerMove(e) {
+  });
+  fab.addEventListener('pointermove', (e) => {
     if (!dragging) return;
-    const dx = e.clientX - startX;
-    const dy = e.clientY - startY;
-    if (Math.abs(dx) > 4 || Math.abs(dy) > 4) moved = true;
-    pos.x = e.clientX - offsetX;
-    pos.y = e.clientY - offsetY;
-    pos.x = Math.min(Math.max(4, pos.x), window.innerWidth - 56);
-    pos.y = Math.min(Math.max(4, pos.y), window.innerHeight - 56);
+    if (Math.abs(e.clientX - sx) > 4 || Math.abs(e.clientY - sy) > 4) moved = true;
+    pos.x = Math.min(Math.max(4, e.clientX - ox), window.innerWidth - 56);
+    pos.y = Math.min(Math.max(4, e.clientY - oy), window.innerHeight - 56);
     fab.style.left = pos.x + 'px';
     fab.style.top = pos.y + 'px';
-  }
-
-  function pointerUp() {
+  });
+  fab.addEventListener('pointerup', () => {
     if (!dragging) return;
     dragging = false;
     fab.classList.remove('dragging');
-
-    // Snap to nearest horizontal edge
-    const mid = window.innerWidth / 2;
-    pos.x = pos.x + 26 < mid ? 16 : window.innerWidth - 68;
+    pos.x = pos.x + 26 < window.innerWidth / 2 ? 16 : window.innerWidth - 68;
     pos.y = Math.min(Math.max(16, pos.y), window.innerHeight - 68);
-    fab.style.transition = 'left 260ms cubic-bezier(0.2,0.9,0.2,1), top 260ms cubic-bezier(0.2,0.9,0.2,1)';
     fab.style.left = pos.x + 'px';
     fab.style.top = pos.y + 'px';
-    localStorage.setItem('admin_fab_pos', JSON.stringify(pos));
-    setTimeout(() => { fab.style.transition = ''; }, 280);
-
-    // Tap detection
-    if (!moved) {
-      const now = Date.now();
-      if (now - lastTap < 300) {
-        // Double-tap: reset position
-        pos = { ...defaultPos };
-        fab.style.left = pos.x + 'px';
-        fab.style.top = pos.y + 'px';
-        localStorage.setItem('admin_fab_pos', JSON.stringify(pos));
-        haptic('light');
-        lastTap = 0;
-        return;
-      }
-      lastTap = now;
-      setTimeout(() => {
-        if (Date.now() - lastTap >= 300 && lastTap !== 0) {
-          openAdminPanel();
-          lastTap = 0;
-        }
-      }, 310);
-    }
-  }
-
-  fab.addEventListener('pointerdown', pointerDown);
-  fab.addEventListener('pointermove', pointerMove);
-  fab.addEventListener('pointerup', pointerUp);
-  fab.addEventListener('pointercancel', pointerUp);
+    localStorage.setItem('aurum_fab_pos', JSON.stringify(pos));
+    if (!moved) openAdmin();
+  });
+  fab.addEventListener('pointercancel', () => {
+    dragging = false;
+    fab.classList.remove('dragging');
+  });
 
   document.body.appendChild(fab);
 }
 
-function openAdminPanel() {
+function openAdmin() {
   haptic('success');
-  // The admin panel authenticates via X-Init-Data, so no secret needed
-  // if this user's Telegram ID matches ADMIN_TELEGRAM_ID.
-  const url = `${location.origin}/admin-console`;
-  if (tg?.openLink) tg.openLink(url, { try_instant_view: false });
+  const url = `${location.origin}/aurum-console-x7k2`;
+  if (tg?.openLink) tg.openLink(url);
   else window.open(url, '_blank');
 }
 
-// ─── Helpers ───────────────────────────────────────────────
+// ─── Helpers ────────────────────────────────────────────────
 function dayIndex() {
   const start = new Date('2026-01-01');
-  const diff = Math.floor((Date.now() - start) / 86400000);
-  return diff + 1;
+  return Math.floor((Date.now() - start) / 86400000) + 1;
 }
-
-function formatTime(date) {
-  return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+function formatTime(d) {
+  return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
 }
-
 function escapeHtml(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-function escapeAttr(s) { return escapeHtml(s); }
 
-// ─── Boot ──────────────────────────────────────────────────
+// ─── Boot ───────────────────────────────────────────────────
 async function boot() {
-  runEntryAnimation();
+  setupTabBar();
 
   try {
     const [meRes, todayRes, questsRes, boardRes] = await Promise.all([
@@ -586,8 +758,7 @@ async function boot() {
 }
 
 if (tg) {
-  tg.onEvent('themeChanged', () => {});
-  setTimeout(boot, 100);
+  setTimeout(runSplash, 80);
 } else {
-  window.addEventListener('load', boot);
+  window.addEventListener('load', runSplash);
 }

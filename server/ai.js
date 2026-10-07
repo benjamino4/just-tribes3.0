@@ -19,17 +19,27 @@ const PROVIDERS = [
   },
 ];
 
-function buildPrompt(question, outcome, options) {
-  const optLines = options.map(o => `${o.id}: ${o.text}`).join('\n');
-  return `You are a strict classifier for a prediction game.
+function buildRankingPrompt(question, outcome, options) {
+  const ids = options.map(o => o.id).join(', ');
+  const lines = options.map(o => `${o.id}: ${o.text}`).join('\n');
+  return `You are a strict judge for a prediction game.
+
 Question: ${question}
 What actually happened: ${outcome}
 
 Options:
-${optLines}
+${lines}
 
-Return ONLY valid JSON:
-{"winner_id": "<one of: ${options.map(o => o.id).join(', ')}>", "confidence": 0.0, "reason": "max 15 words"}`;
+Rank ALL options from BEST to WORST based on how well they match what actually happened.
+Every option must appear exactly once.
+
+Return ONLY valid JSON in this exact shape:
+{
+  "ranking": ["<best_id>", "<2nd_id>", "<3rd_id>", ...],
+  "reason": "max 20 words"
+}
+
+Allowed ids: ${ids}`;
 }
 
 async function callOne(provider, prompt) {
@@ -52,11 +62,11 @@ async function callOne(provider, prompt) {
     if (!res.ok) return null;
     const data = await res.json();
     const parsed = JSON.parse(data.choices[0].message.content);
+    if (!Array.isArray(parsed.ranking)) return null;
     return {
       model: provider.model,
       provider: provider.name,
-      winner_id: parsed.winner_id,
-      confidence: parsed.confidence ?? 0,
+      ranking: parsed.ranking,
       reason: parsed.reason ?? '',
     };
   } catch {
@@ -64,25 +74,36 @@ async function callOne(provider, prompt) {
   }
 }
 
-export async function judgeWithVoting(question, outcome, options) {
-  const prompt = buildPrompt(question, outcome, options);
+// Merge multiple AI rankings into one consensus ranking via Borda count.
+function consensusRanking(votes, optionIds) {
+  const score = {};
+  optionIds.forEach(id => (score[id] = 0));
+  const N = optionIds.length;
+
+  for (const v of votes) {
+    const r = v.ranking.filter(id => optionIds.includes(id));
+    r.forEach((id, i) => {
+      score[id] += N - i; // top position = N points
+    });
+  }
+
+  return [...optionIds].sort((a, b) => score[b] - score[a]);
+}
+
+export async function judgeWithRanking(question, outcome, options) {
+  const prompt = buildRankingPrompt(question, outcome, options);
   const results = await Promise.all(PROVIDERS.map(p => callOne(p, prompt)));
   const valid = results.filter(Boolean);
 
   if (!valid.length) {
-    return { winner_id: null, votes: [], error: 'no_ai_response' };
+    return { ranking: [], votes: [], reason: '', error: 'no_ai_response' };
   }
 
-  const counts = {};
-  valid.forEach(v => {
-    counts[v.winner_id] = (counts[v.winner_id] || 0) + 1;
-  });
-  const winner_id = Object.keys(counts).reduce((a, b) =>
-    counts[a] > counts[b] ? a : b
-  );
+  const optionIds = options.map(o => o.id);
+  const ranking = consensusRanking(valid, optionIds);
+  const topReason = valid[0]?.reason || '';
 
-  const topReason = valid.find(v => v.winner_id === winner_id)?.reason || '';
-  return { winner_id, votes: valid, reason: topReason };
+  return { ranking, votes: valid, reason: topReason };
 }
 
 export async function askAI(prompt, providerIndex = 0) {

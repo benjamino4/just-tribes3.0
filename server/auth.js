@@ -2,7 +2,6 @@ import crypto from 'crypto';
 
 export function verifyInitData(initData, botToken) {
   if (!initData || !botToken) return null;
-
   try {
     const params = new URLSearchParams(initData);
     const hash = params.get('hash');
@@ -25,7 +24,6 @@ export function verifyInitData(initData, botToken) {
       .digest('hex');
 
     if (computed !== hash) return null;
-
     return JSON.parse(params.get('user') || '{}');
   } catch {
     return null;

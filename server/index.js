@@ -9,22 +9,21 @@ import { requireUser, verifyInitData } from './auth.js';
 import adminRouter from './routes/admin.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-
 const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
-// Bot instance (no polling here — bot/index.js handles that)
 const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
 app.set('bot', bot);
 
-// ─── Public API ────────────────────────────────────────────
+// ─── Public API ─────────────────────────────────────────────
 app.get('/api/health', (_, res) => res.json({ ok: true }));
 
 app.get('/api/today', async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   const { rows } = await q(
-    `SELECT id, challenge_date, question, options, reveal_at, status, winner_id, ai_reason
+    `SELECT id, challenge_date, question, options, reveal_at, status,
+            winner_id, ranking, ai_reason, outcome_text
      FROM challenges WHERE challenge_date = $1`,
     [today]
   );
@@ -56,7 +55,8 @@ app.get('/api/me', requireUser, async (req, res) => {
 
 app.get('/api/me/pick', requireUser, async (req, res) => {
   const { rows } = await q(
-    `SELECT choice FROM picks WHERE telegram_id=$1 AND challenge_id=$2`,
+    `SELECT choice, points_earned FROM picks
+     WHERE telegram_id=$1 AND challenge_id=$2`,
     [req.tgUser.id, req.query.challengeId]
   );
   res.json({ pick: rows[0] || null });
@@ -112,6 +112,42 @@ app.get('/api/challenge/:id/stats', async (req, res) => {
   res.json({ total, stats });
 });
 
+// Full breakdown used on Home after reveal
+app.get('/api/challenge/:id/breakdown', async (req, res) => {
+  const { rows: ch } = await q(
+    `SELECT id, question, options, ranking, winner_id, ai_reason, outcome_text, status
+     FROM challenges WHERE id=$1`,
+    [req.params.id]
+  );
+  if (!ch.length) return res.status(404).json({ error: 'not_found' });
+  const challenge = ch[0];
+
+  const { rows: counts } = await q(
+    `SELECT choice, COUNT(*)::int AS count FROM picks
+     WHERE challenge_id=$1 GROUP BY choice`,
+    [req.params.id]
+  );
+  const total = counts.reduce((s, r) => s + r.count, 0);
+  const dist = {};
+  counts.forEach(c => {
+    dist[c.choice] = {
+      count: c.count,
+      percent: total ? Math.round((c.count / total) * 100) : 0,
+    };
+  });
+
+  const pointsMap = {};
+  (challenge.ranking || []).forEach((id, i) => {
+    const N = challenge.ranking.length;
+    const base = 100;
+    const floor = 15;
+    const step = N > 1 ? (base - floor) / (N - 1) : 0;
+    pointsMap[id] = Math.round(base - step * i);
+  });
+
+  res.json({ challenge, distribution: dist, total, pointsMap });
+});
+
 app.get('/api/quests', async (req, res) => {
   const { rows } = await q(
     `SELECT id, title, description, reward, action_url, action_type, verify_text
@@ -143,40 +179,32 @@ app.post('/api/quests/:id/complete', requireUser, async (req, res) => {
     `UPDATE users SET points = points + $1 WHERE telegram_id = $2`,
     [quest[0].reward, id]
   );
-
   res.json({ ok: true, reward: quest[0].reward });
 });
 
-// ─── Admin API ────────────────────────────────────────────
+// ─── Admin API ──────────────────────────────────────────────
 app.use('/api/admin', adminRouter);
 
-// ─── Public static (users) ────────────────────────────────
+// ─── Static ─────────────────────────────────────────────────
 app.use(express.static('public'));
 
-// ─── Admin gated routes ───────────────────────────────────
-const ADMIN_PATH = '/' + (process.env.ADMIN_PATH || 'admin-console');
+const ADMIN_PATH = '/' + (process.env.ADMIN_PATH || 'aurum-console-x7k2');
 
 const adminAttempts = new Map();
 function adminRateLimit(req, res, next) {
   const ip = req.headers['x-forwarded-for']?.split(',')[0] || req.socket.remoteAddress || 'unknown';
   const now = Date.now();
   const record = adminAttempts.get(ip) || { count: 0, resetAt: now + 60000 };
-
-  if (now > record.resetAt) {
-    record.count = 0;
-    record.resetAt = now + 60000;
-  }
+  if (now > record.resetAt) { record.count = 0; record.resetAt = now + 60000; }
   record.count++;
   adminAttempts.set(ip, record);
-
-  if (record.count > 15) return res.status(429).send('Too many attempts');
+  if (record.count > 20) return res.status(429).send('Too many attempts');
   next();
 }
 
 function checkAdminAccess(req) {
   const secret = req.query.secret || req.headers['x-admin-secret'];
   if (secret && secret === process.env.ADMIN_SECRET) return true;
-
   const initData = req.headers['x-init-data'] || req.query.initData;
   if (initData) {
     const user = verifyInitData(initData, process.env.BOT_TOKEN);
@@ -197,13 +225,11 @@ app.get(`${ADMIN_PATH}/:file`, adminRateLimit, (req, res) => {
   res.sendFile(path.join(__dirname, '../admin/' + file));
 });
 
-// ─── Fallback for SPA routes ──────────────────────────────
 app.get('*', (req, res) => {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found' });
   if (req.path.startsWith(ADMIN_PATH)) return res.status(404).send('Not found');
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
-// ─── Start ────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✓ Server on :${PORT}  ·  admin at ${ADMIN_PATH}`));
+app.listen(PORT, () => console.log(`✓ AURUM on :${PORT}  ·  console at ${ADMIN_PATH}`));
