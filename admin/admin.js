@@ -1,17 +1,41 @@
 /* ═══════════════════════════════════════════════════════════ */
-/* ADMIN PANEL — Full logic                                     */
-/* Auth, navigation, all CRUD views, AI console, broadcast      */
+/* ADMIN PANEL — Neo-tactical console                           */
 /* ═══════════════════════════════════════════════════════════ */
 
 const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
+tg?.setHeaderColor('#05070C');
+tg?.setBackgroundColor('#05070C');
 
 // ─── Auth ───────────────────────────────────────────────────
 const initData = tg?.initData || '';
 const urlSecret = new URLSearchParams(location.search).get('secret') || '';
 const SECRET = urlSecret || sessionStorage.getItem('admin_secret') || '';
 if (urlSecret) sessionStorage.setItem('admin_secret', urlSecret);
+
+// ─── Toast system ───────────────────────────────────────────
+function ensureToastStack() {
+  let stack = document.getElementById('toast-stack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'toast-stack';
+    document.body.appendChild(stack);
+  }
+  return stack;
+}
+
+function toast(message, type = 'info', ms = 3200) {
+  const stack = ensureToastStack();
+  const el = document.createElement('div');
+  el.className = `toast ${type}`;
+  el.textContent = message;
+  stack.appendChild(el);
+  setTimeout(() => {
+    el.classList.add('out');
+    setTimeout(() => el.remove(), 320);
+  }, ms);
+}
 
 // ─── API helper ─────────────────────────────────────────────
 async function api(path, options = {}) {
@@ -25,17 +49,17 @@ async function api(path, options = {}) {
 
   if (res.status === 403) {
     document.body.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center;font-family:-apple-system,sans-serif;color:#8A8178;">
+      <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center;font-family:-apple-system,sans-serif;color:#6B7A94;background:#05070C;">
         <div>
-          <div style="font-size:32px;margin-bottom:16px;">🔒</div>
-          <div style="font-size:16px;font-weight:600;color:#1A1A1A;margin-bottom:8px;">Forbidden</div>
-          <div style="font-size:14px;">Open this page from the admin Telegram account, or add ?secret=YOUR_SECRET to the URL.</div>
+          <div style="font-size:42px;margin-bottom:18px;filter:drop-shadow(0 0 20px #00F0FF);">🔒</div>
+          <div style="font-size:18px;font-weight:800;color:#E8F1FF;margin-bottom:10px;letter-spacing:-0.01em;">ACCESS DENIED</div>
+          <div style="font-size:13px;font-family:ui-monospace,monospace;letter-spacing:0.06em;">OPEN FROM THE ADMIN TELEGRAM ACCOUNT · OR ADD ?secret=YOUR_SECRET</div>
         </div>
       </div>`;
     throw new Error('forbidden');
   }
   if (res.status === 429) {
-    alert('Too many attempts. Try again in a minute.');
+    toast('Too many attempts. Try again in a minute.', 'warn');
     throw new Error('rate_limited');
   }
   if (!res.ok) {
@@ -75,38 +99,57 @@ async function loadView(name) {
     if (name === 'quests') await loadQuests();
     if (name === 'ai') await loadAiHistory();
     if (name === 'users') await loadUsers();
-  } catch (e) {
-    console.error(e);
+  } catch (e) { console.error(e); }
+}
+
+// ─── Count-up helper ────────────────────────────────────────
+function countUp(el, target, ms = 800) {
+  const start = Number(el.textContent) || 0;
+  const diff = target - start;
+  const t0 = performance.now();
+  function step(t) {
+    const p = Math.min(1, (t - t0) / ms);
+    const eased = 1 - Math.pow(1 - p, 3);
+    el.textContent = Math.round(start + diff * eased);
+    if (p < 1) requestAnimationFrame(step);
   }
+  requestAnimationFrame(step);
 }
 
 // ─── Dashboard ──────────────────────────────────────────────
+let dashboardTimer = null;
+
 async function loadDashboard() {
   try {
     const { users, picks, quests_completed, open_challenges, recent } = await api('/stats');
 
-    document.getElementById('stat-users').textContent = users;
-    document.getElementById('stat-picks').textContent = picks;
-    document.getElementById('stat-quests').textContent = quests_completed;
-    document.getElementById('stat-open').textContent = open_challenges;
+    countUp(document.getElementById('stat-users'), users);
+    countUp(document.getElementById('stat-picks'), picks);
+    countUp(document.getElementById('stat-quests'), quests_completed);
+    countUp(document.getElementById('stat-open'), open_challenges);
 
     const list = document.getElementById('recent-list');
     if (!recent.length) {
-      list.innerHTML = `<div class="empty">No challenges yet.</div>`;
+      list.innerHTML = `<div class="empty">NO CHALLENGES YET</div>`;
       return;
     }
-    list.innerHTML = recent.map(r => `
-      <div class="list-item">
+    list.innerHTML = recent.map((r, i) => `
+      <div class="list-item" style="--i:${i}">
         <div>
           <div class="title">${escapeHtml(r.question)}</div>
-          <div class="meta">${r.challenge_date} · winner: ${r.winner_id || '—'}</div>
+          <div class="meta">${r.challenge_date} · WINNER: ${r.winner_id || '—'}</div>
         </div>
         <span class="badge ${r.status}">${r.status}</span>
       </div>
     `).join('');
-  } catch (e) {
-    console.error(e);
-  }
+
+    // Auto-refresh while dashboard is visible
+    clearTimeout(dashboardTimer);
+    dashboardTimer = setTimeout(() => {
+      const view = document.getElementById('view-dashboard');
+      if (view?.classList.contains('active') && !document.hidden) loadDashboard();
+    }, 30000);
+  } catch (e) { console.error(e); }
 }
 
 // ─── Challenges ─────────────────────────────────────────────
@@ -115,12 +158,12 @@ async function loadChallenges() {
   const el = document.getElementById('challenges-list');
 
   if (!challenges.length) {
-    el.innerHTML = `<div class="empty">No challenges yet. Create one.</div>`;
+    el.innerHTML = `<div class="empty">NO CHALLENGES YET</div>`;
     return;
   }
 
-  el.innerHTML = challenges.map(c => `
-    <div class="card">
+  el.innerHTML = challenges.map((c, i) => `
+    <div class="card" style="--i:${i}">
       <div class="card-head">
         <div>
           <div class="card-date">${c.challenge_date}</div>
@@ -129,9 +172,7 @@ async function loadChallenges() {
         <span class="badge ${c.status}">${c.status}</span>
       </div>
       <div class="card-body">
-        ${(c.options || []).length} options ·
-        ${c.pick_count} picks ·
-        ${c.use_ai ? 'AI judge' : 'Manual judge'}
+        ${(c.options || []).length} OPTIONS · ${c.pick_count} PICKS · ${c.use_ai ? 'AI JUDGE' : 'MANUAL'}
       </div>
       <div class="card-foot">
         <button class="btn-ghost" data-action="view" data-id="${c.id}">View</button>
@@ -156,8 +197,13 @@ async function loadChallenges() {
 
 async function deleteChallenge(id) {
   if (!confirm('Delete this challenge and all its picks?')) return;
-  await api(`/challenges/${id}`, { method: 'DELETE' });
-  loadChallenges();
+  try {
+    await api(`/challenges/${id}`, { method: 'DELETE' });
+    toast('Challenge deleted', 'success');
+    loadChallenges();
+  } catch (e) {
+    toast('Delete failed: ' + e.message, 'error');
+  }
 }
 
 async function viewChallenge(id) {
@@ -172,7 +218,7 @@ async function viewChallenge(id) {
     .map(o => `${o.id}: ${o.text}`)
     .join('\n');
 
-  alert(
+  toast(
 `${challenge.question}
 
 Options:
@@ -181,9 +227,8 @@ ${options}
 Current picks:
 ${report || 'No picks yet'}
 
-Winner: ${challenge.winner_id || 'not set'}
-
-AI reason: ${challenge.ai_reason || '—'}`
+Winner: ${challenge.winner_id || 'not set'}`,
+    'info', 8000
   );
 }
 
@@ -201,7 +246,7 @@ async function openResolve(id) {
     <textarea id="resolve-outcome" rows="3">${escapeHtml(challenge.outcome_text || '')}</textarea>
     <div class="row">
       <button class="btn-primary" id="btn-resolve-ai">Let AIs decide</button>
-      <span style="color:var(--text-muted);font-size:12px;">or pick manually below</span>
+      <span style="color:var(--text-muted);font-size:12px;font-family:var(--mono);">OR PICK MANUALLY</span>
     </div>
     <div id="resolve-options" class="row" style="margin-top:12px;"></div>
     <div id="resolve-report" style="margin-top:16px;"></div>
@@ -214,52 +259,69 @@ async function openResolve(id) {
 
   optionsEl.querySelectorAll('[data-winner]').forEach(b => {
     b.addEventListener('click', async () => {
-      if (!confirm(`Set winner to ${b.dataset.winner}? This cannot be undone.`)) return;
-      await api(`/challenges/${id}/resolve`, {
-        method: 'POST',
-        body: JSON.stringify({ winner_id: b.dataset.winner }),
-      });
-      modal.close();
-      loadChallenges();
+      if (!confirm(`Set winner to ${b.dataset.winner}?`)) return;
+      try {
+        await api(`/challenges/${id}/resolve`, {
+          method: 'POST',
+          body: JSON.stringify({ winner_id: b.dataset.winner }),
+        });
+        toast('Winner set', 'success');
+        modal.close();
+        loadChallenges();
+      } catch (e) {
+        toast('Resolve failed: ' + e.message, 'error');
+      }
     });
   });
 
   document.getElementById('btn-resolve-ai').addEventListener('click', async () => {
     const outcome = document.getElementById('resolve-outcome').value.trim();
-    if (!outcome) return alert('Enter the outcome first.');
+    if (!outcome) return toast('Enter the outcome first.', 'warn');
 
-    await api(`/challenges/${id}`, {
-      method: 'PATCH',
-      body: JSON.stringify({ outcome_text: outcome }),
-    });
+    try {
+      await api(`/challenges/${id}`, {
+        method: 'PATCH',
+        body: JSON.stringify({ outcome_text: outcome }),
+      });
+    } catch (e) {
+      toast('Save failed: ' + e.message, 'error');
+      return;
+    }
 
     const report = document.getElementById('resolve-report');
-    report.innerHTML = '<div class="empty"><span class="spinner"></span> Asking AIs…</div>';
+    report.innerHTML = '<div class="empty"><span class="spinner"></span> ASKING AIs…</div>';
 
-    const res = await api(`/challenges/${id}/resolve`, {
-      method: 'POST',
-      body: JSON.stringify({}),
-    });
+    try {
+      const res = await api(`/challenges/${id}/resolve`, {
+        method: 'POST',
+        body: JSON.stringify({}),
+      });
 
-    report.innerHTML = `
-      <div class="ai-responses">
-        ${(res.ai_votes || []).map(v => `
-          <div class="ai-card provider-${v.provider}">
-            <div class="ai-model">${v.provider} · ${v.model}</div>
-            <div class="ai-winner">${escapeHtml(v.winner_id)}</div>
-            <div class="ai-reason">${escapeHtml(v.reason || '')}</div>
-          </div>
-        `).join('')}
-      </div>
-      <div class="panel" style="margin-top:12px;">
-        <strong>Majority winner: ${escapeHtml(res.winner_id)}</strong>
-      </div>
-    `;
+      report.innerHTML = `
+        <div class="ai-responses">
+          ${(res.ai_votes || []).map(v => `
+            <div class="ai-card provider-${v.provider}">
+              <div class="ai-model">${v.provider} · ${v.model}</div>
+              <div class="ai-winner">${escapeHtml(v.winner_id)}</div>
+              <div class="ai-reason">${escapeHtml(v.reason || '')}</div>
+            </div>
+          `).join('')}
+        </div>
+        <div class="panel" style="margin-top:12px;">
+          <strong style="color:var(--cyan);">MAJORITY WINNER: ${escapeHtml(res.winner_id)}</strong>
+        </div>
+      `;
 
-    setTimeout(() => {
-      modal.close();
-      loadChallenges();
-    }, 2000);
+      toast('Resolved by AI: ' + res.winner_id, 'success');
+
+      setTimeout(() => {
+        modal.close();
+        loadChallenges();
+      }, 2200);
+    } catch (e) {
+      report.innerHTML = `<div class="empty">ERROR: ${escapeHtml(e.message)}</div>`;
+      toast('AI resolve failed: ' + e.message, 'error');
+    }
   });
 
   modal.showModal();
@@ -292,7 +354,7 @@ document.getElementById('form-challenge')?.addEventListener('submit', async (e) 
       return { id: id.trim(), text: rest.join('|').trim() };
     });
 
-  if (options.length < 2) return alert('Need at least 2 options.');
+  if (options.length < 2) return toast('Need at least 2 options.', 'warn');
 
   const payload = {
     challenge_date: fd.get('challenge_date'),
@@ -309,16 +371,18 @@ document.getElementById('form-challenge')?.addEventListener('submit', async (e) 
         method: 'PATCH',
         body: JSON.stringify(payload),
       });
+      toast('Challenge updated', 'success');
     } else {
       await api('/challenges', {
         method: 'POST',
         body: JSON.stringify(payload),
       });
+      toast('Challenge created', 'success');
     }
     document.getElementById('modal-challenge').close();
     loadChallenges();
   } catch (err) {
-    alert('Error: ' + err.message);
+    toast('Error: ' + err.message, 'error');
   }
 });
 
@@ -328,25 +392,25 @@ async function loadQuests() {
   const el = document.getElementById('quests-list');
 
   if (!quests.length) {
-    el.innerHTML = `<div class="empty">No quests yet.</div>`;
+    el.innerHTML = `<div class="empty">NO QUESTS YET</div>`;
     return;
   }
 
-  el.innerHTML = quests.map(q => `
-    <div class="card">
+  el.innerHTML = quests.map((q, i) => `
+    <div class="card" style="--i:${i}">
       <div class="card-head">
         <div>
           <div class="card-title">${escapeHtml(q.title)}</div>
-          <div class="card-date">+${q.reward} pts</div>
+          <div class="card-date">+${q.reward} PTS</div>
         </div>
         <span class="badge ${q.is_active ? 'active' : 'inactive'}">
           ${q.is_active ? 'active' : 'inactive'}
         </span>
       </div>
       <div class="card-body">${escapeHtml(q.description || '—')}</div>
-      <div class="card-body" style="font-size:12px;">
-        ${q.completions} completions
-        ${q.action_url ? ` · <a href="${escapeHtml(q.action_url)}" target="_blank" style="color:var(--brand);">link</a>` : ''}
+      <div class="card-body" style="font-size:11px;">
+        ${q.completions} COMPLETIONS
+        ${q.action_url ? ` · <a href="${escapeHtml(q.action_url)}" target="_blank" style="color:var(--cyan);">LINK</a>` : ''}
       </div>
       <div class="card-foot">
         <button class="btn-ghost" data-action="toggle" data-id="${q.id}">
@@ -359,16 +423,28 @@ async function loadQuests() {
 
   el.querySelectorAll('[data-action="toggle"]').forEach(b => {
     b.addEventListener('click', async () => {
-      await api(`/quests/${b.dataset.id}/toggle`, { method: 'PATCH' });
-      loadQuests();
+      b.disabled = true;
+      try {
+        await api(`/quests/${b.dataset.id}/toggle`, { method: 'PATCH' });
+        toast('Quest toggled', 'success');
+        loadQuests();
+      } catch (e) {
+        toast('Toggle failed: ' + e.message, 'error');
+        b.disabled = false;
+      }
     });
   });
 
   el.querySelectorAll('[data-action="delete"]').forEach(b => {
     b.addEventListener('click', async () => {
       if (!confirm('Delete this quest?')) return;
-      await api(`/quests/${b.dataset.id}`, { method: 'DELETE' });
-      loadQuests();
+      try {
+        await api(`/quests/${b.dataset.id}`, { method: 'DELETE' });
+        toast('Quest deleted', 'success');
+        loadQuests();
+      } catch (e) {
+        toast('Delete failed: ' + e.message, 'error');
+      }
     });
   });
 }
@@ -397,17 +473,17 @@ document.getElementById('form-quest')?.addEventListener('submit', async (e) => {
   };
   try {
     await api('/quests', { method: 'POST', body: JSON.stringify(payload) });
+    toast('Quest created', 'success');
     document.getElementById('modal-quest').close();
     loadQuests();
   } catch (err) {
-    alert('Error: ' + err.message);
+    toast('Error: ' + err.message, 'error');
   }
 });
 
 // ─── AI Console ─────────────────────────────────────────────
 document.getElementById('btn-ask-all')?.addEventListener('click', async () => {
-  const prompt = document.getElementById('ai-prompt').value.trim();
-  await runAsk('all', prompt);
+  await runAsk('all', document.getElementById('ai-prompt').value.trim());
 });
 document.getElementById('btn-ask-groq')?.addEventListener('click', async () => {
   await runAsk('one', document.getElementById('ai-prompt').value.trim(), 0);
@@ -420,9 +496,9 @@ document.getElementById('btn-ask-gemini')?.addEventListener('click', async () =>
 });
 
 async function runAsk(mode, prompt, providerIndex) {
-  if (!prompt) return alert('Enter a prompt.');
+  if (!prompt) return toast('Enter a prompt.', 'warn');
   const out = document.getElementById('ai-responses');
-  out.innerHTML = '<div class="empty"><span class="spinner"></span> Asking…</div>';
+  out.innerHTML = '<div class="empty"><span class="spinner"></span> ASKING…</div>';
 
   try {
     let responses;
@@ -441,7 +517,8 @@ async function runAsk(mode, prompt, providerIndex) {
     }
 
     if (!responses.length) {
-      out.innerHTML = '<div class="empty">No AI responded.</div>';
+      out.innerHTML = '<div class="empty">NO AI RESPONDED</div>';
+      toast('No AI responded', 'warn');
       return;
     }
 
@@ -450,15 +527,17 @@ async function runAsk(mode, prompt, providerIndex) {
         <div class="ai-model">${r.provider || 'unknown'} · ${r.model || '—'}</div>
         <div class="ai-winner">${escapeHtml(r.winner_id || '—')}</div>
         <div class="ai-reason">${escapeHtml(r.reason || '')}</div>
-        <div class="ai-reason" style="margin-top:6px;font-size:11px;">
-          confidence: ${r.confidence ?? '—'}
+        <div class="ai-reason" style="margin-top:6px;font-size:10px;font-family:var(--mono);">
+          CONFIDENCE: ${r.confidence ?? '—'}
         </div>
       </div>
     `).join('');
 
+    toast(`Got ${responses.length} response(s)`, 'success');
     loadAiHistory();
   } catch (err) {
-    out.innerHTML = `<div class="empty">Error: ${escapeHtml(err.message)}</div>`;
+    out.innerHTML = `<div class="empty">ERROR: ${escapeHtml(err.message)}</div>`;
+    toast('AI request failed: ' + err.message, 'error');
   }
 }
 
@@ -466,11 +545,11 @@ async function loadAiHistory() {
   const { history } = await api('/ai/history');
   const el = document.getElementById('ai-history');
   if (!history.length) {
-    el.innerHTML = `<div class="empty">No prompts yet.</div>`;
+    el.innerHTML = `<div class="empty">NO PROMPTS YET</div>`;
     return;
   }
-  el.innerHTML = history.map(h => `
-    <div class="list-item">
+  el.innerHTML = history.map((h, i) => `
+    <div class="list-item" style="--i:${i}">
       <div>
         <div class="title">${escapeHtml(h.prompt.slice(0, 80))}${h.prompt.length > 80 ? '…' : ''}</div>
         <div class="meta">${new Date(h.created_at).toLocaleString()}</div>
@@ -488,7 +567,7 @@ async function loadUsers() {
   const tbody = document.getElementById('users-tbody');
 
   if (!users.length) {
-    tbody.innerHTML = `<tr><td colspan="6" class="empty">No users.</td></tr>`;
+    tbody.innerHTML = `<tr><td colspan="6" class="empty">NO USERS</td></tr>`;
     return;
   }
 
@@ -511,11 +590,16 @@ async function loadUsers() {
     b.addEventListener('click', async () => {
       const next = prompt('New points value:', b.dataset.points);
       if (next === null) return;
-      await api(`/users/${b.dataset.edit}/points`, {
-        method: 'PATCH',
-        body: JSON.stringify({ points: Number(next) }),
-      });
-      loadUsers();
+      try {
+        await api(`/users/${b.dataset.edit}/points`, {
+          method: 'PATCH',
+          body: JSON.stringify({ points: Number(next) }),
+        });
+        toast('Points updated', 'success');
+        loadUsers();
+      } catch (e) {
+        toast('Update failed: ' + e.message, 'error');
+      }
     });
   });
 }
@@ -528,17 +612,17 @@ document.getElementById('user-search')?.addEventListener(
 // ─── Broadcast ──────────────────────────────────────────────
 document.getElementById('btn-broadcast')?.addEventListener('click', async () => {
   const message = document.getElementById('broadcast-msg').value.trim();
-  if (!message) return;
+  if (!message) return toast('Enter a message.', 'warn');
   if (!confirm('Send this to every user?')) return;
   try {
     const res = await api('/broadcast', {
       method: 'POST',
       body: JSON.stringify({ message }),
     });
-    alert(`Sent: ${res.sent}\nFailed: ${res.failed}`);
+    toast(`Sent: ${res.sent} · Failed: ${res.failed}`, 'success', 5000);
     document.getElementById('broadcast-msg').value = '';
   } catch (err) {
-    alert('Error: ' + err.message);
+    toast('Broadcast failed: ' + err.message, 'error');
   }
 });
 
@@ -550,9 +634,25 @@ function doLogout() {
 document.getElementById('btn-logout')?.addEventListener('click', doLogout);
 document.getElementById('btn-logout-mobile')?.addEventListener('click', doLogout);
 
-// ─── Modal close buttons ────────────────────────────────────
+// ─── Modal close ────────────────────────────────────────────
 document.querySelectorAll('[data-close]').forEach(b => {
   b.addEventListener('click', () => b.closest('dialog').close());
+});
+
+// ─── Keyboard shortcuts ─────────────────────────────────────
+const VIEW_KEYS = ['dashboard', 'challenges', 'quests', 'ai', 'users', 'broadcast'];
+document.addEventListener('keydown', (e) => {
+  if (e.target.matches('input, textarea, select')) return;
+  const n = Number(e.key);
+  if (n >= 1 && n <= VIEW_KEYS.length) {
+    switchView(VIEW_KEYS[n - 1]);
+    return;
+  }
+  if (e.key === 'n' || e.key === 'N') {
+    const active = document.querySelector('.view.active')?.id;
+    if (active === 'view-challenges') document.getElementById('btn-new-challenge')?.click();
+    if (active === 'view-quests') document.getElementById('btn-new-quest')?.click();
+  }
 });
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -576,7 +676,6 @@ function debounce(fn, ms) {
 // ─── Boot ───────────────────────────────────────────────────
 loadDashboard();
 
-// Show admin identity
 const who = document.getElementById('admin-who');
 if (tg?.initDataUnsafe?.user) {
   who.textContent = tg.initDataUnsafe.user.first_name

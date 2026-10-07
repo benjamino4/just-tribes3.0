@@ -3,18 +3,18 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "build": "echo \"No build step required\"",
+    "build": "npm install",
     "start": "node server/index.js",
     "bot": "node bot/index.js",
     "migrate": "node -e \"import('./server/db.js').then(m=>m.migrate())\""
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "pg": "^8.11.5",
-    "node-telegram-bot-api": "^0.66.0",
-    "node-cron": "^3.0.3",
+    "cors": "^2.8.5",
     "dotenv": "^16.4.5",
-    "cors": "^2.8.5"
+    "express": "^4.19.2",
+    "node-cron": "^3.0.3",
+    "node-telegram-bot-api": "^0.66.0",
+    "pg": "^8.11.5"
   },
   "engines": {
     "node": ">=20"

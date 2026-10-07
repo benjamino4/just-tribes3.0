@@ -34,6 +34,8 @@ app.get('/api/today', async (req, res) => {
 
 app.get('/api/me', requireUser, async (req, res) => {
   const id = req.tgUser.id;
+  const isAdmin = String(id) === String(process.env.ADMIN_TELEGRAM_ID);
+
   const { rows } = await q(
     `SELECT telegram_id, username, first_name, points, streak, best_streak
      FROM users WHERE telegram_id = $1`,
@@ -45,9 +47,11 @@ app.get('/api/me', requireUser, async (req, res) => {
        VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
       [id, req.tgUser.username, req.tgUser.first_name]
     );
-    return res.json({ user: { telegram_id: id, points: 0, streak: 0, best_streak: 0 } });
+    return res.json({
+      user: { telegram_id: id, points: 0, streak: 0, best_streak: 0, is_admin: isAdmin },
+    });
   }
-  res.json({ user: rows[0] });
+  res.json({ user: { ...rows[0], is_admin: isAdmin } });
 });
 
 app.get('/api/me/pick', requireUser, async (req, res) => {
