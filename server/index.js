@@ -5,6 +5,8 @@ import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import { q } from './db.js';
 import { requireUser } from './auth.js';
+import { adminWebhookPath, handleAdminUpdate, registerAdminWebhook } from '../admin-bot/index.js';
+import { publicWebhookPath, handlePublicUpdate, registerPublicWebhook } from '../bot/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -181,6 +183,12 @@ app.post('/api/quests/:id/complete', requireUser, async (req, res) => {
 // ═════════════════════════════════════════════════════
 // Static Mini App  +  SPA fallback
 // ═════════════════════════════════════════════════════
+// Telegram webhooks — both bots fold into this one web service.
+// Telegram pushes updates to these unguessable, token-derived paths, so no
+// separate always-on worker is needed (free-tier friendly).
+app.post(adminWebhookPath, (req, res) => { handleAdminUpdate(req.body); res.sendStatus(200); });
+app.post(publicWebhookPath, (req, res) => { handlePublicUpdate(req.body); res.sendStatus(200); });
+
 app.use(express.static('public'));
 
 app.get('*', (req, res) => {
@@ -200,5 +208,11 @@ const PORT = process.env.PORT || 3000;
   } catch (e) {
     console.error('⚠ Migration skipped:', e.message);
   }
-  app.listen(PORT, () => console.log(`✓ HUBRIS on :${PORT}`));
+  app.listen(PORT, async () => {
+    console.log(`✓ HUBRIS on :${PORT}`);
+    // Fold both Telegram bots onto this service via webhook.
+    const base = process.env.MINI_APP_URL;
+    await registerPublicWebhook(base);
+    await registerAdminWebhook(base);
+  });
 })();

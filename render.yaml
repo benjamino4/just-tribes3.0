@@ -1,5 +1,14 @@
 services:
-  # ── Public web + Mini App API ─────────────────────────────
+  # ── One free web service hosts EVERYTHING ─────────────────
+  # The Mini App API, the public game bot, AND the private admin bot
+  # all run inside this single process. Both bots receive updates by
+  # Telegram *webhook* (pushed to this service), so there is no separate
+  # always-on worker to pay for — it runs on Render's free tier.
+  #
+  # Set every secret below in the Render dashboard (they are sync:false).
+  # Required: DATABASE_URL, BOT_TOKEN, ADMIN_BOT_TOKEN, ADMIN_TELEGRAM_ID,
+  #           MINI_APP_URL (this service's own https URL).
+  # Optional: GROQ_API_KEY / CEREBRAS_API_KEY / GEMINI_API_KEY (AI resolve).
   - type: web
     name: hubris
     runtime: node
@@ -14,40 +23,8 @@ services:
       - { key: NODE_ENV, value: production }
       - { key: DATABASE_URL, sync: false }
       - { key: BOT_TOKEN, sync: false }
-      - { key: MINI_APP_URL, sync: false }
-
-  # ── Public game bot (polling) ─────────────────────────────
-  - type: worker
-    name: hubris-bot
-    runtime: node
-    plan: free
-    region: oregon
-    buildCommand: npm install
-    startCommand: npm run bot
-    autoDeploy: true
-    envVars:
-      - { key: NODE_VERSION, value: "20" }
-      - { key: NODE_ENV, value: production }
-      - { key: DATABASE_URL, sync: false }
-      - { key: BOT_TOKEN, sync: false }
-      - { key: MINI_APP_URL, sync: false }
-
-  # ── Private admin bot (polling, separate token) ─────────────
-  - type: worker
-    name: hubris-admin-bot
-    runtime: node
-    plan: free
-    region: oregon
-    buildCommand: npm install
-    startCommand: npm run admin
-    autoDeploy: true
-    envVars:
-      - { key: NODE_VERSION, value: "20" }
-      - { key: NODE_ENV, value: production }
-      - { key: DATABASE_URL, sync: false }
       - { key: ADMIN_BOT_TOKEN, sync: false }
       - { key: ADMIN_TELEGRAM_ID, sync: false }
-      - { key: BOT_TOKEN, sync: false }
       - { key: MINI_APP_URL, sync: false }
       - { key: GROQ_API_KEY, sync: false }
       - { key: CEREBRAS_API_KEY, sync: false }

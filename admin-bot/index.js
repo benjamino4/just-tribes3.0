@@ -1,5 +1,8 @@
 import TelegramBot from 'node-telegram-bot-api';
 import cron from 'node-cron';
+import crypto from 'crypto';
+import path from 'path';
+import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import { q } from '../server/db.js';
 import { judgeWithRanking } from '../server/ai.js';
@@ -22,7 +25,9 @@ const ADMIN_SET = Number.isFinite(ADMIN) && ADMIN > 0;
 if (!process.env.ADMIN_BOT_TOKEN) {
   console.error('✗ ADMIN_BOT_TOKEN is missing. Set it in your environment (a DIFFERENT bot token from the public game bot) and restart.');
 }
-const bot = new TelegramBot(process.env.ADMIN_BOT_TOKEN, { polling: true });
+// No polling here: this bot receives updates by webhook when it rides on the
+// web service (free tier), and only self-polls when launched as its own worker.
+const bot = new TelegramBot(process.env.ADMIN_BOT_TOKEN, { polling: false });
 
 // Public bot handle (no polling) — used only to message players as the game bot.
 const publicBot = process.env.BOT_TOKEN
@@ -679,5 +684,40 @@ cron.schedule('* * * * *', async () => {
   } catch (e) { console.error('self-heal skipped:', e.message); }
 })();
 
-bot.on('polling_error', (e) => console.error('admin polling_error', e.code || e.message));
-console.log('✓ HUBRIS admin bot running' + (ADMIN_SET ? ` (admin ${ADMIN})` : ' — ⚠ ADMIN_TELEGRAM_ID not set'));
+bot.on('error', (e) => console.error('admin bot error', e.code || e.message));
+
+// ═══ Webhook wiring (lets this bot ride on the web service, free tier) ═══════
+// Unguessable path derived from the token so only Telegram can reach it.
+const ADMIN_WEBHOOK_SECRET = process.env.ADMIN_BOT_TOKEN
+  ? crypto.createHash('sha256').update('hubris-admin:' + process.env.ADMIN_BOT_TOKEN).digest('hex').slice(0, 40)
+  : 'disabled';
+export const adminWebhookPath = `/tg/admin/${ADMIN_WEBHOOK_SECRET}`;
+export const adminBot = bot;
+
+// Feed one Telegram update (parsed JSON body) into the bot's handlers.
+export function handleAdminUpdate(update) {
+  try { bot.processUpdate(update); } catch (e) { console.error('admin update error', e.message); }
+}
+
+// Register the webhook with Telegram. Call once on web-service boot.
+export async function registerAdminWebhook(baseUrl) {
+  if (!process.env.ADMIN_BOT_TOKEN) return console.warn('⚠ ADMIN_BOT_TOKEN missing — admin bot disabled.');
+  if (!baseUrl) return console.warn('⚠ MINI_APP_URL missing — cannot register the admin webhook.');
+  const url = baseUrl.replace(/\/+$/, '') + adminWebhookPath;
+  try {
+    await bot.setWebHook(url, { allowed_updates: ['message', 'callback_query'] });
+    console.log('✓ admin webhook registered' + (ADMIN_SET ? ` (admin ${ADMIN})` : ' — ⚠ ADMIN_TELEGRAM_ID not set'));
+  } catch (e) { console.error('✗ admin webhook failed:', e.message); }
+}
+
+// Standalone mode: `npm run admin` as its own (paid) worker still polls.
+const __adminIsMain = process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url);
+if (__adminIsMain) {
+  if (!process.env.ADMIN_BOT_TOKEN) {
+    console.error('✗ ADMIN_BOT_TOKEN is missing. Set it and restart.');
+  } else {
+    bot.startPolling();
+    bot.on('polling_error', (e) => console.error('admin polling_error', e.code || e.message));
+    console.log('✓ HUBRIS admin bot polling' + (ADMIN_SET ? ` (admin ${ADMIN})` : ' — ⚠ ADMIN_TELEGRAM_ID not set'));
+  }
+}
