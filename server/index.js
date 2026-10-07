@@ -17,7 +17,26 @@ const bot = new TelegramBot(process.env.BOT_TOKEN, { polling: false });
 app.set('bot', bot);
 
 // ─── Public API ─────────────────────────────────────────────
+// ─── Public API ─────────────────────────────────────────────
 app.get('/api/health', (_, res) => res.json({ ok: true }));
+
+app.get('/api/db-check', async (req, res) => {
+  try {
+    const info = await q('SELECT current_database() AS db, current_user AS u');
+    const tables = await q(
+      `SELECT tablename FROM pg_tables WHERE schemaname='public' ORDER BY tablename`
+    );
+    res.json({
+      ok: true,
+      db: info.rows[0].db,
+      user: info.rows[0].u,
+      tables: tables.rows.map(r => r.tablename),
+      hasUsers: tables.rows.some(r => r.tablename === 'users'),
+    });
+  } catch (e) {
+    res.json({ ok: false, error: e.message, code: e.code });
+  }
+});
 
 app.get('/api/today', async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
@@ -231,5 +250,18 @@ app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
 });
 
+// ─── Auto-migrate + start ─────────────────────────────────
 const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => console.log(`✓ AURUM on :${PORT}  ·  console at ${ADMIN_PATH}`));
+
+(async () => {
+  try {
+    const { migrate } = await import('./db.js');
+    await migrate();
+  } catch (e) {
+    console.error('⚠ Migration failed:', e.message);
+    console.error('⚠ Continuing anyway — check /api/db-check');
+  }
+  app.listen(PORT, () =>
+    console.log(`✓ AURUM on :${PORT}  ·  console at ${ADMIN_PATH}`)
+  );
+})();

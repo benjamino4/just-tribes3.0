@@ -18,6 +18,7 @@ export const pool = new Pool({
 
 export async function migrate() {
   const schemaPath = path.join(__dirname, '..', 'schema.sql');
+  console.log('Reading schema from:', schemaPath);
   const sql = fs.readFileSync(schemaPath, 'utf8');
   await pool.query(sql);
   console.log('✓ Migration complete');
