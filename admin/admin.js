@@ -1,16 +1,22 @@
 const tg = window.Telegram?.WebApp;
 tg?.ready();
 tg?.expand();
+tg?.setHeaderColor('#F2EFE9');
+tg?.setBackgroundColor('#F2EFE9');
 
+// Read auth from the URL. The FAB passed both params through the navigation.
 const params = new URLSearchParams(location.search);
-const adminToken = params.get('t') || '';
+const adminToken = params.get('t') || window.__AURUM_T || '';
+const initData = tg?.initData || params.get('i') || window.__AURUM_I || '';
 
-// Prefer the live initData from the Telegram SDK. Fall back to the
-// initData that was passed in the URL by the FAB if the SDK is empty.
-const initData = tg?.initData || params.get('i') || '';
-
-if (!initData || !adminToken) {
-  document.body.innerHTML = `...locked screen...`;
+if (!adminToken || !initData) {
+  document.body.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:center;min-height:100vh;padding:40px;text-align:center;font-family:-apple-system,sans-serif;color:#8A7F70;background:#F2EFE9;">
+      <div>
+        <div style="font-size:42px;margin-bottom:18px;">🔒</div>
+        <div style="font-size:18px;font-weight:800;color:#14100C;margin-bottom:10px;">Not found</div>
+      </div>
+    </div>`;
   throw new Error('no_auth');
 }
 
@@ -29,7 +35,6 @@ async function api(path, options = {}) {
         <div>
           <div style="font-size:42px;margin-bottom:18px;">🔒</div>
           <div style="font-size:18px;font-weight:800;color:#14100C;margin-bottom:10px;">Not found</div>
-          <div style="font-size:13px;">This page does not exist.</div>
         </div>
       </div>`;
     throw new Error('not_found');
@@ -43,6 +48,25 @@ async function api(path, options = {}) {
     throw new Error(err.error || 'request_failed');
   }
   return res.json();
+}
+
+function toast(msg, type = 'info') {
+  let stack = document.getElementById('toast-stack');
+  if (!stack) {
+    stack = document.createElement('div');
+    stack.id = 'toast-stack';
+    stack.style.cssText = 'position:fixed;bottom:24px;right:24px;z-index:9999;display:flex;flex-direction:column;gap:10px;';
+    document.body.appendChild(stack);
+  }
+  const el = document.createElement('div');
+  el.style.cssText = `
+    background:${type === 'error' ? '#C33A28' : type === 'success' ? '#1D7B48' : '#14100C'};
+    color:#F2EFE9;padding:14px 18px;border-radius:100px;
+    font-family:ui-rounded,sans-serif;font-size:13px;font-weight:800;
+    box-shadow:4px 4px 0 #14100C;border:2px solid #14100C;`;
+  el.textContent = msg;
+  stack.appendChild(el);
+  setTimeout(() => el.remove(), 3200);
 }
 
 // ─── Nav ────────────────────────────────────────────────────
@@ -391,12 +415,9 @@ document.getElementById('btn-broadcast')?.addEventListener('click', async () => 
 });
 
 // ─── Logout ─────────────────────────────────────────────────
-function doLogout() {
-  // No session to clear — just close the admin panel and return to the mini app.
-  location.href = location.origin;
-}
-document.getElementById('btn-logout')?.onclick = doLogout;
-document.getElementById('btn-logout-mobile')?.onclick = doLogout;
+function doLogout() { location.href = location.origin; }
+document.getElementById('btn-logout')?.addEventListener('click', doLogout);
+document.getElementById('btn-logout-mobile')?.addEventListener('click', doLogout);
 
 document.querySelectorAll('[data-close]').forEach(b => {
   b.onclick = () => b.closest('dialog').close();
@@ -413,12 +434,12 @@ function debounce(fn, ms) {
 
 // ─── Boot ───────────────────────────────────────────────────
 loadDashboard();
+
 const who = document.getElementById('admin-who');
 if (tg?.initDataUnsafe?.user) {
-  who.textContent =
-    tg.initDataUnsafe.user.first_name ||
-    tg.initDataUnsafe.user.username ||
-    'Admin';
+  who.textContent = tg.initDataUnsafe.user.first_name
+    || tg.initDataUnsafe.user.username
+    || 'Admin';
 } else {
   who.textContent = 'Admin';
 }

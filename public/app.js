@@ -100,7 +100,6 @@ function setupTabBar() {
 
     to.classList.remove('from-left', 'from-right', 'leaving-left', 'leaving-right');
     to.classList.add(goRight ? 'from-right' : 'from-left');
-    // force layout
     void to.offsetWidth;
     to.classList.remove('from-right', 'from-left');
     to.classList.add('active');
@@ -121,7 +120,6 @@ function setupTabBar() {
     });
   });
 
-  // Swipe between tabs
   let sx = 0, sy = 0, tracking = false;
   viewport.addEventListener('touchstart', (e) => {
     sx = e.touches[0].clientX;
@@ -153,7 +151,7 @@ function renderUser() {
   document.getElementById('streak').textContent = state.user?.streak ?? 0;
 }
 
-// ─── Render: challenge (stacked deck) ───────────────────────
+// ─── Render: challenge ──────────────────────────────────────
 function renderChallenge() {
   const mount = document.getElementById('challenge-mount');
   const ch = state.challenge;
@@ -199,7 +197,6 @@ function renderChallenge() {
     return;
   }
 
-  // Open — stacked deck
   const options = ch.options || [];
   mount.innerHTML = `
     <div class="day-badge">Day ${dayIndex()}</div>
@@ -216,7 +213,6 @@ function renderChallenge() {
   buildDeck(options);
 }
 
-// ─── Stacked deck builder ───────────────────────────────────
 function buildDeck(options) {
   const deck = document.getElementById('deck');
   const pager = document.getElementById('deck-pager');
@@ -240,12 +236,10 @@ function buildDeck(options) {
     return card;
   });
 
-  // Initial stacked transform
   function layout() {
     cards.forEach((card, i) => {
       const offset = i - activeIdx;
       if (offset < 0) {
-        // Swiped away (shouldn't normally happen since we cycle)
         card.style.transform = `translateX(-120%) rotate(-20deg)`;
         card.style.opacity = '0';
         card.style.pointerEvents = 'none';
@@ -267,7 +261,6 @@ function buildDeck(options) {
         card.style.pointerEvents = 'none';
       }
     });
-    // Pager
     pager.querySelectorAll('.deck-dot').forEach((d, i) => {
       d.classList.toggle('active', i === activeIdx);
     });
@@ -277,12 +270,11 @@ function buildDeck(options) {
     deck.appendChild(card);
     if (i === 0) layout();
 
-    // Pointer drag
     let sx = 0, sy = 0, dx = 0, dy = 0, dragging = false;
 
     card.addEventListener('pointerdown', (e) => {
       if (i !== activeIdx) return;
-      if (e.target.closest('.lock')) return; // let button handle
+      if (e.target.closest('.lock')) return;
       dragging = true;
       sx = e.clientX;
       sy = e.clientY;
@@ -324,7 +316,6 @@ function buildDeck(options) {
       layout();
     });
 
-    // Lock In button
     card.querySelector('.lock').addEventListener('click', (e) => {
       e.stopPropagation();
       commitPick(opt.id);
@@ -334,7 +325,6 @@ function buildDeck(options) {
   layout();
 }
 
-// ─── Commit pick + reveal overlay ───────────────────────────
 async function commitPick(choiceId) {
   if (state.myPick) return;
   haptic('medium');
@@ -348,11 +338,7 @@ async function commitPick(choiceId) {
       }),
     });
     state.myPick = { choice: choiceId };
-
-    // Show reveal overlay
     showRevealOverlay(choiceId);
-
-    // Re-render behind the overlay
     setTimeout(() => renderChallenge(), 400);
   } catch (err) {
     if (err.error === 'already_picked') {
@@ -369,11 +355,9 @@ function showRevealOverlay(choiceId) {
   const overlay = document.getElementById('reveal-overlay');
   const timeEl = document.getElementById('reveal-time');
   const subEl = document.getElementById('reveal-sub');
-  const titleEl = document.getElementById('reveal-title');
 
   const revealTime = new Date(state.challenge.reveal_at);
   timeEl.textContent = `Reveal at ${formatTime(revealTime)}`;
-
   subEl.textContent = 'You locked in ' + choiceId.toUpperCase() +
     '. The AIs are ranking every path. The best call pays the most.';
 
@@ -385,19 +369,17 @@ function showRevealOverlay(choiceId) {
   };
 }
 
-// ─── Revealed view (full breakdown) ─────────────────────────
 async function renderRevealed(mount, ch) {
   mount.innerHTML = `<div class="empty"><span class="loader"></span></div>`;
 
   try {
     const { challenge, distribution, total, pointsMap } = await api(`/api/challenge/${ch.id}/breakdown`);
-    const ranking = challenge.ranking || []; // [{ id, rank, points }]
+    const ranking = challenge.ranking || [];
     const optionsById = Object.fromEntries((challenge.options || []).map(o => [o.id, o]));
     const myChoice = state.myPick?.choice;
     const myRank = ranking.find(r => r.id === myChoice);
     const amBest = myRank?.rank === 1;
 
-    // Trigger reward if user got the best option AND hasn't been shown it yet for this challenge
     if (amBest && myRank.points > 0) {
       const seenKey = `aurum_reward_${ch.id}`;
       if (!sessionStorage.getItem(seenKey)) {
@@ -457,7 +439,6 @@ async function renderRevealed(mount, ch) {
   }
 }
 
-// ─── Reward overlay + confetti ──────────────────────────────
 function showRewardOverlay(label, points) {
   const overlay = document.getElementById('reward-overlay');
   const canvas = document.getElementById('reward-canvas');
@@ -469,7 +450,6 @@ function showRewardOverlay(label, points) {
   overlay.classList.add('active');
   haptic('success');
 
-  // Confetti
   const ctx = canvas.getContext('2d');
   const dpr = window.devicePixelRatio || 1;
   canvas.width = window.innerWidth * dpr;
@@ -504,7 +484,7 @@ function showRewardOverlay(label, points) {
     ctx.clearRect(0, 0, W, H);
     let alive = false;
     for (const p of parts) {
-      p.vy += 0.45;      // gravity
+      p.vy += 0.45;
       p.vx *= 0.99;
       p.x += p.vx;
       p.y += p.vy;
@@ -533,7 +513,6 @@ function showRewardOverlay(label, points) {
   }
   tick();
 
-  // Auto dismiss after 3s
   setTimeout(() => {
     overlay.classList.add('hidden');
     overlay.classList.remove('active');
@@ -605,13 +584,11 @@ function renderBoard() {
   const rest = state.board.slice(3);
   const myId = String(state.user?.telegram_id);
   const nameOf = u => u.first_name || u.username || 'Anon';
-
-  // Podium (2, 1, 3)
   const podiumOrder = [top3[1], top3[0], top3[2]].filter(Boolean);
 
   mount.innerHTML = `
     <div class="podium">
-      ${podiumOrder.map((u, idx) => {
+      ${podiumOrder.map((u) => {
         const realRank = top3.indexOf(u) + 1;
         return `
           <div class="podium-slot" data-rank="${realRank}">
@@ -637,24 +614,15 @@ function renderBoard() {
       }).join('')}
     </div>
   `;
-
-  // If me is in top 3, highlight
-  // (already done via data-rank styling — could add outline later)
 }
 
-// ─── Admin FAB — only rendered for the verified admin ──────
-// Nothing about this exists for non-admin users:
-//   - No CSS is shipped mentioning #admin-fab
-//   - No path is hardcoded; it comes from /api/me for the admin only
-//   - Requires a valid, unexpired session token from /api/me
-//   - Long-press (700ms) to open; plain taps do nothing
+// ─── Admin FAB ──────────────────────────────────────────────
 function renderAdminFab() {
   if (!state.user?.is_admin) return;
   if (!state.user?.admin_token) return;
   if (!state.user?.admin_path) return;
   if (document.getElementById('admin-fab')) return;
 
-  // Inject styles dynamically — never shipped to non-admins
   if (!document.getElementById('admin-fab-styles')) {
     const style = document.createElement('style');
     style.id = 'admin-fab-styles';
@@ -675,8 +643,7 @@ function renderAdminFab() {
         touch-action: none;
         user-select: none;
         box-shadow: 6px 6px 0 #14100C;
-        transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1),
-                    opacity 0.25s ease;
+        transition: transform 0.15s cubic-bezier(0.34, 1.56, 0.64, 1), opacity 0.25s ease;
         opacity: 0.55;
       }
       #admin-fab:active:not(.dragging) {
@@ -699,18 +666,14 @@ function renderAdminFab() {
   fab.textContent = '◈';
 
   const saved = JSON.parse(localStorage.getItem('aurum_fab_pos') || 'null');
-  const defaultPos = {
-    x: window.innerWidth - 68,
-    y: window.innerHeight - 160,
-  };
+  const defaultPos = { x: window.innerWidth - 68, y: window.innerHeight - 160 };
   let pos = saved || defaultPos;
   pos.x = Math.min(Math.max(6, pos.x), window.innerWidth - 58);
   pos.y = Math.min(Math.max(6, pos.y), window.innerHeight - 58);
   fab.style.left = pos.x + 'px';
   fab.style.top = pos.y + 'px';
 
-  let dragging = false;
-  let moved = false;
+  let dragging = false, moved = false;
   let sx = 0, sy = 0, ox = 0, oy = 0;
   let pressTimer = null;
 
@@ -718,16 +681,11 @@ function renderAdminFab() {
     dragging = true;
     moved = false;
     fab.classList.add('dragging');
-
     const r = fab.getBoundingClientRect();
-    sx = e.clientX;
-    sy = e.clientY;
-    ox = e.clientX - r.left;
-    oy = e.clientY - r.top;
-
+    sx = e.clientX; sy = e.clientY;
+    ox = e.clientX - r.left; oy = e.clientY - r.top;
     fab.setPointerCapture?.(e.pointerId);
 
-    // Long-press to open. Plain taps do nothing.
     pressTimer = setTimeout(() => {
       if (!moved) openAdmin();
       pressTimer = null;
@@ -738,15 +696,10 @@ function renderAdminFab() {
     if (!dragging) return;
     const dx = e.clientX - sx;
     const dy = e.clientY - sy;
-
     if (Math.abs(dx) > 4 || Math.abs(dy) > 4) {
       moved = true;
-      if (pressTimer) {
-        clearTimeout(pressTimer);
-        pressTimer = null;
-      }
+      if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
     }
-
     pos.x = Math.min(Math.max(4, e.clientX - ox), window.innerWidth - 56);
     pos.y = Math.min(Math.max(4, e.clientY - oy), window.innerHeight - 56);
     fab.style.left = pos.x + 'px';
@@ -754,24 +707,16 @@ function renderAdminFab() {
   }
 
   function endPress() {
-    if (pressTimer) {
-      clearTimeout(pressTimer);
-      pressTimer = null;
-    }
+    if (pressTimer) { clearTimeout(pressTimer); pressTimer = null; }
     if (!dragging) return;
     dragging = false;
     fab.classList.remove('dragging');
-
-    // Snap to nearest edge
     pos.x = pos.x + 26 < window.innerWidth / 2 ? 16 : window.innerWidth - 68;
     pos.y = Math.min(Math.max(16, pos.y), window.innerHeight - 68);
-
-    fab.style.transition =
-      'left 260ms cubic-bezier(0.2,0.9,0.2,1), top 260ms cubic-bezier(0.2,0.9,0.2,1)';
+    fab.style.transition = 'left 260ms cubic-bezier(0.2,0.9,0.2,1), top 260ms cubic-bezier(0.2,0.9,0.2,1)';
     fab.style.left = pos.x + 'px';
     fab.style.top = pos.y + 'px';
     setTimeout(() => { fab.style.transition = ''; }, 280);
-
     localStorage.setItem('aurum_fab_pos', JSON.stringify(pos));
   }
 
@@ -780,12 +725,10 @@ function renderAdminFab() {
   fab.addEventListener('pointerup', endPress);
   fab.addEventListener('pointercancel', endPress);
 
-  // Fade out when Telegram is backgrounded (screenshot hygiene)
   document.addEventListener('visibilitychange', () => {
     fab.style.opacity = document.hidden ? '0' : '0.55';
   });
 
-  // Stay inside viewport on rotate/resize
   window.addEventListener('resize', () => {
     pos.x = Math.min(Math.max(6, pos.x), window.innerWidth - 58);
     pos.y = Math.min(Math.max(6, pos.y), window.innerHeight - 58);
@@ -796,22 +739,15 @@ function renderAdminFab() {
   document.body.appendChild(fab);
 }
 
-// ─── Open admin — stays inside the same Telegram webview ───
 function openAdmin() {
   haptic('success');
-
-  // A page navigation cannot send custom headers, so both the token
-  // and the Telegram initData must travel in the query string.
-  // The server reads initData from req.query.i as a fallback.
   const path = state.user?.admin_path || '/aurum-console-x7k2';
   const token = state.user?.admin_token || '';
   const initData = window.Telegram?.WebApp?.initData || '';
-
   const url =
     `${location.origin}${path}` +
     `?t=${encodeURIComponent(token)}` +
     `&i=${encodeURIComponent(initData)}`;
-
   location.href = url;
 }
 

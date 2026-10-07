@@ -161,19 +161,30 @@
   </dialog>
 
   <script>
-    // Load the token from the URL once. Everything else (css, js) uses it.
-    const __t = new URLSearchParams(location.search).get('t') || '';
-    const __qs = __t ? '?t=' + encodeURIComponent(__t) : '';
+    // Load css + js with BOTH t and i query params so the server can
+    // validate every asset request. Page navigations can't send custom
+    // headers, so the initData travels in the URL.
+    (function () {
+      const p = new URLSearchParams(location.search);
+      const t = p.get('t') || '';
+      const i = p.get('i') || '';
+      const qs = (t || i)
+        ? '?t=' + encodeURIComponent(t) + '&i=' + encodeURIComponent(i)
+        : '';
 
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = './admin.css' + __qs;
-    document.head.appendChild(link);
+      window.__AURUM_T = t;
+      window.__AURUM_I = i;
 
-    const script = document.createElement('script');
-    script.type = 'module';
-    script.src = './admin.js' + __qs;
-    document.body.appendChild(script);
+      const link = document.createElement('link');
+      link.rel = 'stylesheet';
+      link.href = './admin.css' + qs;
+      document.head.appendChild(link);
+
+      const script = document.createElement('script');
+      script.type = 'module';
+      script.src = './admin.js' + qs;
+      document.body.appendChild(script);
+    })();
   </script>
 </body>
 </html>
