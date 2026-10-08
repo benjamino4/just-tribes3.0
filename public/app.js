@@ -288,67 +288,70 @@ function buildDeck(options) {
     deck.appendChild(card);
     if (i === 0) layout();
 
-    let sx = 0, sy = 0, dx = 0, dy = 0, dragging = false;
-    const TAP_SLOP = 10;   // movement under this = a tap, not a drag
-    const SWIPE = 90;      // movement over this = advance to next card
+    const opt = options[i];      // <-- was out of scope before; taps threw ReferenceError
+    let sx = 0, sy = 0, dx = 0, dy = 0, dragging = false, moved = false;
+    const TAP_SLOP = 8;    // movement under this = a tap, not a drag
+    const SWIPE = 80;      // movement over this = advance to next card
 
     card.addEventListener('pointerdown', (e) => {
       if (i !== activeIdx) return;
       if (e.target.closest('.lock')) return;
       dragging = true;
-      dx = 0; dy = 0;          // reset so stale deltas can't fake a tap/drag
+      moved = false;
+      dx = 0; dy = 0;
       sx = e.clientX;
       sy = e.clientY;
       card.classList.add('dragging');
-      card.setPointerCapture?.(e.pointerId);
+      try { card.setPointerCapture?.(e.pointerId); } catch {}
     });
 
     card.addEventListener('pointermove', (e) => {
       if (!dragging) return;
       dx = e.clientX - sx;
       dy = e.clientY - sy;
-      const rot = dx * 0.06;
-      card.style.transform = `translate(${dx}px, ${dy * 0.4}px) rotate(${rot}deg)`;
+      if (Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP) moved = true;
+      card.style.transform = `translate(${dx}px, ${dy * 0.4}px) rotate(${dx * 0.06}deg)`;
     });
 
-    card.addEventListener('pointerup', () => {
+    function endDrag() {
       if (!dragging) return;
       dragging = false;
       card.classList.remove('dragging');
-
-      const moved = Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP;
-
-      // Clean tap on the active card = lock this option in (with feedback).
-      if (!moved) {
-        layout();
-        haptic('medium');
-        commitPick(opt.id);
-        return;
-      }
-
       // Horizontal fling = browse to the next card.
-      if (Math.abs(dx) > SWIPE) {
+      if (moved && Math.abs(dx) > SWIPE) {
         const dir = dx > 0 ? 1 : -1;
-        card.style.transform = `translate(${dir * 500}px, ${dy}px) rotate(${dir * 30}deg)`;
+        card.style.transform = `translate(${dir * 520}px, ${dy}px) rotate(${dir * 28}deg)`;
         card.style.opacity = '0';
         haptic('light');
         setTimeout(() => {
           activeIdx = (activeIdx + 1) % cards.length;
           dx = 0; dy = 0;
           layout();
-        }, 260);
+        }, 240);
       } else {
-        // Small nudge that wasn't a tap — snap back.
+        // Snap back. (A clean tap is handled by the click listener below.)
         dx = 0; dy = 0;
         layout();
       }
-    });
+    }
 
+    card.addEventListener('pointerup', endDrag);
     card.addEventListener('pointercancel', () => {
       dragging = false;
       dx = 0; dy = 0;
       card.classList.remove('dragging');
       layout();
+    });
+
+    // Tap-to-lock. `click` is the dependable "tap" signal in Telegram's WebView:
+    // with touch-action:pan-y a tap can arrive as pointercancel (never pointerup),
+    // but a genuine tap still fires click.
+    card.addEventListener('click', (e) => {
+      if (e.target.closest('.lock')) return;   // its own button handles it
+      if (i !== activeIdx) return;
+      if (moved) { moved = false; return; }    // that was a drag, not a tap
+      haptic('medium');
+      commitPick(opt.id);
     });
 
     card.querySelector('.lock').addEventListener('click', (e) => {
@@ -461,7 +464,7 @@ async function renderRevealed(mount, ch) {
           }).join('')}
         </div>
 
-        ${challenge.ai_reason ? `
+        ${(challenge.show_reason && challenge.ai_reason) ? `
           <div class="result-reason">
             <strong>Why</strong>
             ${escapeHtml(challenge.ai_reason)}
@@ -557,6 +560,9 @@ function showRewardOverlay(label, points) {
 }
 
 // ─── Quests ─────────────────────────────────────────────────
+const QUEST_GLYPH = { x_follow: '✕', task: '◆', research: '◇', terms: '§', link: '◈' };
+function questGlyph(t) { return QUEST_GLYPH[t] || QUEST_GLYPH.link; }
+
 function renderQuests() {
   const mount = document.getElementById('quests-mount');
   if (!state.quests.length) { mount.innerHTML = ''; return; }
@@ -565,9 +571,9 @@ function renderQuests() {
     <div class="section-label">Side Quests</div>
     ${state.quests.map(q => `
       <div class="quest" data-id="${q.id}">
-        <div class="quest-icon">◆</div>
+        <div class="quest-icon">${questGlyph(q.action_type)}</div>
         <div class="quest-body">
-          <div class="quest-title">${escapeHtml(q.title)}</div>
+          <div class="quest-title">${escapeHtml(q.title)}${q.requires_terms ? ' <span class="quest-flag">§ T&amp;C</span>' : ''}</div>
           <div class="quest-desc">${escapeHtml(q.description)}</div>
         </div>
         <div class="quest-reward">+${q.reward}</div>
@@ -577,6 +583,60 @@ function renderQuests() {
 
   mount.querySelectorAll('.quest').forEach(el => {
     el.addEventListener('click', () => onQuestClick(el.dataset.id));
+  });
+}
+
+// Dynamically-built, fully-escaped Terms & Conditions consent sheet.
+// Resolves true only when the player explicitly taps "I agree".
+function showTermsOverlay(quest) {
+  return new Promise(resolve => {
+    const back = document.createElement('div');
+    back.className = 'terms-overlay';
+
+    const sheet = document.createElement('div');
+    sheet.className = 'terms-sheet';
+
+    const h = document.createElement('div');
+    h.className = 'terms-head';
+    h.textContent = 'Terms & Conditions';
+
+    const sub = document.createElement('div');
+    sub.className = 'terms-sub';
+    sub.textContent = quest.title;
+
+    const body = document.createElement('div');
+    body.className = 'terms-body';
+    body.textContent = quest.terms_text || 'By continuing you agree to the terms of this quest.';
+
+    const actions = document.createElement('div');
+    actions.className = 'terms-actions';
+
+    const decline = document.createElement('button');
+    decline.className = 'terms-btn ghost';
+    decline.textContent = 'Decline';
+
+    const agree = document.createElement('button');
+    agree.className = 'terms-btn primary';
+    agree.textContent = 'I agree';
+
+    const close = (val) => {
+      back.classList.remove('active');
+      setTimeout(() => back.remove(), 220);
+      resolve(val);
+    };
+    decline.addEventListener('click', () => { haptic('light'); close(false); });
+    agree.addEventListener('click', () => { haptic('success'); close(true); });
+    back.addEventListener('click', (e) => { if (e.target === back) close(false); });
+
+    actions.appendChild(decline);
+    actions.appendChild(agree);
+    sheet.appendChild(h);
+    sheet.appendChild(sub);
+    sheet.appendChild(body);
+    sheet.appendChild(actions);
+    back.appendChild(sheet);
+    document.body.appendChild(back);
+    requestAnimationFrame(() => back.classList.add('active'));
   });
 }
 
@@ -591,8 +651,18 @@ async function onQuestClick(questId) {
   }
   if (quest.verify_text && !confirm(quest.verify_text)) return;
 
+  // Legal gate: quests flagged requires_terms must get explicit consent first.
+  let agreed = false;
+  if (quest.requires_terms) {
+    agreed = await showTermsOverlay(quest);
+    if (!agreed) return;
+  }
+
   try {
-    const res = await api(`/api/quests/${questId}/complete`, { method: 'POST' });
+    const res = await api(`/api/quests/${questId}/complete`, {
+      method: 'POST',
+      body: JSON.stringify({ agreed }),
+    });
     haptic('success');
     if (state.user) state.user.points += res.reward || quest.reward;
     renderUser();

@@ -24,7 +24,7 @@ app.get('/api/today', async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
   const { rows } = await q(
     `SELECT id, challenge_date, question, options, reveal_at, status,
-            winner_id, ranking, ai_reason, outcome_text
+            winner_id, ranking, ai_reason, show_reason, outcome_text
      FROM challenges WHERE challenge_date = $1`,
     [today]
   );
@@ -116,7 +116,7 @@ app.get('/api/challenge/:id/stats', async (req, res) => {
 
 app.get('/api/challenge/:id/breakdown', async (req, res) => {
   const { rows: ch } = await q(
-    `SELECT id, question, options, ranking, winner_id, ai_reason, outcome_text, status
+    `SELECT id, question, options, ranking, winner_id, ai_reason, show_reason, outcome_text, status
      FROM challenges WHERE id=$1`,
     [req.params.id]
   );
@@ -148,7 +148,8 @@ app.get('/api/challenge/:id/breakdown', async (req, res) => {
 
 app.get('/api/quests', async (req, res) => {
   const { rows } = await q(
-    `SELECT id, title, description, reward, action_url, action_type, verify_text
+    `SELECT id, title, description, reward, action_url, action_type, verify_text,
+            requires_terms, terms_text
      FROM quests WHERE is_active = TRUE
        AND (expires_at IS NULL OR expires_at > NOW())
      ORDER BY created_at DESC`
@@ -159,17 +160,24 @@ app.get('/api/quests', async (req, res) => {
 app.post('/api/quests/:id/complete', requireUser, async (req, res) => {
   const id = req.tgUser.id;
   const questId = req.params.id;
+  const agreed = req.body?.agreed === true;
 
   const { rows: quest } = await q(
-    `SELECT reward FROM quests WHERE id = $1 AND is_active = TRUE`,
+    `SELECT reward, requires_terms FROM quests WHERE id = $1 AND is_active = TRUE`,
     [questId]
   );
   if (!quest.length) return res.status(404).json({ error: 'no_quest' });
 
+  // Legal gate: quests flagged requires_terms only complete once the player
+  // has explicitly agreed to the attached Terms & Conditions.
+  if (quest[0].requires_terms && !agreed) {
+    return res.status(400).json({ error: 'terms_required' });
+  }
+
   const insert = await q(
-    `INSERT INTO quest_completions (telegram_id, quest_id)
-     VALUES ($1, $2) ON CONFLICT DO NOTHING RETURNING id`,
-    [id, questId]
+    `INSERT INTO quest_completions (telegram_id, quest_id, agreed_terms)
+     VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id`,
+    [id, questId, agreed]
   );
   if (!insert.rows.length) return res.status(409).json({ error: 'done' });
 

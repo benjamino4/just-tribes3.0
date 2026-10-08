@@ -171,7 +171,8 @@ bot.on('callback_query', async (query) => {
     if (data === 'bc') { S.mode = 'broadcast'; return send(chatId, '▧ Type the broadcast message. It goes to *every* player as the game bot.\n\n/cancel to stop.', { reply_markup: { inline_keyboard: [backRow] } }); }
 
     // quests
-    if (data === 'quest_add') { S.mode = 'quest_add'; return send(chatId, '◆ New quest. Send as:\n`title | reward | description | url`\n(url optional)\n\n/cancel to stop.'); }
+    if (data === 'quest_add') return questTypeMenu(chatId);
+    if (data.startsWith('qnew:')) return startQuestBuild(chatId, data.split(':')[1]);
     if (data.startsWith('qtog:')) return toggleQuest(chatId, data.split(':')[1]);
     if (data.startsWith('qdel:')) return deleteQuest(chatId, data.split(':')[1]);
     if (data.startsWith('qrew:')) { S.mode = 'quest_rew'; S.ctx.qid = data.split(':')[1]; return send(chatId, `Send the new reward (number) for quest \`${S.ctx.qid}\`.`); }
@@ -180,6 +181,10 @@ bot.on('callback_query', async (query) => {
     if (data.startsWith('resolve:')) return startResolve(chatId, data.split(':')[1]);
     if (data.startsWith('rAI:')) return resolveWithAI(chatId, data.split(':')[1]);
     if (data.startsWith('rMan:')) return startManualResolve(chatId, data.split(':')[1]);
+    // reason chooser (after a ranking is locked)
+    if (data === 'rsnAI') return finalizeResolution(chatId, S.ctx.aiReason || '', true);
+    if (data === 'rsnNone') return finalizeResolution(chatId, '', false);
+    if (data === 'rsnCustom') { S.mode = 'resolve_reason'; return send(chatId, '✎ Send the reason players will see for this result.'); }
     if (data.startsWith('del:')) return deleteCall(chatId, data.split(':')[1]);
     if (data.startsWith('cedit:')) return editCallMenu(chatId, data.split(':')[1]);
     if (data.startsWith('cedq:')) { S.mode = 'edit_question'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *question* text.'); }
@@ -268,7 +273,9 @@ function startNewCall(chatId) {
 // ═══ Text / conversation handler ══════════════════
 bot.on('message', async (msg) => {
   if (!ADMIN_SET || msg?.from?.id !== ADMIN) return;   // ignore the whole world but the creator
-  if (!msg.text || msg.text.startsWith('/')) return;   // commands handled elsewhere
+  if (!msg.text) return;
+  // Commands are handled elsewhere — except /skip, which some builder steps accept.
+  if (msg.text.startsWith('/') && msg.text.trim() !== '/skip') return;
   if (!S.mode) return;
   const chatId = msg.chat.id;
   const text = msg.text.trim();
@@ -330,18 +337,41 @@ bot.on('message', async (msg) => {
         if (valid.length !== ids.length) {
           return send(chatId, `Rank *all* options best→worst by id, e.g. \`${ids.join(' ')}\``);
         }
-        return applyResolution(chatId, S.ctx.id, valid, [], 'Ranked by the creator.');
+        // Manual ranking has no AI reason — go straight to the reason chooser.
+        S.ctx = { id: S.ctx.id, ranking: valid, votes: [], aiReason: '' };
+        return askReason(chatId);
       }
-      case 'quest_add': {
+      case 'resolve_reason': {
+        const reason = text.trim();
+        return finalizeResolution(chatId, reason, true);
+      }
+      case 'quest_build': {
         const [title, reward, description, url] = text.split('|').map(s => (s || '').trim());
         if (!title || !reward || isNaN(Number(reward)))
           return send(chatId, 'Format: `title | reward | description | url`');
+        S.draft.title = title;
+        S.draft.reward = Number(reward);
+        S.draft.description = description || '';
+        S.draft.url = url || null;
+        S.mode = 'quest_terms';
+        if (S.draft.action_type === 'terms') {
+          return send(chatId, '§ Send the *Terms & Conditions* text players must agree to before completing this quest.');
+        }
+        return send(chatId, 'Attach *Terms & Conditions* players must agree to before completing?\n\nSend the T&C text now, or /skip for none.');
+      }
+      case 'quest_terms': {
+        const skip = text.trim() === '/skip';
+        if (skip && S.draft.action_type === 'terms')
+          return send(chatId, 'A Terms & Conditions quest needs its T&C text. Please send it (or /cancel).');
+        const requires_terms = S.draft.action_type === 'terms' ? true : !skip;
+        const terms_text = skip ? null : text.trim();
+        const d = S.draft;
         const { rows } = await q(
-          `INSERT INTO quests (title, description, reward, action_url)
-           VALUES ($1,$2,$3,$4) RETURNING id`,
-          [title, description || '', Number(reward), url || null]);
+          `INSERT INTO quests (title, description, reward, action_url, action_type, requires_terms, terms_text)
+           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
+          [d.title, d.description, d.reward, d.url, d.action_type, requires_terms, terms_text]);
         reset();
-        return send(chatId, `◆ Quest #${rows[0].id} created (+${reward} ${UNIT}).`, homeMenu());
+        return send(chatId, `◆ Quest #${rows[0].id} created (+${d.reward} ${UNIT})${requires_terms ? ' · T&C required' : ''}.`, homeMenu());
       }
       case 'quest_rew': {
         const r = Number(text);
@@ -522,7 +552,9 @@ async function resolveWithAI(chatId, id) {
   const verdict = await judgeWithRanking(ch.question, ch.outcome_text, ch.options);
   if (!verdict.ranking || !verdict.ranking.length)
     return send(chatId, 'No judge responded (check AI keys). Try ✎ Rank manually.', { reply_markup: { inline_keyboard: [[{ text: '✎ Rank manually', callback_data: 'rMan:' + id }], backRow] } });
-  return applyResolution(chatId, id, verdict.ranking, verdict.votes || [], verdict.reason || '');
+  // Stash the ranking, then let the admin choose the reason to publish.
+  S.ctx = { id, ranking: verdict.ranking, votes: verdict.votes || [], aiReason: verdict.reason || '' };
+  return askReason(chatId);
 }
 
 function startManualResolve(chatId, id) {
@@ -535,15 +567,17 @@ function startManualResolve(chatId, id) {
   });
 }
 
-// Build ranking → persist → award Ichor → update streaks
-async function applyResolution(chatId, id, ranking, ai_votes, ai_reason) {
+// Build ranking → persist → award Ichor → update streaks.
+// show_reason controls whether players see ANY reason at all; ai_reason now
+// holds either the judges' reason OR an admin-authored custom reason.
+async function applyResolution(chatId, id, ranking, ai_votes, ai_reason, show_reason = true) {
   const { map, ordered } = buildPointsMap(ranking);
   const winner_id = ranking[0];
 
   await q(
     `UPDATE challenges SET winner_id=$1, ranking=$2, ai_votes=$3, ai_reason=$4,
-       status='revealed', resolved_at=NOW() WHERE id=$5`,
-    [winner_id, JSON.stringify(ordered), JSON.stringify(ai_votes), ai_reason, id]);
+       show_reason=$5, status='revealed', resolved_at=NOW() WHERE id=$6`,
+    [winner_id, JSON.stringify(ordered), JSON.stringify(ai_votes), ai_reason, show_reason, id]);
 
   for (const [optionId, points] of Object.entries(map)) {
     await q(`UPDATE picks SET points_earned=$1 WHERE challenge_id=$2 AND choice=$3`, [points, id, optionId]);
@@ -559,11 +593,34 @@ async function applyResolution(chatId, id, ranking, ai_votes, ai_reason) {
 
   reset();
   const line = ordered.map(o => `*${o.id.toUpperCase()}* · #${o.rank} · +${o.points}`).join('\n');
+  const reasonLine = (show_reason && ai_reason) ? `\n\n_“${esc(ai_reason)}”_`
+    : (!show_reason ? `\n\n_(no reason shown to players)_` : '');
   send(chatId,
     `◈ *Call #${id} resolved.*\n\nConsensus: ${ranking.map(x => x.toUpperCase()).join(' › ')}\n\n${line}` +
-    (ai_reason ? `\n\n_“${esc(ai_reason)}”_` : '') +
+    reasonLine +
     `\n\n${UNIT} awarded and streaks updated.`,
     { reply_markup: { inline_keyboard: [[{ text: '▧ Announce result', callback_data: 'cann:' + id }], backRow] } });
+}
+
+// After a ranking is decided (AI or manual) the admin chooses what reason —
+// if any — players will see. Fully customizable: AI's words, your own, or none.
+function askReason(chatId) {
+  const kb = [];
+  if (S.ctx.aiReason) kb.push([{ text: '◈ Use the judges’ reason', callback_data: 'rsnAI' }]);
+  kb.push([{ text: '✎ Write a custom reason', callback_data: 'rsnCustom' }]);
+  kb.push([{ text: '∅ Publish with no reason', callback_data: 'rsnNone' }]);
+  kb.push(backRow);
+  send(chatId,
+    `Ranking locked: ${(S.ctx.ranking || []).map(x => x.toUpperCase()).join(' › ')}\n\n` +
+    `What reason should players see?` +
+    (S.ctx.aiReason ? `\n\nThe judges said:\n_“${esc(S.ctx.aiReason)}”_` : ''),
+    { reply_markup: { inline_keyboard: kb } });
+}
+
+// Commit using whatever ranking/votes were stashed on S.ctx.
+function finalizeResolution(chatId, reason, show) {
+  const { id, ranking, votes } = S.ctx;
+  return applyResolution(chatId, id, ranking, votes || [], reason || '', show);
 }
 
 async function reopenCall(chatId, id) {
@@ -592,13 +649,52 @@ async function deleteCall(chatId, id) {
   send(chatId, `Call #${id} deleted.`, { reply_markup: { inline_keyboard: [[{ text: '▤ Calls', callback_data: 'calls' }], backRow] } });
 }
 // ═══ Quests ════════════════════════════
+// Quest types the admin builds from the bot. Each carries a monochrome glyph
+// the Mini App renders; 'terms' always gates completion on an "I agree" step.
+const QUEST_TYPES = {
+  x_follow: { label: 'Follow-X quest', glyph: '✕' },
+  task:     { label: 'Task',          glyph: '◆' },
+  research: { label: 'Research task',  glyph: '◇' },
+  terms:    { label: 'T&C agreement',  glyph: '§' },
+  link:     { label: 'Link task',      glyph: '◈' },
+};
+function questTypeLabel(t) { return (QUEST_TYPES[t] || QUEST_TYPES.link).label; }
+
+function questTypeMenu(chatId) {
+  reset();
+  send(chatId, '◆ *New Quest* — choose a type', { reply_markup: { inline_keyboard: [
+    [{ text: '✕ Follow an X account', callback_data: 'qnew:x_follow' }],
+    [{ text: '◆ Link / generic task', callback_data: 'qnew:task' }],
+    [{ text: '◇ AI / research task', callback_data: 'qnew:research' }],
+    [{ text: '§ Terms & Conditions', callback_data: 'qnew:terms' }],
+    backRow,
+  ] } });
+}
+
+function startQuestBuild(chatId, type) {
+  if (!QUEST_TYPES[type]) type = 'task';
+  reset();
+  S.mode = 'quest_build';
+  S.draft = { action_type: type };
+  const hint = type === 'x_follow'
+    ? 'Send: `title | reward | description | x_profile_url`\ne.g. `Follow us on X | 50 | Follow @hubris for the alpha | https://x.com/hubris`'
+    : type === 'research'
+    ? 'Send: `title | reward | description | url`\ne.g. `Read the partner report | 80 | Review our revenue-share partner | https://…`'
+    : type === 'terms'
+    ? 'Send: `title | reward | description | url`\n(url optional — you’ll paste the T&C text next)'
+    : 'Send: `title | reward | description | url`\n(url optional)';
+  send(chatId, `◆ *New ${questTypeLabel(type)}*\n\n${hint}\n\n/cancel to stop.`);
+}
+
 async function listQuests(chatId) {
   const { rows } = await q(
     `SELECT q.*, (SELECT COUNT(*)::int FROM quest_completions c WHERE c.quest_id=q.id) done
      FROM quests q ORDER BY created_at DESC LIMIT 20`);
   const kb = [[{ text: '＋ New Quest', callback_data: 'quest_add' }]];
   for (const r of rows) {
-    kb.push([{ text: `${r.is_active ? '●' : '○'} ${esc(r.title).slice(0, 24)} · +${r.reward} · ${r.done}✓`, callback_data: 'noop' }]);
+    const g = (QUEST_TYPES[r.action_type] || QUEST_TYPES.link).glyph;
+    const tc = r.requires_terms ? ' §' : '';
+    kb.push([{ text: `${r.is_active ? '●' : '○'} ${g} ${esc(r.title).slice(0, 22)}${tc} · +${r.reward} · ${r.done}✓`, callback_data: 'noop' }]);
     kb.push([
       { text: r.is_active ? 'Deactivate' : 'Activate', callback_data: 'qtog:' + r.id },
       { text: '✎ Reward', callback_data: 'qrew:' + r.id },

@@ -33,6 +33,11 @@ CREATE TABLE IF NOT EXISTS challenges (
   created_at      TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Self-heal: resolution-reason controls (feature: admin-customizable reasons).
+-- show_reason lets the admin publish a verdict with NO reason shown at all;
+-- ai_reason already exists and now also stores admin-authored custom reasons.
+ALTER TABLE challenges ADD COLUMN IF NOT EXISTS show_reason BOOLEAN DEFAULT TRUE;
+
 CREATE TABLE IF NOT EXISTS picks (
   id            SERIAL PRIMARY KEY,
   telegram_id   BIGINT NOT NULL,
@@ -59,13 +64,25 @@ CREATE TABLE IF NOT EXISTS quests (
   created_at   TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Self-heal: richer quest types + optional legal T&C agreement.
+--   action_type : link | task | x_follow | research | terms
+--   requires_terms / terms_text : gate completion behind an "I agree" step
+ALTER TABLE quests ADD COLUMN IF NOT EXISTS action_type    TEXT DEFAULT 'link';
+ALTER TABLE quests ADD COLUMN IF NOT EXISTS verify_text    TEXT;
+ALTER TABLE quests ADD COLUMN IF NOT EXISTS requires_terms BOOLEAN DEFAULT FALSE;
+ALTER TABLE quests ADD COLUMN IF NOT EXISTS terms_text     TEXT;
+
 CREATE TABLE IF NOT EXISTS quest_completions (
   id           SERIAL PRIMARY KEY,
   telegram_id  BIGINT NOT NULL,
   quest_id     INTEGER NOT NULL,
+  agreed_terms BOOLEAN DEFAULT FALSE,
   completed_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(telegram_id, quest_id)
 );
+
+-- Self-heal for legacy quest_completions created before T&C tracking.
+ALTER TABLE quest_completions ADD COLUMN IF NOT EXISTS agreed_terms BOOLEAN DEFAULT FALSE;
 
 CREATE TABLE IF NOT EXISTS ai_chats (
   id          SERIAL PRIMARY KEY,
