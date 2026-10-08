@@ -5,7 +5,17 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import { q } from '../server/db.js';
-import { judgeWithRanking } from '../server/ai.js';
+import {
+  judgeWithRanking,
+  listProviders,
+  activeProviders,
+  getProvider,
+  addProvider,
+  toggleProvider,
+  deleteProvider,
+  chatProvider,
+  testProvider,
+} from '../server/ai.js';
 import { buildPointsMap } from '../server/scoring.js';
 
 // ═════════════════════════════════════════
@@ -39,8 +49,10 @@ const isAdmin = (msg) => ADMIN_SET && msg?.from?.id === ADMIN;
 const UNIT = 'Ichor';
 
 // Single-admin conversation state.
-const S = { mode: null, draft: {}, ctx: {} };
-function reset() { S.mode = null; S.draft = {}; S.ctx = {}; }
+// S.chat (when set) is the running message history [{role,content}] for a
+// freeform chat with a chosen AI provider; S.chatId is that provider's id.
+const S = { mode: null, draft: {}, ctx: {}, chat: null, chatId: null };
+function reset() { S.mode = null; S.draft = {}; S.ctx = {}; S.chat = null; S.chatId = null; }
 
 const esc = (s) => String(s ?? '');
 const fmt = (d) => new Date(d).toLocaleString('en-GB', { dateStyle: 'medium', timeStyle: 'short' });
@@ -79,6 +91,7 @@ function homeMenu() {
         [{ text: '＋ New Call', callback_data: 'new' }, { text: '▤ Calls', callback_data: 'calls' }],
         [{ text: '◆ Quests', callback_data: 'quests' }, { text: '● Users', callback_data: 'users' }],
         [{ text: '▧ Broadcast', callback_data: 'bc' }, { text: '⚙ Mini App', callback_data: 'miniapp' }],
+        [{ text: '◇ AI', callback_data: 'ai' }],
         [{ text: '⚠ Danger Zone', callback_data: 'danger' }],
       ],
     },
@@ -188,6 +201,17 @@ bot.on('callback_query', async (query) => {
     // mini-app-wide
     if (data === 'ma_streak0') return confirm(chatId, 'ma_streak0', 'reset *every* player’s current streak to 0');
     if (data === 'ma_remind') { S.mode = 'remind'; return send(chatId, 'Send the reminder message to push to all players (as the game bot).'); }
+
+    // AI
+    if (data === 'ai') return aiMenu(chatId);
+    if (data === 'ai_list') return aiList(chatId);
+    if (data === 'ai_pick') return aiPickToChat(chatId);
+    if (data.startsWith('aichat:')) return startChat(chatId, data.slice('aichat:'.length));
+    if (data === 'ai_endchat') { const was = !!S.chat; reset(); return send(chatId, was ? '◇ Chat ended.' : 'No chat was open.', aiKb()); }
+    if (data === 'ai_add') { S.mode = 'ai_add'; return send(chatId, '◇ *Register an AI provider*\n\nSend it on one line as:\n`name | endpoint_url | model | api_key`\n\nThe endpoint must be an OpenAI-compatible `chat/completions` URL, e.g.\n`myai | https://api.example.com/v1/chat/completions | gpt-4o-mini | sk-...`\n\n/cancel to stop.', { reply_markup: { inline_keyboard: [[{ text: '‹ AI', callback_data: 'ai' }]] } }); }
+    if (data.startsWith('aitog:')) return aiToggle(chatId, data.slice('aitog:'.length));
+    if (data.startsWith('aidel:')) return aiDelete(chatId, data.slice('aidel:'.length));
+    if (data.startsWith('aitest:')) return aiTest(chatId, data.slice('aitest:'.length));
 
     // danger zone (two-step confirm)
     if (data === 'dz_leader') return confirm(chatId, 'dz_leader', `zero out *all* ${UNIT} for every player (reset the leaderboard)`);
@@ -368,6 +392,32 @@ bot.on('message', async (msg) => {
       case 'broadcast': {
         reset();
         return doBroadcast(chatId, text);
+      }
+      case 'ai_add': {
+        const parts = text.split('|').map(s => (s || '').trim());
+        const [name, url, model, key] = parts;
+        if (parts.length < 4 || !name || !url || !model || !key)
+          return send(chatId, 'Format: `name | endpoint_url | model | api_key`\nAll four are required.');
+        if (!/^https?:\/\//i.test(url))
+          return send(chatId, 'The endpoint must be a full `https://.../chat/completions` URL.');
+        const id = await addProvider(name, url, model, key);
+        reset();
+        return send(chatId, `◇ Provider *${esc(name)}* registered (#${id}). It is active and will now judge calls and is available to chat.`, aiKb());
+      }
+      case 'ai_chat': {
+        if (!S.chat || !S.chatId) { reset(); return send(chatId, 'Chat is no longer open.', aiKb()); }
+        S.chat.push({ role: 'user', content: text });
+        // keep history bounded (last ~20 turns)
+        if (S.chat.length > 40) S.chat = S.chat.slice(-40);
+        bot.sendChatAction(chatId, 'typing').catch(() => {});
+        const r = await chatProvider(S.chatId, S.chat);
+        if (r.error) {
+          // drop the user turn we couldn't answer so history stays clean
+          S.chat.pop();
+          return send(chatId, `⚠ ${esc(r.error)} — the provider didn't answer. Try again or /cancel.`, chatControls());
+        }
+        S.chat.push({ role: 'assistant', content: r.content });
+        return send(chatId, r.content || '(empty reply)', chatControls());
       }
     }
   } catch (e) {

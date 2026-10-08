@@ -73,3 +73,16 @@ CREATE TABLE IF NOT EXISTS ai_chats (
   response    JSONB,
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- Extra OpenAI-compatible AI providers the admin registers later from the
+-- admin bot (name | endpoint url | model | api key). The three free providers
+-- (groq/cerebras/gemini) live in code + env; these augment them at runtime.
+CREATE TABLE IF NOT EXISTS ai_providers (
+  id          SERIAL PRIMARY KEY,
+  name        TEXT NOT NULL,
+  url         TEXT NOT NULL,       -- chat/completions endpoint
+  model       TEXT NOT NULL,
+  api_key     TEXT NOT NULL,
+  active      BOOLEAN DEFAULT TRUE,
+  created_at  TIMESTAMPTZ DEFAULT NOW()
+);

@@ -5,6 +5,8 @@ tg?.ready();
 tg?.expand();
 tg?.setHeaderColor('#08080A');
 tg?.setBackgroundColor('#08080A');
+// Stop Telegram's own vertical swipe-to-close from fighting the card gestures.
+try { tg?.disableVerticalSwipes?.(); } catch {}
 
 // ─── State ──────────────────────────────────────────────────
 const state = {
@@ -122,6 +124,8 @@ function setupTabBar() {
 
   let sx = 0, sy = 0, tracking = false;
   viewport.addEventListener('touchstart', (e) => {
+    // Don't let a horizontal card swipe also flip the tab pages.
+    if (e.target.closest('.deck')) { tracking = false; return; }
     sx = e.touches[0].clientX;
     sy = e.touches[0].clientY;
     tracking = true;
@@ -137,7 +141,21 @@ function setupTabBar() {
     if (dx > 0 && state.tab === 'board') switchTab('home', 'left');
   }, { passive: true });
 
-  setPaneHeight();
+  // Activate the starting pane. The HTML ships with NO pane marked active,
+  // and inactive panes are opacity:0 — that's why Home looked blank until a
+  // tab switch. Make the current tab visible up front.
+  panes[state.tab].classList.add('active');
+  tabbar.dataset.active = state.tab;
+
+  // Keep the viewport height in sync with whatever the active pane renders,
+  // including content that arrives async (challenge, board) or after fonts load.
+  if ('ResizeObserver' in window) {
+    const ro = new ResizeObserver(() => setPaneHeight());
+    ro.observe(panes.home);
+    ro.observe(panes.board);
+  }
+
+  requestAnimationFrame(setPaneHeight);
   window.addEventListener('resize', setPaneHeight);
 
   return { setPaneHeight };
@@ -206,7 +224,7 @@ function renderChallenge() {
       ${options.map((_, i) => `<div class="deck-dot ${i === 0 ? 'active' : ''}"></div>`).join('')}
     </div>
     <div class="empty" style="padding:0;font-size:10px;">
-      Swipe to browse · tap LOCK IN to commit
+      Swipe to browse · tap a card to lock it in
     </div>
   `;
 
@@ -271,11 +289,14 @@ function buildDeck(options) {
     if (i === 0) layout();
 
     let sx = 0, sy = 0, dx = 0, dy = 0, dragging = false;
+    const TAP_SLOP = 10;   // movement under this = a tap, not a drag
+    const SWIPE = 90;      // movement over this = advance to next card
 
     card.addEventListener('pointerdown', (e) => {
       if (i !== activeIdx) return;
       if (e.target.closest('.lock')) return;
       dragging = true;
+      dx = 0; dy = 0;          // reset so stale deltas can't fake a tap/drag
       sx = e.clientX;
       sy = e.clientY;
       card.classList.add('dragging');
@@ -294,8 +315,19 @@ function buildDeck(options) {
       if (!dragging) return;
       dragging = false;
       card.classList.remove('dragging');
-      const threshold = 90;
-      if (Math.abs(dx) > threshold) {
+
+      const moved = Math.abs(dx) > TAP_SLOP || Math.abs(dy) > TAP_SLOP;
+
+      // Clean tap on the active card = lock this option in (with feedback).
+      if (!moved) {
+        layout();
+        haptic('medium');
+        commitPick(opt.id);
+        return;
+      }
+
+      // Horizontal fling = browse to the next card.
+      if (Math.abs(dx) > SWIPE) {
         const dir = dx > 0 ? 1 : -1;
         card.style.transform = `translate(${dir * 500}px, ${dy}px) rotate(${dir * 30}deg)`;
         card.style.opacity = '0';
@@ -306,18 +338,22 @@ function buildDeck(options) {
           layout();
         }, 260);
       } else {
+        // Small nudge that wasn't a tap — snap back.
+        dx = 0; dy = 0;
         layout();
       }
     });
 
     card.addEventListener('pointercancel', () => {
       dragging = false;
+      dx = 0; dy = 0;
       card.classList.remove('dragging');
       layout();
     });
 
     card.querySelector('.lock').addEventListener('click', (e) => {
       e.stopPropagation();
+      haptic('medium');
       commitPick(opt.id);
     });
   });
