@@ -16,6 +16,11 @@ const state = {
   board: [],
   myPick: null,
   tab: 'home',
+  // Antechamber (invite-gate) state
+  phase: 'open',      // 'gate' | 'standby' | 'open'
+  ante: null,         // { phase, enabled, threshold, claimed, remaining, referralBase }
+  oathbound: 0,       // how many souls I've brought in
+  mainBooted: false,  // guard so we only wire the tab app once
 };
 
 // ─── API ────────────────────────────────────────────────────
@@ -66,7 +71,6 @@ function runSplash() {
     splash.classList.add('exit');
     setTimeout(() => {
       splash.classList.add('hidden');
-      document.getElementById('app').classList.remove('hidden');
       boot();
     }, 720);
   }, readMs);
@@ -167,6 +171,26 @@ function renderUser() {
   document.getElementById('user-name').textContent = name;
   document.getElementById('points').textContent = state.user?.points ?? 0;
   document.getElementById('streak').textContent = state.user?.streak ?? 0;
+
+  // Primordial chip beside the name for the founding few.
+  const nameEl = document.getElementById('user-name');
+  const host = nameEl?.parentElement;
+  if (host) {
+    const existing = host.querySelector('.prim-chip');
+    if (state.user?.is_primordial) {
+      const no = state.user.primordial_no ? String(state.user.primordial_no).padStart(3, '0') : '';
+      if (existing) {
+        existing.textContent = `Primordial Nº${no}`;
+      } else {
+        const chip = document.createElement('span');
+        chip.className = 'prim-chip';
+        chip.textContent = `Primordial Nº${no}`;
+        nameEl.insertAdjacentElement('afterend', chip);
+      }
+    } else if (existing) {
+      existing.remove();
+    }
+  }
 }
 
 // ─── Render: challenge ──────────────────────────────────────
@@ -853,7 +877,10 @@ function renderBoard() {
   const top3 = state.board.slice(0, 3);
   const rest = state.board.slice(3);
   const myId = String(state.user?.telegram_id);
-  const nameOf = u => u.first_name || u.username || 'Anon';
+  const nameOf = u => u.handle || u.first_name || u.username || 'Anon';
+  const primMark = u => u.is_primordial
+    ? `<span class="board-prim" title="Primordial Nº${u.primordial_no ? String(u.primordial_no).padStart(3,'0') : ''}">⧉</span>`
+    : '';
   const podiumOrder = [top3[1], top3[0], top3[2]].filter(Boolean);
 
   mount.innerHTML = `
@@ -863,7 +890,7 @@ function renderBoard() {
         return `
           <div class="podium-slot" data-rank="${realRank}">
             <div class="podium-rank">${realRank === 1 ? 'Champion' : realRank === 2 ? 'Runner-up' : 'Third'}</div>
-            <div class="podium-name">${escapeHtml(nameOf(u))}</div>
+            <div class="podium-name">${escapeHtml(nameOf(u))}${primMark(u)}</div>
             <div class="podium-pts">${u.points}</div>
           </div>
         `;
@@ -877,7 +904,7 @@ function renderBoard() {
         return `
           <div class="board-row ${isMe ? 'me' : ''} ${rank <= 10 ? 'top' : ''}" style="--i:${i}">
             <div class="board-rank">${rank}</div>
-            <div class="board-name">${escapeHtml(nameOf(u))}</div>
+            <div class="board-name">${escapeHtml(nameOf(u))}${primMark(u)}</div>
             <div class="board-points">${u.points}</div>
           </div>
         `;
@@ -898,6 +925,255 @@ function escapeHtml(s) {
   return String(s ?? '')
     .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+}
+
+// Copy to clipboard with graceful fallbacks (Telegram WebView + old Androids).
+async function copyText(txt) {
+  try {
+    if (navigator.clipboard?.writeText) {
+      await navigator.clipboard.writeText(txt);
+      return true;
+    }
+  } catch {}
+  try {
+    const ta = document.createElement('textarea');
+    ta.value = txt;
+    ta.style.position = 'fixed';
+    ta.style.opacity = '0';
+    document.body.appendChild(ta);
+    ta.focus(); ta.select();
+    const ok = document.execCommand('copy');
+    document.body.removeChild(ta);
+    return ok;
+  } catch { return false; }
+}
+
+// Build this soul's invite link from the Antechamber referral base + Sigil.
+function referralLink() {
+  const base = state.ante?.referralBase || '';
+  const sigil = state.user?.sigil || '';
+  if (!base || !sigil) return '';
+  const sep = base.includes('?') ? '&' : '?';
+  return `${base}${sep}startapp=${encodeURIComponent(sigil)}`;
+}
+
+// ─── The Antechamber (invite-gate screen) ────────────────────────
+// Full-screen gate shown before the gates open. Two faces:
+//   'gate'    → a newcomer must carve a unique handle to claim a Primordial seat
+//   'standby' → claimed; show the Primordial badge, Sigil, invite link + progress
+function enterAntechamber() {
+  document.getElementById('app').classList.add('hidden');
+  document.getElementById('antechamber').classList.remove('hidden');
+  renderAntechamber();
+}
+
+function renderAntechamber() {
+  const mount = document.getElementById('antechamber-mount');
+  const a = state.ante || {};
+  if (state.phase === 'standby') {
+    mount.innerHTML = standbyHtml(a);
+    wireStandby();
+  } else {
+    mount.innerHTML = gateHtml(a);
+    wireGate();
+  }
+}
+
+function progressHtml(a) {
+  const claimed = a.claimed ?? 0;
+  const threshold = a.threshold ?? 0;
+  const pct = threshold > 0 ? Math.min(100, Math.round((claimed / threshold) * 100)) : 0;
+  const remaining = a.remaining ?? Math.max(0, threshold - claimed);
+  return `
+    <div class="ante-progress">
+      <div class="ante-progress-head">
+        <span>${claimed} sworn</span>
+        <span>${remaining > 0 ? remaining + ' until the gates open' : 'gates opening…'}</span>
+      </div>
+      <div class="ante-bar"><div class="ante-bar-fill" style="width:${pct}%"></div></div>
+    </div>`;
+}
+
+function gateHtml(a) {
+  const seat = (a.claimed ?? 0) + 1;
+  return `
+    <div class="ante-eyebrow">The Antechamber</div>
+    <h1 class="ante-title">You stand before<br/>the sealed gates</h1>
+    <p class="ante-sub">Only the first few are admitted. Carve your handle into the stone and claim your seat among the Primordials.</p>
+    <div class="ante-seat">Next seat · <strong>Primordial Nº${String(seat).padStart(3, '0')}</strong></div>
+    <div class="ante-field">
+      <input id="ante-handle" class="ante-input" type="text" inputmode="text"
+             autocomplete="off" autocapitalize="off" spellcheck="false"
+             maxlength="20" placeholder="your unique handle" />
+      <div id="ante-hint" class="ante-hint">3–20 chars · letters, numbers, _ · must be unique</div>
+    </div>
+    <button id="ante-claim" class="ante-pill" type="button">
+      <span class="ante-pill-txt">Carve your Sigil</span>
+      <span class="ante-pill-arrow">⟡</span>
+    </button>
+    ${progressHtml(a)}`;
+}
+
+function standbyHtml(a) {
+  const u = state.user || {};
+  const no = u.primordial_no ? String(u.primordial_no).padStart(3, '0') : '???';
+  const link = referralLink();
+  return `
+    <div class="ante-eyebrow">Welcome, Primordial</div>
+    <div class="prim-badge">
+      <div class="prim-badge-ring"></div>
+      <div class="prim-badge-label">Primordial</div>
+      <div class="prim-badge-no">Nº${no}</div>
+      <div class="prim-badge-handle">@${escapeHtml(u.handle || u.username || 'nameless')}</div>
+    </div>
+    <p class="ante-sub">Your seat is secured. The gates stay sealed until enough souls are sworn in — bring them, and open the world sooner.</p>
+    ${progressHtml(a)}
+    <div class="ante-oath">
+      <div class="ante-oath-num">${state.oathbound}</div>
+      <div class="ante-oath-label">Oathbound by your Sigil</div>
+    </div>
+    <div class="copy-pills">
+      <button id="copy-sigil" class="copy-pill" type="button">
+        <span class="copy-pill-k">Sigil</span>
+        <span class="copy-pill-v">${escapeHtml(u.sigil || '—')}</span>
+        <span class="copy-pill-ico">⧉</span>
+      </button>
+      <button id="copy-link" class="copy-pill wide" type="button" ${link ? '' : 'disabled'}>
+        <span class="copy-pill-k">Invite link</span>
+        <span class="copy-pill-v mono">${escapeHtml(link || 'unavailable')}</span>
+        <span class="copy-pill-ico">⧉</span>
+      </button>
+    </div>`;
+}
+
+function validHandle(h) {
+  return /^[A-Za-z0-9_]{3,20}$/.test(h);
+}
+
+function wireGate() {
+  const input = document.getElementById('ante-handle');
+  const btn = document.getElementById('ante-claim');
+  const hint = document.getElementById('ante-hint');
+  if (!input || !btn) return;
+
+  const refresh = () => {
+    const ok = validHandle(input.value.trim());
+    btn.classList.toggle('ready', ok);
+  };
+  input.addEventListener('input', refresh);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Enter') btn.click(); });
+  setTimeout(() => input.focus(), 300);
+
+  btn.addEventListener('click', async () => {
+    const handle = input.value.trim();
+    if (!validHandle(handle)) {
+      hint.textContent = 'Pick 3–20 chars: letters, numbers or _';
+      hint.classList.add('err');
+      shakeEl(input);
+      haptic('error');
+      return;
+    }
+    btn.classList.add('busy');
+    btn.disabled = true;
+    try {
+      await claimPrimordial(handle);
+    } finally {
+      btn.classList.remove('busy');
+      btn.disabled = false;
+    }
+  });
+}
+
+function wireStandby() {
+  const u = state.user || {};
+  const sigilBtn = document.getElementById('copy-sigil');
+  const linkBtn = document.getElementById('copy-link');
+  sigilBtn?.addEventListener('click', async () => {
+    if (await copyText(u.sigil || '')) { toast('Sigil copied'); haptic('success'); pulseEl(sigilBtn); }
+    else { toast('Copy failed'); haptic('error'); }
+  });
+  linkBtn?.addEventListener('click', async () => {
+    const link = referralLink();
+    if (link && await copyText(link)) { toast('Invite link copied'); haptic('success'); pulseEl(linkBtn); }
+    else { toast('Copy failed'); haptic('error'); }
+  });
+}
+
+function pulseEl(el) {
+  if (!el) return;
+  el.classList.add('copied');
+  setTimeout(() => el.classList.remove('copied'), 700);
+}
+
+// Carve the handle → claim a Primordial seat. 409 = handle already taken.
+async function claimPrimordial(handle) {
+  const hint = document.getElementById('ante-hint');
+  try {
+    const res = await api('/api/antechamber/claim', {
+      method: 'POST',
+      body: JSON.stringify({ handle }),
+    });
+    state.user = res.user || state.user;
+    state.ante = res.antechamber || state.ante;
+    state.oathbound = res.oathbound ?? state.oathbound;
+    state.phase = state.ante?.phase || 'standby';
+    haptic('success');
+    if (state.phase === 'open') {
+      toast('The gates open — welcome');
+      await enterMainApp();
+    } else {
+      toast('Your seat is sworn');
+      renderAntechamber();
+    }
+  } catch (e) {
+    haptic('error');
+    if (e.error === 'handle_taken' || e.status === 409) {
+      if (hint) { hint.textContent = 'That handle is already carved — choose another'; hint.classList.add('err'); }
+      const input = document.getElementById('ante-handle');
+      if (input) shakeEl(input);
+    } else {
+      toast(e.error === 'invalid_handle' ? 'That handle is not allowed' : 'Could not claim — try again');
+    }
+  }
+}
+
+// ─── Referral card (shown in the main app home pane) ──────────────────
+function renderReferral() {
+  const mount = document.getElementById('referral-mount');
+  if (!mount) return;
+  const u = state.user || {};
+  const sigil = u.sigil;
+  if (!sigil) { mount.innerHTML = ''; return; }
+  const link = referralLink();
+  mount.innerHTML = `
+    <div class="referral-card">
+      <div class="referral-head">
+        <div class="referral-title">Your Sigil</div>
+        <div class="referral-oath"><strong>${state.oathbound}</strong> Oathbound</div>
+      </div>
+      <div class="copy-pills">
+        <button id="ref-copy-sigil" class="copy-pill" type="button">
+          <span class="copy-pill-k">Code</span>
+          <span class="copy-pill-v">${escapeHtml(sigil)}</span>
+          <span class="copy-pill-ico">⧉</span>
+        </button>
+        <button id="ref-copy-link" class="copy-pill wide" type="button" ${link ? '' : 'disabled'}>
+          <span class="copy-pill-k">Invite link</span>
+          <span class="copy-pill-v mono">${escapeHtml(link || 'unavailable')}</span>
+          <span class="copy-pill-ico">⧉</span>
+        </button>
+      </div>
+    </div>`;
+  const sb = document.getElementById('ref-copy-sigil');
+  const lb = document.getElementById('ref-copy-link');
+  sb?.addEventListener('click', async () => {
+    if (await copyText(sigil)) { toast('Sigil copied'); haptic('success'); pulseEl(sb); }
+    else { toast('Copy failed'); haptic('error'); }
+  });
+  lb?.addEventListener('click', async () => {
+    if (link && await copyText(link)) { toast('Invite link copied'); haptic('success'); pulseEl(lb); }
+    else { toast('Copy failed'); haptic('error'); }
+  });
 }
 
 // ─── Boot ───────────────────────────────────────────────────
@@ -967,18 +1243,47 @@ function initLiveMotion() {
 }
 
 async function boot() {
-  setupTabBar();
   initLiveMotion();
 
+  // The Antechamber gate decides everything: read /api/me FIRST, then route.
+  let meRes;
   try {
-    const [meRes, todayRes, questsRes, boardRes] = await Promise.all([
-      api('/api/me').catch(() => ({ user: null })),
+    meRes = await api('/api/me');
+  } catch (e) {
+    console.error(e);
+    meRes = { user: null, oathbound: 0, antechamber: null };
+  }
+
+  state.user = meRes.user;
+  state.oathbound = meRes.oathbound || 0;
+  state.ante = meRes.antechamber || null;
+  state.phase = state.ante?.phase || 'open';
+
+  if (state.phase === 'open') {
+    await enterMainApp();
+  } else {
+    enterAntechamber();
+  }
+}
+
+// Reveal the real tab app and load its content. Wires the tab bar once.
+async function enterMainApp() {
+  state.phase = 'open';
+  document.getElementById('antechamber').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+
+  if (!state.mainBooted) {
+    state.mainBooted = true;
+    setupTabBar();
+  }
+
+  try {
+    const [todayRes, questsRes, boardRes] = await Promise.all([
       api('/api/today').catch(() => ({ challenge: null })),
       api('/api/quests').catch(() => ({ quests: [] })),
       api('/api/board').catch(() => ({ board: [] })),
     ]);
 
-    state.user = meRes.user;
     state.challenge = todayRes.challenge;
     state.quests = questsRes.quests || [];
     state.board = boardRes.board || [];
@@ -993,6 +1298,7 @@ async function boot() {
     renderUser();
     renderChallenge();
     renderQuests();
+    renderReferral();
     renderBoard();
   } catch (e) {
     console.error(e);

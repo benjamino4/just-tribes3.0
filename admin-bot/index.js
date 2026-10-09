@@ -17,6 +17,7 @@ import {
   testProvider,
 } from '../server/ai.js';
 import { buildPointsMap } from '../server/scoring.js';
+import { getSetting, getSettings, setSetting } from '../server/settings.js';
 
 // ═════════════════════════════════════════
 // HUBRIS — ADMIN BOT  (a SEPARATE bot from the public game bot)
@@ -91,7 +92,7 @@ function homeMenu() {
         [{ text: '＋ New Call', callback_data: 'new' }, { text: '▤ Calls', callback_data: 'calls' }],
         [{ text: '◆ Quests', callback_data: 'quests' }, { text: '● Users', callback_data: 'users' }],
         [{ text: '▧ Broadcast', callback_data: 'bc' }, { text: '⚙ Mini App', callback_data: 'miniapp' }],
-        [{ text: '◇ AI', callback_data: 'ai' }],
+        [{ text: '◇ AI', callback_data: 'ai' }, { text: '⟡ Antechamber', callback_data: 'ante' }],
         [{ text: '⚠ Danger Zone', callback_data: 'danger' }],
       ],
     },
@@ -168,6 +169,15 @@ bot.on('callback_query', async (query) => {
     if (data === 'users') return listUsers(chatId);
     if (data === 'miniapp') return miniAppMenu(chatId);
     if (data === 'danger') return dangerMenu(chatId);
+
+    // antechamber (invite-gate controls)
+    if (data === 'ante') return anteMenu(chatId);
+    if (data === 'ante_toggle') return anteToggle(chatId);
+    if (data === 'ante_open') return anteSetOpen(chatId, true);
+    if (data === 'ante_close') return anteSetOpen(chatId, false);
+    if (data === 'ante_thr') { S.mode = 'ante_threshold'; return send(chatId, 'Send the *minimum headcount* needed before the gates open (a whole number). The app stays locked until that many players have claimed a Primordial handle.'); }
+    if (data === 'ante_link') { S.mode = 'ante_link'; return send(chatId, 'Send the *base Mini App link* used for referral/invite URLs, e.g. `https://t.me/YourBot/app`.\n\nReferral links become `that?startapp=SIGIL`. Send `-` to clear it (falls back to env).'); }
+    if (data === 'ante_reset') return confirm(chatId, 'ante_reset', 'wipe *every* Primordial claim (handles, ordinals, Sigils, referral links) and re-arm the Antechamber from zero');
     if (data === 'bc') { S.mode = 'broadcast'; return send(chatId, '▧ Type the broadcast message. It goes to *every* player as the game bot.\n\n/cancel to stop.', { reply_markup: { inline_keyboard: [backRow] } }); }
 
     // quests
@@ -349,6 +359,23 @@ bot.on('message', async (msg) => {
       case 'resolve_reason': {
         const reason = text.trim();
         return finalizeResolution(chatId, reason, true);
+      }
+      case 'ante_threshold': {
+        const n = parseInt(text.replace(/[^0-9]/g, ''), 10);
+        if (isNaN(n) || n < 0) return send(chatId, 'Send a whole number ≥ 0.');
+        await setSetting('antechamber_threshold', n);
+        // Changing the target re-arms the “gates open” announcement.
+        await setSetting('antechamber_announced', 'false');
+        reset();
+        return anteMenu(chatId, `✓ Threshold set to *${n}*.`);
+      }
+      case 'ante_link': {
+        const v = text.trim();
+        if (v === '-') { await setSetting('referral_link', ''); reset(); return anteMenu(chatId, '✓ Referral base cleared (using env fallback).'); }
+        if (!/^https?:\/\//i.test(v)) return send(chatId, 'Send a full URL starting with http(s)://, or `-` to clear.');
+        await setSetting('referral_link', v);
+        reset();
+        return anteMenu(chatId, '✓ Referral base link saved.');
       }
       case 'quest_build': {
         const [title, reward, description, url] = text.split('|').map(s => (s || '').trim());
@@ -991,6 +1018,104 @@ function miniAppMenu(chatId) {
     ] } });
 }
 
+// ═══ The Antechamber (invite-gate controls) ══════════
+async function anteStats() {
+  const s = await getSettings([
+    'antechamber_enabled', 'antechamber_threshold',
+    'antechamber_forced_open', 'referral_link',
+  ]);
+  let claimed = 0;
+  try {
+    const { rows } = await q(`SELECT COUNT(*)::int n FROM users WHERE is_primordial = TRUE`);
+    claimed = rows[0]?.n || 0;
+  } catch { claimed = 0; }
+  return {
+    enabled: s.antechamber_enabled !== 'false',
+    forcedOpen: s.antechamber_forced_open === 'true',
+    threshold: Math.max(0, parseInt(s.antechamber_threshold, 10) || 0),
+    link: (s.referral_link || '').trim(),
+    claimed,
+  };
+}
+
+async function anteMenu(chatId, note) {
+  const a = await anteStats();
+  const reached = a.claimed >= a.threshold;
+  const stateLine = !a.enabled
+    ? 'OFF — app open to everyone'
+    : a.forcedOpen
+      ? 'FORCED OPEN — gates lifted'
+      : reached
+        ? 'OPEN — threshold reached'
+        : 'LOCKED — gathering Primordials';
+  const bar = a.threshold > 0 ? `${a.claimed} / ${a.threshold}` : `${a.claimed} (no threshold set)`;
+  const body =
+    `⟡ *The Antechamber*\n` +
+    (note ? `\n${note}\n` : '') +
+    `\nStatus: *${stateLine}*\n` +
+    `Primordials: *${bar}*\n` +
+    `Gate: ${a.enabled ? 'enabled' : 'disabled'}\n` +
+    `Referral base: ${a.link ? `\`${esc(a.link)}\`` : '_env fallback_'}`;
+  const kb = [
+    [{ text: a.enabled ? '◉ Gate: ON (tap to disable)' : '○ Gate: OFF (tap to enable)', callback_data: 'ante_toggle' }],
+    [{ text: `▣ Set threshold (now ${a.threshold})`, callback_data: 'ante_thr' }],
+    a.forcedOpen
+      ? [{ text: '▤ Re-lock (undo force-open)', callback_data: 'ante_close' }]
+      : [{ text: '▤ Force gates open now', callback_data: 'ante_open' }],
+    [{ text: '→ Set referral/invite link', callback_data: 'ante_link' }],
+    [{ text: '✖ Reset all Primordials', callback_data: 'ante_reset' }],
+    [{ text: '↻ Refresh', callback_data: 'ante' }],
+    backRow,
+  ];
+  send(chatId, body, { reply_markup: { inline_keyboard: kb } });
+}
+
+async function anteToggle(chatId) {
+  const a = await anteStats();
+  await setSetting('antechamber_enabled', a.enabled ? 'false' : 'true');
+  anteMenu(chatId, a.enabled ? '✓ Gate disabled — everyone sees the app.' : '✓ Gate enabled — new players meet the Antechamber.');
+}
+
+async function anteSetOpen(chatId, open) {
+  await setSetting('antechamber_forced_open', open ? 'true' : 'false');
+  if (open) {
+    const announced = await getSetting('antechamber_announced', 'false');
+    if (announced !== 'true') {
+      await setSetting('antechamber_announced', 'true');
+      try {
+        const { rows } = await q(`SELECT COUNT(*)::int n FROM users WHERE is_primordial = TRUE`);
+        notifyGatesOpen({ total: rows[0]?.n || 0 });
+      } catch {}
+    }
+  }
+  anteMenu(chatId, open ? '✓ Gates FORCED open — the app is live for all.' : '✓ Re-locked — back to gathering Primordials.');
+}
+
+// Called by the web server when a player claims a Primordial handle.
+export async function notifyNewPrimordial({ user, handle, no, total, sigil }) {
+  if (!ADMIN_SET) return;
+  const who = esc(user?.first_name || user?.username || user?.id);
+  const bodyText =
+    `⟡ *New Primordial*\n\n` +
+    `${who} (\`${user?.id}\`) carved in as *@${esc(handle)}*\n` +
+    `Badge: *Primordial Nº${String(no).padStart(3, '0')}*\n` +
+    (sigil ? `Sigil: \`${esc(sigil)}\`\n` : '') +
+    `\nAntechamber headcount: *${total}*`;
+  try {
+    await bot.sendMessage(ADMIN, bodyText, { parse_mode: 'Markdown', disable_web_page_preview: true });
+  } catch (e) { console.error('notifyNewPrimordial failed:', e.message); }
+}
+
+// Called once when the headcount threshold is crossed (gates open).
+export async function notifyGatesOpen({ total }) {
+  if (!ADMIN_SET) return;
+  try {
+    await bot.sendMessage(ADMIN,
+      `◈ *The gates are open.*\n\nThe Antechamber threshold was reached — *${total}* Primordials carved in. Every player can now enter HUBRIS.`,
+      { parse_mode: 'Markdown' });
+  } catch (e) { console.error('notifyGatesOpen failed:', e.message); }
+}
+
 // ═══ Danger zone ════════════════════════
 function dangerMenu(chatId) {
   send(chatId,
@@ -1010,6 +1135,16 @@ async function runDanger(chatId, action) {
   else if (action === 'dz_picks') { await q(`DELETE FROM picks`); msg = 'All picks wiped.'; }
   else if (action === 'dz_calls') { await q(`DELETE FROM picks`); await q(`DELETE FROM challenges`); msg = 'All calls and picks deleted.'; }
   else if (action === 'dz_users') { await q(`DELETE FROM picks`); await q(`DELETE FROM quest_completions`); await q(`DELETE FROM users`); msg = 'All players deleted.'; }
+  else if (action === 'ante_reset') {
+    // Re-arm the Antechamber: strip every Primordial identity + referral graph,
+    // reset the referral link, and re-fire the “gates open” announcement later.
+    await q(`UPDATE users SET handle=NULL, sigil=NULL, referred_by=NULL,
+                 is_primordial=FALSE, primordial_no=NULL, joined_antechamber_at=NULL`);
+    await setSetting('referral_link', '');
+    await setSetting('antechamber_forced_open', 'false');
+    await setSetting('antechamber_announced', 'false');
+    msg = 'The Antechamber was reset — every Primordial claim, Sigil and referral link cleared.';
+  }
   send(chatId, '✓ ' + msg, homeMenu());
 }
 
@@ -1047,6 +1182,15 @@ cron.schedule('* * * * *', async () => {
 (async () => {
   try {
     await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS banned BOOLEAN DEFAULT FALSE`);
+    // Antechamber columns (legacy DBs that predate the invite gate).
+    await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS handle TEXT`);
+    await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS sigil TEXT`);
+    await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by BIGINT`);
+    await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS is_primordial BOOLEAN DEFAULT FALSE`);
+    await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS primordial_no INTEGER`);
+    await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_antechamber_at TIMESTAMPTZ`);
+    await q(`CREATE TABLE IF NOT EXISTS app_settings (
+              key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMPTZ DEFAULT NOW())`);
   } catch (e) { console.error('self-heal skipped:', e.message); }
 })();
 

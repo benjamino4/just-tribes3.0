@@ -117,3 +117,38 @@ CREATE TABLE IF NOT EXISTS ai_providers (
   active      BOOLEAN DEFAULT TRUE,
   created_at  TIMESTAMPTZ DEFAULT NOW()
 );
+
+-- ═══════════════════════════════════════════════════════════════════
+-- THE ANTECHAMBER  (early-access gate)  +  SIGIL referral system
+--   handle         : the unique @name an early player carves for themselves
+--   sigil          : every player's unique referral code (auto-issued)
+--   referred_by     : the sigil of whoever drew this player in
+--   is_primordial  : holds the exclusive early-access Primordial badge
+--   primordial_no  : their ordinal place in line (Nº001, Nº002, …)
+-- ═══════════════════════════════════════════════════════════════════
+ALTER TABLE users ADD COLUMN IF NOT EXISTS handle                TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS sigil                 TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by           TEXT;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS is_primordial         BOOLEAN DEFAULT FALSE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS primordial_no         INTEGER;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_antechamber_at TIMESTAMPTZ;
+
+-- Case-insensitive uniqueness for handles; unique sigils; fast referral counts.
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle ON users (lower(handle)) WHERE handle IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS idx_users_sigil  ON users (sigil)          WHERE sigil  IS NOT NULL;
+CREATE INDEX        IF NOT EXISTS idx_users_refby   ON users (referred_by);
+
+-- Simple key/value store for admin-tunable app settings (Antechamber, etc.).
+CREATE TABLE IF NOT EXISTS app_settings (
+  key        TEXT PRIMARY KEY,
+  value      TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Defaults: gate ON for the early-testing phase; opens once 50 Primordials join.
+INSERT INTO app_settings (key, value) VALUES
+  ('antechamber_enabled',     'true'),
+  ('antechamber_threshold',   '50'),
+  ('antechamber_forced_open', 'false'),
+  ('antechamber_announced',   'false')
+ON CONFLICT (key) DO NOTHING;

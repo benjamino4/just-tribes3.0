@@ -1374,3 +1374,317 @@ html, body {
   transition: opacity 0.3s var(--ease-out), transform 0.3s var(--ease-spring);
 }
 .toast.show { opacity: 1; transform: translate(-50%, 0); }
+
+/* ══════════════════════════════════════════════════════ */
+/* The Antechamber — invite-gate screen                          */
+/* ══════════════════════════════════════════════════════ */
+.antechamber {
+  position: fixed;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: calc(env(safe-area-inset-top) + 32px) 26px calc(env(safe-area-inset-bottom) + 32px);
+  background:
+    radial-gradient(120% 80% at 50% -10%, rgba(255,255,255,0.06), transparent 60%),
+    var(--bg);
+  overflow-y: auto;
+  animation: ante-in 0.7s var(--ease-out) both;
+}
+@keyframes ante-in { from { opacity: 0; } to { opacity: 1; } }
+
+.antechamber-mount { position: relative; z-index: 2; max-width: 460px; margin: 0 auto; width: 100%; }
+
+/* slow concentric rings pulsing behind the content */
+.ante-rings { position: absolute; inset: 0; z-index: 1; pointer-events: none; display: grid; place-items: center; }
+.ante-rings span {
+  position: absolute;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  width: 320px; height: 320px;
+  opacity: 0;
+  animation: ante-ring 6s var(--ease-out) infinite;
+}
+.ante-rings span:nth-child(2) { animation-delay: 2s; }
+.ante-rings span:nth-child(3) { animation-delay: 4s; }
+@keyframes ante-ring {
+  0%   { transform: scale(0.3); opacity: 0; }
+  30%  { opacity: 0.5; }
+  100% { transform: scale(2.4); opacity: 0; }
+}
+
+.ante-eyebrow {
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.28em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  text-align: center;
+  margin-bottom: 18px;
+}
+.ante-title {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 34px;
+  line-height: 1.1;
+  text-align: center;
+  letter-spacing: -0.01em;
+  margin-bottom: 16px;
+}
+.ante-sub {
+  color: var(--ink-soft);
+  font-size: 15px;
+  text-align: center;
+  margin: 0 auto 26px;
+  max-width: 360px;
+}
+.ante-seat {
+  text-align: center;
+  font-family: var(--font-mono);
+  font-size: 13px;
+  color: var(--ink-mute);
+  margin-bottom: 14px;
+}
+.ante-seat strong { color: var(--ink); }
+
+/* handle input field */
+.ante-field { margin-bottom: 16px; }
+.ante-input {
+  width: 100%;
+  background: var(--glass-2);
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  padding: 17px 18px;
+  color: var(--ink);
+  font-family: var(--font-mono);
+  font-size: 17px;
+  letter-spacing: 0.02em;
+  text-align: center;
+  outline: none;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  transition: border-color 0.25s var(--ease-out), box-shadow 0.25s var(--ease-out);
+}
+.ante-input::placeholder { color: var(--ink-faint); letter-spacing: normal; }
+.ante-input:focus { border-color: var(--glass-hi); box-shadow: 0 0 0 3px rgba(255,255,255,0.06); }
+.ante-hint {
+  margin-top: 9px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--ink-mute);
+  transition: color 0.2s;
+}
+.ante-hint.err { color: #ff8d8d; }
+
+/* Carve-your-Sigil pill */
+.ante-pill {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-pill);
+  background: var(--glass);
+  color: var(--ink-soft);
+  padding: 16px 22px;
+  font-family: var(--font-ui);
+  font-size: 16px;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+  cursor: pointer;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  transition: transform 0.3s var(--ease-spring), background 0.3s var(--ease-out), color 0.3s, box-shadow 0.3s;
+}
+.ante-pill .ante-pill-arrow { transition: transform 0.3s var(--ease-spring); opacity: 0.6; }
+.ante-pill.ready {
+  background: var(--ink);
+  color: var(--bg);
+  box-shadow: var(--glow-ring);
+}
+.ante-pill.ready .ante-pill-arrow { opacity: 1; transform: translateX(3px); }
+.ante-pill:active { transform: scale(0.97); }
+.ante-pill.busy { opacity: 0.6; pointer-events: none; }
+.ante-pill.busy .ante-pill-txt::after {
+  content: '…'; animation: ante-dots 1s steps(4) infinite;
+}
+@keyframes ante-dots { to { content: '……'; } }
+
+/* progress bar */
+.ante-progress { margin-top: 26px; }
+.ante-progress-head {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 11px;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--ink-mute);
+  margin-bottom: 8px;
+}
+.ante-bar {
+  height: 7px;
+  border-radius: var(--radius-pill);
+  background: var(--glass-2);
+  border: 1px solid var(--line);
+  overflow: hidden;
+}
+.ante-bar-fill {
+  height: 100%;
+  border-radius: var(--radius-pill);
+  background: linear-gradient(90deg, var(--ink-soft), var(--ink));
+  box-shadow: 0 0 12px rgba(255,255,255,0.4);
+  transition: width 0.9s var(--ease-out);
+}
+
+/* Primordial badge (standby face) */
+.prim-badge {
+  position: relative;
+  margin: 4px auto 22px;
+  width: 190px; height: 190px;
+  display: grid;
+  place-items: center;
+  text-align: center;
+}
+.prim-badge-ring {
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 1px solid var(--glass-border);
+  background:
+    radial-gradient(circle at 50% 30%, rgba(255,255,255,0.1), transparent 60%),
+    var(--glass);
+  box-shadow: var(--glow-ring), 0 0 50px rgba(255,255,255,0.08);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  animation: prim-spin 24s linear infinite;
+}
+.prim-badge-ring::before {
+  content: ''; position: absolute; inset: 10px;
+  border-radius: 50%; border: 1px dashed var(--line);
+}
+@keyframes prim-spin { to { transform: rotate(360deg); } }
+.prim-badge-label {
+  position: relative; z-index: 1;
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.26em; text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.prim-badge-no {
+  position: relative; z-index: 1;
+  font-family: var(--font-display);
+  font-weight: 600; font-size: 46px; line-height: 1;
+  margin: 4px 0;
+}
+.prim-badge-handle {
+  position: relative; z-index: 1;
+  font-family: var(--font-mono); font-size: 13px; color: var(--ink-soft);
+}
+
+/* Oathbound counter block */
+.ante-oath {
+  margin: 22px auto;
+  text-align: center;
+}
+.ante-oath-num {
+  font-family: var(--font-display);
+  font-weight: 600; font-size: 40px; line-height: 1;
+}
+.ante-oath-label {
+  font-family: var(--font-mono);
+  font-size: 11px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-mute); margin-top: 4px;
+}
+
+/* ══════════════════════════════════════════════════════ */
+/* Copy pills (Sigil / invite link) — reused in referral card    */
+/* ══════════════════════════════════════════════════════ */
+.copy-pills { display: flex; flex-direction: column; gap: 10px; }
+.copy-pill {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--glass);
+  padding: 13px 15px;
+  color: var(--ink);
+  cursor: pointer;
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  transition: transform 0.25s var(--ease-spring), background 0.25s, border-color 0.25s;
+}
+.copy-pill:active { transform: scale(0.98); }
+.copy-pill[disabled] { opacity: 0.5; pointer-events: none; }
+.copy-pill.copied { border-color: var(--glass-hi); background: var(--glass-3); }
+.copy-pill-k {
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-mute); flex: 0 0 auto;
+}
+.copy-pill-v {
+  flex: 1 1 auto;
+  font-weight: 600; font-size: 15px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.copy-pill-v.mono { font-family: var(--font-mono); font-weight: 400; font-size: 12.5px; color: var(--ink-soft); }
+.copy-pill-ico { flex: 0 0 auto; color: var(--ink-mute); font-size: 16px; }
+.copy-pill.copied .copy-pill-ico { color: var(--ink); }
+
+/* ══════════════════════════════════════════════════════ */
+/* Referral card (main app home pane)                            */
+/* ══════════════════════════════════════════════════════ */
+.referral-card {
+  border: 1px solid var(--glass-border);
+  border-radius: var(--radius);
+  background:
+    var(--sheen),
+    var(--glass);
+  box-shadow: var(--glow-soft);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  padding: 18px;
+  margin: 16px 0;
+}
+.referral-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  margin-bottom: 14px;
+}
+.referral-title {
+  font-family: var(--font-display);
+  font-weight: 600; font-size: 18px;
+}
+.referral-oath {
+  font-family: var(--font-mono);
+  font-size: 12px; color: var(--ink-mute);
+}
+.referral-oath strong { color: var(--ink); font-size: 14px; }
+
+/* Primordial chip beside the username in the header */
+.prim-chip {
+  display: inline-block;
+  margin-left: 8px;
+  vertical-align: middle;
+  font-family: var(--font-mono);
+  font-size: 10px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--ink);
+  padding: 3px 9px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-2);
+}
+
+/* Primordial mark on the Pantheon leaderboard */
+.board-prim {
+  margin-left: 6px;
+  color: var(--ink-soft);
+  font-size: 0.85em;
+  opacity: 0.9;
+}

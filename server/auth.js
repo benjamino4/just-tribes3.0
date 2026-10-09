@@ -35,6 +35,12 @@ export async function requireUser(req, res, next) {
   const initData = req.headers['x-init-data'] || req.body?.initData;
   const user = verifyInitData(initData, process.env.BOT_TOKEN);
   if (!user?.id) return res.status(401).json({ error: 'unauthorized' });
+  // Pull the (signed) deep-link payload so referral attribution can't be spoofed:
+  // `startapp=<sigil>` arrives here as start_param inside the verified initData.
+  try {
+    const params = new URLSearchParams(initData);
+    req.startParam = (params.get('start_param') || '').trim();
+  } catch { req.startParam = ''; }
   // The admin can ban a user from the admin bot — blocked here app-wide.
   try {
     const { rows } = await q(`SELECT banned FROM users WHERE telegram_id=$1`, [user.id]);

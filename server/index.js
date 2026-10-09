@@ -1,11 +1,13 @@
 import express from 'express';
 import cors from 'cors';
+import crypto from 'crypto';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import { q } from './db.js';
 import { requireUser } from './auth.js';
-import { adminWebhookPath, handleAdminUpdate, registerAdminWebhook, notifyPendingProof } from '../admin-bot/index.js';
+import { getSetting, getSettings, setSetting } from './settings.js';
+import { adminWebhookPath, handleAdminUpdate, registerAdminWebhook, notifyPendingProof, notifyNewPrimordial, notifyGatesOpen } from '../admin-bot/index.js';
 import { publicWebhookPath, handlePublicUpdate, registerPublicWebhook } from '../bot/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -19,6 +21,72 @@ app.use(express.json({ limit: '2mb' }));
 // All creation / resolving / stats live in the ADMIN BOT, not here.
 // ═════════════════════════════════════════════════════
 app.get('/api/health', (_, res) => res.json({ ok: true }));
+
+// ═════════════════════════════════════════════════════
+// THE ANTECHAMBER  —  invite-gate + referral primitives
+// A "Sigil" is each player's unique referral code; "Oathbound" = people they
+// brought; a "Primordial Nº" is the ordinal badge granted to the founding
+// cohort who claim a handle before the gates open.
+// ═════════════════════════════════════════════════════
+const SIGIL_ALPHABET = 'ACDEFGHJKLMNPQRTUVWXY349';
+function randomSigil(len = 6) {
+  const b = crypto.randomBytes(len);
+  let s = '';
+  for (let i = 0; i < len; i++) s += SIGIL_ALPHABET[b[i] % SIGIL_ALPHABET.length];
+  return s;
+}
+
+// Assign a stable, unique Sigil to a user the first time they appear.
+// Retries on the (extremely rare) unique-index collision.
+async function ensureSigil(id) {
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { rows } = await q(`SELECT sigil FROM users WHERE telegram_id=$1`, [id]);
+    if (rows.length && rows[0].sigil) return rows[0].sigil;
+    const candidate = randomSigil();
+    try {
+      await q(`UPDATE users SET sigil=$1 WHERE telegram_id=$2 AND sigil IS NULL`, [candidate, id]);
+      const { rows: check } = await q(`SELECT sigil FROM users WHERE telegram_id=$1`, [id]);
+      if (check.length && check[0].sigil) return check[0].sigil;
+    } catch { /* collision — loop and try a fresh code */ }
+  }
+  return null;
+}
+
+// Resolve the live gate state the Mini App should render.
+async function antechamberState(me) {
+  const s = await getSettings([
+    'antechamber_enabled', 'antechamber_threshold',
+    'antechamber_forced_open', 'referral_link',
+  ]);
+  const enabled = s.antechamber_enabled !== 'false';
+  const forcedOpen = s.antechamber_forced_open === 'true';
+  const threshold = Math.max(0, parseInt(s.antechamber_threshold, 10) || 0);
+
+  // Headcount = everyone who has claimed a Primordial handle so far.
+  let claimed = 0;
+  try {
+    const { rows } = await q(`SELECT COUNT(*)::int AS n FROM users WHERE is_primordial = TRUE`);
+    claimed = rows[0]?.n || 0;
+  } catch { claimed = 0; }
+
+  const reached = claimed >= threshold;
+  // "gate" = app locked and this user hasn't claimed; "standby" = claimed but
+  // still waiting for the crowd; "open" = everyone's in.
+  const open = !enabled || forcedOpen || reached;
+  let phase;
+  if (open) phase = 'open';
+  else if (me?.is_primordial) phase = 'standby';
+  else phase = 'gate';
+
+  const base = (s.referral_link || process.env.MINI_APP_LINK || process.env.MINI_APP_URL || '').trim();
+
+  return {
+    phase, enabled, threshold,
+    claimed,
+    remaining: Math.max(0, threshold - claimed),
+    referralBase: base,
+  };
+}
 
 app.get('/api/today', async (req, res) => {
   const today = new Date().toISOString().split('T')[0];
@@ -34,25 +102,145 @@ app.get('/api/today', async (req, res) => {
 
 app.get('/api/me', requireUser, async (req, res) => {
   const id = req.tgUser.id;
-  const { rows } = await q(
-    `SELECT telegram_id, username, first_name, points, streak, best_streak
+
+  // Ensure the row exists.
+  let { rows } = await q(
+    `SELECT telegram_id, username, first_name, points, streak, best_streak,
+            handle, sigil, referred_by, is_primordial, primordial_no
      FROM users WHERE telegram_id = $1`,
     [id]
   );
-
-  let user;
   if (!rows.length) {
     await q(
       `INSERT INTO users (telegram_id, username, first_name)
        VALUES ($1, $2, $3) ON CONFLICT DO NOTHING`,
       [id, req.tgUser.username, req.tgUser.first_name]
     );
-    user = { telegram_id: id, points: 0, streak: 0, best_streak: 0 };
-  } else {
-    user = rows[0];
+    ({ rows } = await q(
+      `SELECT telegram_id, username, first_name, points, streak, best_streak,
+              handle, sigil, referred_by, is_primordial, primordial_no
+       FROM users WHERE telegram_id = $1`,
+      [id]
+    ));
+  }
+  let user = rows[0] || { telegram_id: id, points: 0, streak: 0, best_streak: 0 };
+
+  // Universal referral: everyone carries a Sigil, whether gated or not.
+  if (!user.sigil) {
+    const sigil = await ensureSigil(id);
+    if (sigil) user.sigil = sigil;
   }
 
-  res.json({ user });
+  // Referral attribution — only from the signed start_param, only once, never self.
+  if (!user.referred_by && req.startParam) {
+    const code = req.startParam.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
+    if (code) {
+      try {
+        const { rows: ref } = await q(
+          `SELECT telegram_id FROM users WHERE sigil = $1`, [code]
+        );
+        if (ref.length && ref[0].telegram_id !== id) {
+          await q(
+            `UPDATE users SET referred_by = $1 WHERE telegram_id = $2 AND referred_by IS NULL`,
+            [ref[0].telegram_id, id]
+          );
+          user.referred_by = ref[0].telegram_id;
+        }
+      } catch { /* ignore attribution races */ }
+    }
+  }
+
+  // How many souls this player has brought (their Oathbound count).
+  let oathbound = 0;
+  try {
+    const { rows: c } = await q(
+      `SELECT COUNT(*)::int AS n FROM users WHERE referred_by = $1`, [id]
+    );
+    oathbound = c[0]?.n || 0;
+  } catch { oathbound = 0; }
+
+  const ante = await antechamberState(user);
+
+  res.json({ user, oathbound, antechamber: ante });
+});
+
+// Claim a Primordial handle during the gated phase (or anytime, universally).
+app.post('/api/antechamber/claim', requireUser, async (req, res) => {
+  const id = req.tgUser.id;
+  const raw = (req.body?.handle || '').toString().trim().toLowerCase();
+
+  // Handles are lowercase, 3–16 chars, letters/digits/underscore.
+  if (!/^[a-z0-9_]{3,16}$/.test(raw)) {
+    return res.status(400).json({ error: 'invalid_handle' });
+  }
+
+  // Already a Primordial? Return the existing identity (idempotent).
+  const { rows: existing } = await q(
+    `SELECT handle, primordial_no FROM users WHERE telegram_id = $1 AND is_primordial = TRUE`,
+    [id]
+  );
+  if (existing.length) {
+    return res.json({ ok: true, handle: existing[0].handle, primordial_no: existing[0].primordial_no });
+  }
+
+  // Make sure the player exists + carries a Sigil.
+  await q(
+    `INSERT INTO users (telegram_id, username, first_name)
+     VALUES ($1,$2,$3) ON CONFLICT DO NOTHING`,
+    [id, req.tgUser.username, req.tgUser.first_name]
+  );
+  const sigil = await ensureSigil(id);
+
+  // Uniqueness check on the handle (case-insensitive).
+  try {
+    const { rows: taken } = await q(
+      `SELECT 1 FROM users WHERE lower(handle) = $1 AND telegram_id <> $2`, [raw, id]
+    );
+    if (taken.length) return res.status(409).json({ error: 'handle_taken' });
+  } catch { /* unique index will still protect us below */ }
+
+  // Assign the next ordinal. Serialized enough for free-tier volume; the
+  // unique index on primordial_no is the real guard against double-claims.
+  for (let attempt = 0; attempt < 6; attempt++) {
+    const { rows: mx } = await q(
+      `SELECT COALESCE(MAX(primordial_no), 0) AS mx FROM users WHERE is_primordial = TRUE`
+    );
+    const next = (mx[0]?.mx || 0) + 1;
+    try {
+      const upd = await q(
+        `UPDATE users
+         SET handle = $1, is_primordial = TRUE, primordial_no = $2,
+             joined_antechamber_at = NOW()
+         WHERE telegram_id = $3 AND is_primordial = FALSE
+         RETURNING handle, primordial_no`,
+        [raw, next, id]
+      );
+      if (upd.rows.length) {
+        const { handle, primordial_no } = upd.rows[0];
+        // Alert the admin of the new initiate + the running total.
+        try {
+          const { rows: t } = await q(`SELECT COUNT(*)::int AS n FROM users WHERE is_primordial = TRUE`);
+          const total = t[0]?.n || primordial_no;
+          notifyNewPrimordial({ user: req.tgUser, handle, no: primordial_no, total, sigil });
+          // If this claim crossed the threshold, announce the gates once.
+          const ante = await antechamberState({ is_primordial: true });
+          if (ante.phase === 'open') {
+            const announced = await getSetting('antechamber_announced', 'false');
+            if (announced !== 'true' && ante.enabled) {
+              await setSetting('antechamber_announced', 'true');
+              notifyGatesOpen({ total });
+            }
+          }
+        } catch (e) { console.error('primordial notify failed:', e.message); }
+        return res.json({ ok: true, handle, primordial_no });
+      }
+    } catch (e) {
+      // Unique collision on handle or primordial_no — retry / report.
+      if (/handle/i.test(e.message)) return res.status(409).json({ error: 'handle_taken' });
+      // else loop to grab a fresh ordinal
+    }
+  }
+  return res.status(500).json({ error: 'claim_failed' });
 });
 
 app.get('/api/me/pick', requireUser, async (req, res) => {
@@ -93,7 +281,8 @@ app.post('/api/pick', requireUser, async (req, res) => {
 
 app.get('/api/board', async (req, res) => {
   const { rows } = await q(
-    `SELECT telegram_id, username, first_name, points, streak
+    `SELECT telegram_id, username, first_name, points, streak,
+            handle, is_primordial, primordial_no
      FROM users ORDER BY points DESC, streak DESC LIMIT 100`
   );
   res.json({ board: rows });
