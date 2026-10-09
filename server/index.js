@@ -52,6 +52,28 @@ async function ensureSigil(id) {
   return null;
 }
 
+// Resolve the base link players actually OPEN. This must be the Telegram bot
+// deep-link (https://t.me/<bot>) — NOT the Render web URL, which would open a
+// bare browser tab. Order: explicit admin setting → env t.me link → derived from
+// the public bot's username (getMe, cached) → web URL only as a last resort.
+let _botLinkCache = null;
+async function resolveReferralBase() {
+  const s = await getSettings(['referral_link']);
+  const manual = (s.referral_link || process.env.MINI_APP_LINK || '').trim();
+  if (manual) return manual;
+  if (_botLinkCache) return _botLinkCache;
+  const token = process.env.BOT_TOKEN;
+  if (token && typeof fetch === 'function') {
+    try {
+      const r = await fetch(`https://api.telegram.org/bot${token}/getMe`);
+      const j = await r.json();
+      const uname = j?.result?.username;
+      if (uname) { _botLinkCache = `https://t.me/${uname}`; return _botLinkCache; }
+    } catch { /* fall through */ }
+  }
+  return (process.env.MINI_APP_URL || '').trim();
+}
+
 // Resolve the live gate state the Mini App should render.
 async function antechamberState(me) {
   const s = await getSettings([
@@ -78,7 +100,7 @@ async function antechamberState(me) {
   else if (me?.is_primordial) phase = 'standby';
   else phase = 'gate';
 
-  const base = (s.referral_link || process.env.MINI_APP_LINK || process.env.MINI_APP_URL || '').trim();
+  const base = await resolveReferralBase();
 
   return {
     phase, enabled, threshold,
@@ -134,12 +156,13 @@ app.get('/api/me', requireUser, async (req, res) => {
   // Referral attribution — only from the signed start_param, only once, never self.
   if (!user.referred_by && req.startParam) {
     const code = req.startParam.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 12);
-    if (code) {
+    // Guard against self-referral: ignore a player's own Sigil outright.
+    if (code && code !== (user.sigil || '').toUpperCase()) {
       try {
         const { rows: ref } = await q(
           `SELECT telegram_id FROM users WHERE sigil = $1`, [code]
         );
-        if (ref.length && ref[0].telegram_id !== id) {
+        if (ref.length && String(ref[0].telegram_id) !== String(id)) {
           await q(
             `UPDATE users SET referred_by = $1 WHERE telegram_id = $2 AND referred_by IS NULL`,
             [ref[0].telegram_id, id]
@@ -161,7 +184,22 @@ app.get('/api/me', requireUser, async (req, res) => {
 
   const ante = await antechamberState(user);
 
-  res.json({ user, oathbound, antechamber: ante });
+  // Season config: Day numbering is counted from an admin-set "Day 1" date.
+  // If the admin hasn't set one, default to the date of the very first call,
+  // so "Day 1" lands on launch day without any configuration.
+  let dayZero = null;
+  try {
+    const cfg = await getSettings(['day_zero']);
+    dayZero = (cfg.day_zero || '').trim() || null;
+  } catch { dayZero = null; }
+  if (!dayZero) {
+    try {
+      const { rows } = await q(`SELECT MIN(challenge_date)::text d FROM challenges`);
+      if (rows[0]?.d) dayZero = String(rows[0].d).slice(0, 10);
+    } catch { /* leave null; client falls back */ }
+  }
+
+  res.json({ user, oathbound, antechamber: ante, config: { dayZero } });
 });
 
 // Claim a Primordial handle during the gated phase (or anytime, universally).

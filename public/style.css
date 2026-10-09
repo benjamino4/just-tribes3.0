@@ -1688,3 +1688,72 @@ html, body {
   font-size: 0.85em;
   opacity: 0.9;
 }
+
+/* ══════════════════════════════════════════════════════ */
+/* Icon sizing + new icon placements                             */
+/* ══════════════════════════════════════════════════════ */
+.coin svg { width: 15px; height: 15px; display: block; }
+
+/* Lock-in countdown clock (after you commit a pick) */
+.sealed-icon.clock { font-size: 30px; line-height: 0; color: var(--ink); }
+.sealed-icon.clock svg { width: 1em; height: 1em; display: block; }
+.lockin-timer {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 8px;
+  margin: 12px auto 2px;
+  padding: 7px 15px;
+  border-radius: var(--radius-pill);
+  border: 1px solid var(--glass-border);
+  background: var(--glass-2);
+}
+.lockin-timer .lk-label {
+  font-family: var(--font-mono);
+  font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase;
+  color: var(--ink-mute);
+}
+.lockin-timer .lk-count {
+  font-family: var(--font-mono);
+  font-size: 17px; font-weight: 700; color: var(--ink);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Ghost on empty states */
+.empty-ghost {
+  display: block;
+  font-size: 34px; line-height: 0;
+  color: var(--ink-faint);
+  margin: 0 auto 14px;
+}
+.empty-ghost svg { width: 1em; height: 1em; }
+
+/* Antechamber waiting clock + seat diamond */
+.ante-wait { display: inline-flex; align-items: center; gap: 5px; }
+.ante-wait-ic { font-size: 13px; line-height: 0; color: var(--ink-soft); }
+.ante-wait-ic svg { width: 1em; height: 1em; }
+.ante-seat-ic { font-size: 13px; line-height: 0; vertical-align: -2px; color: var(--ink); }
+.ante-seat-ic svg { width: 1em; height: 1em; }
+
+/* Primordial badge gem (replaces the old Nº number) */
+.prim-badge-gem {
+  position: relative; z-index: 1;
+  font-size: 54px; line-height: 0; color: var(--ink);
+  margin: 2px 0 6px;
+  filter: drop-shadow(0 2px 10px rgba(255,255,255,0.25));
+}
+.prim-badge-gem svg { width: 1em; height: 1em; }
+
+/* diamond gem inside the header chip + leaderboard mark */
+.prim-chip { display: inline-flex; align-items: center; gap: 5px; }
+.prim-chip-gem { font-size: 11px; line-height: 0; }
+.prim-chip-gem svg { width: 1em; height: 1em; }
+.board-prim svg { width: 0.85em; height: 0.85em; vertical-align: -1px; }
+
+/* quest tag camera + proof drop camera */
+.tag-ic { display: inline-flex; vertical-align: -2px; margin-right: 3px; }
+.tag-ic svg { width: 12px; height: 12px; }
+.proof-drop-ic svg { width: 22px; height: 22px; display: block; }
+
+/* Carve-your-Sigil arrow icon */
+.ante-pill-arrow { display: inline-flex; align-items: center; font-size: 20px; line-height: 0; }
+.ante-pill-arrow svg { width: 1em; height: 1em; }

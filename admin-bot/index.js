@@ -46,6 +46,25 @@ const publicBot = process.env.BOT_TOKEN
   : null;
 const MINI_APP_URL = process.env.MINI_APP_URL || '';
 
+// The link players should OPEN is the Telegram bot deep-link, not the Render
+// web URL. Order: admin setting → env t.me link → getMe username (cached) →
+// web URL as last resort.
+let _appLinkCache = null;
+async function openAppLink() {
+  try {
+    const manual = ((await getSetting('referral_link')) || process.env.MINI_APP_LINK || '').trim();
+    if (manual) return manual;
+  } catch { /* ignore */ }
+  if (_appLinkCache) return _appLinkCache;
+  if (publicBot) {
+    try {
+      const info = await publicBot.getMe();
+      if (info?.username) { _appLinkCache = `https://t.me/${info.username}`; return _appLinkCache; }
+    } catch { /* fall through */ }
+  }
+  return MINI_APP_URL;
+}
+
 const isAdmin = (msg) => ADMIN_SET && msg?.from?.id === ADMIN;
 const UNIT = 'Ichor';
 
@@ -177,6 +196,7 @@ bot.on('callback_query', async (query) => {
     if (data === 'ante_close') return anteSetOpen(chatId, false);
     if (data === 'ante_thr') { S.mode = 'ante_threshold'; return send(chatId, 'Send the *minimum headcount* needed before the gates open (a whole number). The app stays locked until that many players have claimed a Primordial handle.'); }
     if (data === 'ante_link') { S.mode = 'ante_link'; return send(chatId, 'Send the *base Mini App link* used for referral/invite URLs, e.g. `https://t.me/YourBot/app`.\n\nReferral links become `that?startapp=SIGIL`. Send `-` to clear it (falls back to env).'); }
+    if (data === 'ante_dayzero') { S.mode = 'ante_dayzero'; return send(chatId, 'Send the *"Day 1" date* in `YYYY-MM-DD` format (e.g. `2026-10-01`). This is counted as Day 1 — every call\'s "Day N" is measured from it.\n\nSend `-` to clear it (defaults to the first call\'s date).'); }
     if (data === 'ante_reset') return confirm(chatId, 'ante_reset', 'wipe *every* Primordial claim (handles, ordinals, Sigils, referral links) and re-arm the Antechamber from zero');
     if (data === 'bc') { S.mode = 'broadcast'; return send(chatId, '▧ Type the broadcast message. It goes to *every* player as the game bot.\n\n/cancel to stop.', { reply_markup: { inline_keyboard: [backRow] } }); }
 
@@ -376,6 +396,16 @@ bot.on('message', async (msg) => {
         await setSetting('referral_link', v);
         reset();
         return anteMenu(chatId, '✓ Referral base link saved.');
+      }
+      case 'ante_dayzero': {
+        const v = text.trim();
+        if (v === '-') { await setSetting('day_zero', ''); reset(); return anteMenu(chatId, '✓ "Day 1" date cleared (defaults to the first call).'); }
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(v)) return send(chatId, 'Send the date as `YYYY-MM-DD` (e.g. `2026-10-01`), or `-` to clear.');
+        const d = new Date(v + 'T00:00:00Z');
+        if (isNaN(d.getTime())) return send(chatId, 'That isn\'t a valid date. Use `YYYY-MM-DD`.');
+        await setSetting('day_zero', v);
+        reset();
+        return anteMenu(chatId, `✓ "Day 1" date set to *${v}*. Calls now count their Day N from this date.`);
       }
       case 'quest_build': {
         const [title, reward, description, url] = text.split('|').map(s => (s || '').trim());
@@ -669,7 +699,8 @@ async function announceCall(chatId, id) {
   } else {
     text = `◈ HUBRIS — today's call is live.\n\n${c.question}\n\nLock in your pick before ${fmt(c.reveal_at)}. The sharpest call pays the most ${UNIT}.`;
   }
-  const extra = MINI_APP_URL ? { reply_markup: { inline_keyboard: [[{ text: '◈ Open HUBRIS', url: MINI_APP_URL }]] } } : {};
+  const link = await openAppLink();
+  const extra = link ? { reply_markup: { inline_keyboard: [[{ text: '◈ Open HUBRIS', url: link }]] } } : {};
   return doBroadcast(chatId, text, extra);
 }
 
@@ -1022,7 +1053,7 @@ function miniAppMenu(chatId) {
 async function anteStats() {
   const s = await getSettings([
     'antechamber_enabled', 'antechamber_threshold',
-    'antechamber_forced_open', 'referral_link',
+    'antechamber_forced_open', 'referral_link', 'day_zero',
   ]);
   let claimed = 0;
   try {
@@ -1034,6 +1065,7 @@ async function anteStats() {
     forcedOpen: s.antechamber_forced_open === 'true',
     threshold: Math.max(0, parseInt(s.antechamber_threshold, 10) || 0),
     link: (s.referral_link || '').trim(),
+    dayZero: (s.day_zero || '').trim(),
     claimed,
   };
 }
@@ -1055,7 +1087,8 @@ async function anteMenu(chatId, note) {
     `\nStatus: *${stateLine}*\n` +
     `Primordials: *${bar}*\n` +
     `Gate: ${a.enabled ? 'enabled' : 'disabled'}\n` +
-    `Referral base: ${a.link ? `\`${esc(a.link)}\`` : '_env fallback_'}`;
+    `Referral base: ${a.link ? `\`${esc(a.link)}\`` : '_env fallback_'}\n` +
+    `Day 1 date: ${a.dayZero ? `\`${esc(a.dayZero)}\`` : '_not set (defaults to first call)_'}`;
   const kb = [
     [{ text: a.enabled ? '◉ Gate: ON (tap to disable)' : '○ Gate: OFF (tap to enable)', callback_data: 'ante_toggle' }],
     [{ text: `▣ Set threshold (now ${a.threshold})`, callback_data: 'ante_thr' }],
@@ -1063,6 +1096,7 @@ async function anteMenu(chatId, note) {
       ? [{ text: '▤ Re-lock (undo force-open)', callback_data: 'ante_close' }]
       : [{ text: '▤ Force gates open now', callback_data: 'ante_open' }],
     [{ text: '→ Set referral/invite link', callback_data: 'ante_link' }],
+    [{ text: `◷ Set "Day 1" date${a.dayZero ? ` (now ${a.dayZero})` : ''}`, callback_data: 'ante_dayzero' }],
     [{ text: '✖ Reset all Primordials', callback_data: 'ante_reset' }],
     [{ text: '↻ Refresh', callback_data: 'ante' }],
     backRow,

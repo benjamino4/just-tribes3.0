@@ -20,6 +20,7 @@ const state = {
   phase: 'open',      // 'gate' | 'standby' | 'open'
   ante: null,         // { phase, enabled, threshold, claimed, remaining, referralBase }
   oathbound: 0,       // how many souls I've brought in
+  config: null,       // { dayZero } server-driven app config
   mainBooted: false,  // guard so we only wire the tab app once
 };
 
@@ -47,6 +48,44 @@ function haptic(type = 'light') {
     else if (type === 'error') tg?.HapticFeedback.notificationOccurred('error');
     else tg?.HapticFeedback.impactOccurred(type);
   } catch {}
+}
+
+// ─── Inline SVG icon set (uploaded + hand-built, all monochrome) ────────
+const ICONS = {
+  // uploaded assets
+  clock:  '<svg viewBox="0 0 24 24" width="1em" height="1em"><path fill="currentColor" d="M12,1A11,11,0,1,0,23,12,11,11,0,0,0,12,1Zm0,20a9,9,0,1,1,9-9A9,9,0,0,1,12,21Z"/><rect width="2" height="7" x="11" y="6" fill="currentColor" rx="1"><animateTransform attributeName="transform" dur="9s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></rect><rect width="2" height="9" x="11" y="11" fill="currentColor" rx="1"><animateTransform attributeName="transform" dur="0.75s" repeatCount="indefinite" type="rotate" values="0 12 12;360 12 12"/></rect></svg>',
+  ghost:  '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="2"><path d="M15 10v1m-7.472 9.472a1.6 1.6 0 0 1 2.277 0l1.057 1.056a1.6 1.6 0 0 0 2.276 0l1.057-1.056a1.6 1.6 0 0 1 2.277 0l1.114 1.114a1.4 1.4 0 0 0 2.414-1V10a8 8 0 0 0-16 0v10.586a1.4 1.4 0 0 0 2.414 1zM9 10v1"/></svg>',
+  arrow:  '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="M8 12h8m0 0l-3.5-3.5M16 12l-3.5 3.5M12 22c5.523 0 10-4.477 10-10S17.523 2 12 2S2 6.477 2 12s4.477 10 10 10"/></svg>',
+  anchor: '<svg viewBox="0 0 16 16" width="1em" height="1em" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5"><path d="m8 5.75v8.25m-4.75-6.25h-1.5c0 4 2.5 6.5 6.25 6.5s6.25-2.5 6.25-6.5h-1.5"/><circle cx="8" cy="3.5" r="1.75"/></svg>',
+  // hand-built to match the uploaded references
+  diamond: '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M6.2 3h11.6a1 1 0 0 1 .82.43l3.1 4.5a1 1 0 0 1-.06 1.22l-8.9 11.4a1 1 0 0 1-1.56 0L2.3 9.15a1 1 0 0 1-.06-1.22l3.1-4.5A1 1 0 0 1 6.2 3Z" fill-opacity="0.9"/><path d="M2.5 8.3h19M8.7 3.2 7 8.3l5 11.6 5-11.6-1.7-5.1" fill="none" stroke="var(--bg)" stroke-width="0.9" stroke-linejoin="round" opacity="0.5"/></svg>',
+  camera:  '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.3l.9-1.6A1.5 1.5 0 0 1 9.9 3.6h4.2a1.5 1.5 0 0 1 1.3.8L16.2 6h1.3A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><circle cx="12" cy="12.4" r="3.1"/></svg>',
+  follow:  '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.6 19a5.4 5.4 0 0 1 10.8 0"/><path d="M18.5 7v6M15.5 10h6"/></svg>',
+};
+function icon(name) { return ICONS[name] || ''; }
+
+// Shared 1-second countdown. Only one runs at a time; stops when its node
+// leaves the DOM or the target passes (then fires onDone once).
+let _countdownTimer = null;
+function startCountdown(target, el, onDone) {
+  if (_countdownTimer) { clearInterval(_countdownTimer); _countdownTimer = null; }
+  const t = new Date(target).getTime();
+  const paint = () => {
+    if (!el || !el.isConnected) { clearInterval(_countdownTimer); _countdownTimer = null; return; }
+    const ms = t - Date.now();
+    if (ms <= 0) {
+      el.textContent = '00:00';
+      clearInterval(_countdownTimer); _countdownTimer = null;
+      if (onDone) onDone();
+      return;
+    }
+    const s = Math.floor(ms / 1000);
+    const h = Math.floor(s / 3600), m = Math.floor((s % 3600) / 60), sec = s % 60;
+    el.textContent = (h > 0 ? String(h).padStart(2, '0') + ':' : '') +
+      String(m).padStart(2, '0') + ':' + String(sec).padStart(2, '0');
+  };
+  paint();
+  _countdownTimer = setInterval(paint, 1000);
 }
 
 // ─── Splash ─────────────────────────────────────────────────
@@ -167,24 +206,23 @@ function setupTabBar() {
 
 // ─── Render: user header ────────────────────────────────────
 function renderUser() {
-  const name = state.user?.first_name || state.user?.username || 'Guest';
+  // Once a founder has carved their name, that handle IS their username.
+  const name = state.user?.handle || state.user?.first_name || state.user?.username || 'Guest';
   document.getElementById('user-name').textContent = name;
   document.getElementById('points').textContent = state.user?.points ?? 0;
   document.getElementById('streak').textContent = state.user?.streak ?? 0;
 
-  // Primordial chip beside the name for the founding few.
+  // Diamond founder's badge beside the name — only the Primordials wear it.
   const nameEl = document.getElementById('user-name');
   const host = nameEl?.parentElement;
   if (host) {
     const existing = host.querySelector('.prim-chip');
     if (state.user?.is_primordial) {
-      const no = state.user.primordial_no ? String(state.user.primordial_no).padStart(3, '0') : '';
-      if (existing) {
-        existing.textContent = `Primordial Nº${no}`;
-      } else {
+      if (!existing) {
         const chip = document.createElement('span');
         chip.className = 'prim-chip';
-        chip.textContent = `Primordial Nº${no}`;
+        chip.innerHTML = `<span class="prim-chip-gem">${icon('diamond')}</span>Primordial`;
+        chip.title = 'Primordial · founding member';
         nameEl.insertAdjacentElement('afterend', chip);
       }
     } else if (existing) {
@@ -199,7 +237,7 @@ function renderChallenge() {
   const ch = state.challenge;
 
   if (!ch) {
-    mount.innerHTML = `<div class="empty">No challenge today<br/>come back tomorrow</div>`;
+    mount.innerHTML = `<div class="empty"><span class="empty-ghost">${icon('ghost')}</span>No challenge today<br/>come back tomorrow</div>`;
     return;
   }
 
@@ -230,12 +268,17 @@ function renderChallenge() {
       <h2 class="q">${escapeHtml(ch.question)}</h2>
       <div class="sealed">
         <div class="sealed-ring"></div>
-        <div class="sealed-icon">◈</div>
+        <div class="sealed-icon clock">${icon('clock')}</div>
         <div class="sealed-title">Called it</div>
         <div class="sealed-text">You locked in <strong>${escapeHtml(state.myPick.choice.toUpperCase())}</strong>. The AIs will rank every path at reveal time — the sharpest one pays the most.</div>
+        <div class="lockin-timer">
+          <span class="lk-label">Reveal in</span>
+          <span class="lk-count" id="lockin-count">—</span>
+        </div>
         <div class="sealed-time">Reveal · ${formatTime(revealTime)}</div>
       </div>
     `;
+    startCountdown(revealTime, document.getElementById('lockin-count'), () => renderChallenge());
     return;
   }
 
@@ -585,12 +628,17 @@ function showRewardOverlay(label, points) {
 
 // ─── Quests ─────────────────────────────────────────────────
 const QUEST_ICON = {
-  x_follow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>',
+  x_follow: null,  // resolved from ICONS below
+  follow:   null,
   task: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-12"/></svg>',
   research: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.6-4.6"/></svg>',
   terms: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 13h5M10 17h5"/></svg>',
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5l5-5"/><path d="M10.5 7H8a4 4 0 0 0 0 8h2.5"/><path d="M13.5 17H16a4 4 0 0 0 0-8h-2.5"/></svg>',
 };
+// Follow quests use the uploaded "add user" mark; screenshot proofs use a camera.
+QUEST_ICON.x_follow = icon('follow');
+QUEST_ICON.follow = icon('follow');
+QUEST_ICON.screenshot = icon('camera');
 function questIcon(t) { return QUEST_ICON[t] || QUEST_ICON.link; }
 const PROOF_HINT = { username: 'Submit username', link: 'Submit a link', screenshot: 'Submit a screenshot' };
 
@@ -607,7 +655,12 @@ function renderQuests() {
       const needsProof = q.proof_type && q.proof_type !== 'none';
       const tags = [];
       if (q.requires_terms) tags.push('§ T&amp;C');
-      if (needsProof) tags.push('▣ ' + (PROOF_HINT[q.proof_type] || 'Proof'));
+      if (needsProof) {
+        const pt = q.proof_type;
+        const label = PROOF_HINT[pt] || 'Proof';
+        const mark = pt === 'screenshot' ? `<span class="tag-ic">${icon('camera')}</span>` : '▣ ';
+        tags.push(mark + label);
+      }
       return `
       <article class="quest${pending ? ' is-pending' : ''}${rejected ? ' is-rejected' : ''}" data-id="${q.id}">
         <span class="quest-liquid" aria-hidden="true"></span>
@@ -748,7 +801,7 @@ function showProofSheet(quest) {
     if (type === 'screenshot') {
       const drop = document.createElement('label');
       drop.className = 'proof-drop';
-      drop.innerHTML = '<span class="proof-drop-ic">▣</span><span class="proof-drop-tx">Tap to choose a screenshot</span>';
+      drop.innerHTML = `<span class="proof-drop-ic">${icon('camera')}</span><span class="proof-drop-tx">Tap to choose a screenshot</span>`;
       const input = document.createElement('input');
       input.type = 'file'; input.accept = 'image/*'; input.hidden = true;
       const preview = document.createElement('img');
@@ -870,7 +923,7 @@ async function onQuestClick(questId) {
 function renderBoard() {
   const mount = document.getElementById('board-mount');
   if (!state.board.length) {
-    mount.innerHTML = `<div class="empty">Be the first to call it</div>`;
+    mount.innerHTML = `<div class="empty"><span class="empty-ghost">${icon('ghost')}</span>Be the first to call it</div>`;
     return;
   }
 
@@ -879,7 +932,7 @@ function renderBoard() {
   const myId = String(state.user?.telegram_id);
   const nameOf = u => u.handle || u.first_name || u.username || 'Anon';
   const primMark = u => u.is_primordial
-    ? `<span class="board-prim" title="Primordial Nº${u.primordial_no ? String(u.primordial_no).padStart(3,'0') : ''}">⧉</span>`
+    ? `<span class="board-prim" title="Primordial · founding member">${icon('diamond')}</span>`
     : '';
   const podiumOrder = [top3[1], top3[0], top3[2]].filter(Boolean);
 
@@ -915,8 +968,18 @@ function renderBoard() {
 
 // ─── Helpers ────────────────────────────────────────────────
 function dayIndex() {
-  const start = new Date('2026-01-01');
-  return Math.floor((Date.now() - start) / 86400000) + 1;
+  // Day number is counted from an admin-set "Day 1" date to the current
+  // challenge's own date, so it stays correct and is fully customizable.
+  const dz = state.config?.dayZero;
+  const chDate = state.challenge?.challenge_date;
+  // Default base: the current call's own date (→ Day 1) when no "Day 1" is set
+  // and the server couldn't supply one.
+  const base = dz
+    ? new Date(dz + 'T00:00:00')
+    : (chDate ? new Date(String(chDate).slice(0, 10) + 'T00:00:00') : new Date());
+  const ref = chDate ? new Date(String(chDate).slice(0, 10) + 'T00:00:00') : new Date();
+  const n = Math.floor((ref - base) / 86400000) + 1;
+  return n > 0 ? n : 1;
 }
 function formatTime(d) {
   return d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
@@ -987,7 +1050,7 @@ function progressHtml(a) {
   return `
     <div class="ante-progress">
       <div class="ante-progress-head">
-        <span>${claimed} sworn</span>
+        <span class="ante-wait"><span class="ante-wait-ic">${icon('clock')}</span>${claimed} sworn</span>
         <span>${remaining > 0 ? remaining + ' until the gates open' : 'gates opening…'}</span>
       </div>
       <div class="ante-bar"><div class="ante-bar-fill" style="width:${pct}%"></div></div>
@@ -995,38 +1058,37 @@ function progressHtml(a) {
 }
 
 function gateHtml(a) {
-  const seat = (a.claimed ?? 0) + 1;
   return `
     <div class="ante-eyebrow">The Antechamber</div>
     <h1 class="ante-title">You stand before<br/>the sealed gates</h1>
-    <p class="ante-sub">Only the first few are admitted. Carve your handle into the stone and claim your seat among the Primordials.</p>
-    <div class="ante-seat">Next seat · <strong>Primordial Nº${String(seat).padStart(3, '0')}</strong></div>
+    <p class="ante-sub">Only the first few are admitted. Carve your name into the stone and claim the founder's mark — a badge the latecomers will never wear.</p>
+    <div class="ante-seat"><span class="ante-seat-ic">${icon('diamond')}</span> ${a.claimed ?? 0} founders already sworn in</div>
     <div class="ante-field">
       <input id="ante-handle" class="ante-input" type="text" inputmode="text"
              autocomplete="off" autocapitalize="off" spellcheck="false"
-             maxlength="20" placeholder="your unique handle" />
-      <div id="ante-hint" class="ante-hint">3–20 chars · letters, numbers, _ · must be unique</div>
+             maxlength="16" placeholder="choose your name" />
+      <div id="ante-hint" class="ante-hint">3–16 chars · letters, numbers, _ · locked in forever once claimed</div>
     </div>
     <button id="ante-claim" class="ante-pill" type="button">
       <span class="ante-pill-txt">Carve your Sigil</span>
-      <span class="ante-pill-arrow">⟡</span>
+      <span class="ante-pill-arrow">${icon('arrow')}</span>
     </button>
     ${progressHtml(a)}`;
 }
 
 function standbyHtml(a) {
   const u = state.user || {};
-  const no = u.primordial_no ? String(u.primordial_no).padStart(3, '0') : '???';
+  const name = u.handle || u.username || 'nameless';
   const link = referralLink();
   return `
-    <div class="ante-eyebrow">Welcome, Primordial</div>
+    <div class="ante-eyebrow">Welcome, Founder</div>
     <div class="prim-badge">
       <div class="prim-badge-ring"></div>
+      <div class="prim-badge-gem">${icon('diamond')}</div>
       <div class="prim-badge-label">Primordial</div>
-      <div class="prim-badge-no">Nº${no}</div>
-      <div class="prim-badge-handle">@${escapeHtml(u.handle || u.username || 'nameless')}</div>
+      <div class="prim-badge-handle">@${escapeHtml(name)}</div>
     </div>
-    <p class="ante-sub">Your seat is secured. The gates stay sealed until enough souls are sworn in — bring them, and open the world sooner.</p>
+    <p class="ante-sub">Your name is carved and your badge is yours alone. The gates stay sealed until enough souls are sworn in — bring them, and open the world sooner.</p>
     ${progressHtml(a)}
     <div class="ante-oath">
       <div class="ante-oath-num">${state.oathbound}</div>
@@ -1047,7 +1109,7 @@ function standbyHtml(a) {
 }
 
 function validHandle(h) {
-  return /^[A-Za-z0-9_]{3,20}$/.test(h);
+  return /^[A-Za-z0-9_]{3,16}$/.test(h);
 }
 
 function wireGate() {
@@ -1067,7 +1129,7 @@ function wireGate() {
   btn.addEventListener('click', async () => {
     const handle = input.value.trim();
     if (!validHandle(handle)) {
-      hint.textContent = 'Pick 3–20 chars: letters, numbers or _';
+      hint.textContent = 'Pick 3–16 chars: letters, numbers or _';
       hint.classList.add('err');
       shakeEl(input);
       haptic('error');
@@ -1251,12 +1313,13 @@ async function boot() {
     meRes = await api('/api/me');
   } catch (e) {
     console.error(e);
-    meRes = { user: null, oathbound: 0, antechamber: null };
+    meRes = { user: null, oathbound: 0, antechamber: null, config: null };
   }
 
   state.user = meRes.user;
   state.oathbound = meRes.oathbound || 0;
   state.ante = meRes.antechamber || null;
+  state.config = meRes.config || null;
   state.phase = state.ante?.phase || 'open';
 
   if (state.phase === 'open') {
