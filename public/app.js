@@ -61,6 +61,7 @@ const ICONS = {
   diamond: '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M6.2 3h11.6a1 1 0 0 1 .82.43l3.1 4.5a1 1 0 0 1-.06 1.22l-8.9 11.4a1 1 0 0 1-1.56 0L2.3 9.15a1 1 0 0 1-.06-1.22l3.1-4.5A1 1 0 0 1 6.2 3Z" fill-opacity="0.9"/><path d="M2.5 8.3h19M8.7 3.2 7 8.3l5 11.6 5-11.6-1.7-5.1" fill="none" stroke="var(--bg)" stroke-width="0.9" stroke-linejoin="round" opacity="0.5"/></svg>',
   camera:  '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.3l.9-1.6A1.5 1.5 0 0 1 9.9 3.6h4.2a1.5 1.5 0 0 1 1.3.8L16.2 6h1.3A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><circle cx="12" cy="12.4" r="3.1"/></svg>',
   follow:  '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.6 19a5.4 5.4 0 0 1 10.8 0"/><path d="M18.5 7v6M15.5 10h6"/></svg>',
+  check:   '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5 9.2 17.5 4 12.3"/></svg>',
 };
 function icon(name) { return ICONS[name] || ''; }
 
@@ -121,8 +122,11 @@ function setupTabBar() {
   const viewport = document.getElementById('tab-viewport');
   const panes = {
     home: viewport.querySelector('[data-pane="home"]'),
+    summon: viewport.querySelector('[data-pane="summon"]'),
     board: viewport.querySelector('[data-pane="board"]'),
   };
+  // Left-to-right order of the tabs, used to pick the slide direction.
+  const ORDER = ['home', 'summon', 'board'];
 
   function setPaneHeight() {
     const active = viewport.querySelector('.tab-pane.active');
@@ -141,7 +145,7 @@ function setupTabBar() {
 
     const from = panes[prev];
     const to = panes[next];
-    const goRight = dir ? dir === 'right' : (next === 'board');
+    const goRight = dir ? dir === 'right' : (ORDER.indexOf(next) > ORDER.indexOf(prev));
 
     to.classList.remove('from-left', 'from-right', 'leaving-left', 'leaving-right');
     to.classList.add(goRight ? 'from-right' : 'from-left');
@@ -180,8 +184,9 @@ function setupTabBar() {
     const dx = e.changedTouches[0].clientX - sx;
     const dy = e.changedTouches[0].clientY - sy;
     if (Math.abs(dx) < 60 || Math.abs(dy) > Math.abs(dx)) return;
-    if (dx < 0 && state.tab === 'home') switchTab('board', 'right');
-    if (dx > 0 && state.tab === 'board') switchTab('home', 'left');
+    const i = ORDER.indexOf(state.tab);
+    if (dx < 0 && i < ORDER.length - 1) switchTab(ORDER[i + 1], 'right');
+    if (dx > 0 && i > 0) switchTab(ORDER[i - 1], 'left');
   }, { passive: true });
 
   // Activate the starting pane. The HTML ships with NO pane marked active,
@@ -195,6 +200,7 @@ function setupTabBar() {
   if ('ResizeObserver' in window) {
     const ro = new ResizeObserver(() => setPaneHeight());
     ro.observe(panes.home);
+    ro.observe(panes.summon);
     ro.observe(panes.board);
   }
 
@@ -545,85 +551,129 @@ async function renderRevealed(mount, ch) {
   }
 }
 
+// Refined "win" moment: a gold Ichor bloom — an expanding shockwave, a slow
+// shower of fine rising embers, and a count-up on the number. Monochrome shell,
+// warm Ichor-gold accent. Everything animates transform/opacity only; particles
+// are pooled and drawn as soft radial sprites (no confetti rectangles).
+let _rewardRaf = 0;
+let _rewardTimer = 0;
 function showRewardOverlay(label, points) {
   const overlay = document.getElementById('reward-overlay');
   const canvas = document.getElementById('reward-canvas');
-  document.getElementById('reward-label').textContent = label;
-  document.getElementById('reward-points').textContent = `+${points}`;
+  const labelEl = document.getElementById('reward-label');
+  const ptsEl = document.getElementById('reward-points');
+  labelEl.textContent = label;
+  ptsEl.textContent = '+0';
   document.getElementById('reward-sub').textContent = 'Ichor added to your vault';
 
+  cancelAnimationFrame(_rewardRaf);
+  clearTimeout(_rewardTimer);
   overlay.classList.remove('hidden');
+  // restart the CSS halo animation
+  overlay.classList.remove('active');
+  void overlay.offsetWidth;
   overlay.classList.add('active');
   haptic('success');
 
+  // Count the number up over ~1s with an ease-out.
+  const target = Math.max(0, Math.round(points) || 0);
+  const t0 = performance.now();
+  const DUR = 1100;
+  (function countUp(now) {
+    const k = Math.min(1, (now - t0) / DUR);
+    const eased = 1 - Math.pow(1 - k, 3);
+    ptsEl.textContent = '+' + Math.round(target * eased);
+    if (k < 1) requestAnimationFrame(countUp);
+    else ptsEl.textContent = '+' + target;
+  })(t0);
+
+  // ---- Ember field -------------------------------------------------------
   const ctx = canvas.getContext('2d');
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = window.innerWidth * dpr;
-  canvas.height = window.innerHeight * dpr;
-  ctx.scale(dpr, dpr);
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+  const W = window.innerWidth, H = window.innerHeight;
+  canvas.width = W * dpr; canvas.height = H * dpr;
+  canvas.style.width = W + 'px'; canvas.style.height = H + 'px';
+  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
 
-  const COLORS = ['#FFFFFF', '#D8D8DE', '#9A9AA6', '#6A6A78', '#C4C4CE'];
+  const cx = W / 2, cy = H * 0.42;
+  // Ichor-gold palette with a few cool whites for sparkle contrast.
+  const GOLD = ['255,214,120', '246,196,86', '255,236,190', '232,184,75', '255,255,255'];
+  const N = 70;
   const parts = [];
-  const W = window.innerWidth;
-  const H = window.innerHeight;
-  const cx = W / 2;
-  const cy = H / 2;
-
-  for (let i = 0; i < 90; i++) {
-    const angle = Math.random() * Math.PI * 2;
-    const speed = 6 + Math.random() * 12;
+  for (let i = 0; i < N; i++) {
+    const ang = -Math.PI / 2 + (Math.random() - 0.5) * Math.PI * 1.1;
+    const spd = 2 + Math.random() * 5.5;
     parts.push({
-      x: cx, y: cy,
-      vx: Math.cos(angle) * speed,
-      vy: Math.sin(angle) * speed - 4,
-      w: 6 + Math.random() * 8,
-      h: 6 + Math.random() * 8,
-      color: COLORS[(Math.random() * COLORS.length) | 0],
-      rot: Math.random() * Math.PI * 2,
-      vr: (Math.random() - 0.5) * 0.4,
+      x: cx + (Math.random() - 0.5) * 40,
+      y: cy + (Math.random() - 0.5) * 24,
+      vx: Math.cos(ang) * spd * (0.5 + Math.random()),
+      vy: Math.sin(ang) * spd - Math.random() * 2,
+      r: 1.4 + Math.random() * 3.2,
+      col: GOLD[(Math.random() * GOLD.length) | 0],
       life: 1,
+      decay: 0.006 + Math.random() * 0.01,
+      tw: Math.random() * Math.PI * 2,     // twinkle phase
     });
   }
 
-  let raf;
-  function tick() {
+  // Expanding shockwave ring, drawn on canvas for crisp scaling.
+  let ringR = 0, ringA = 0.9;
+  const start = performance.now();
+
+  function frame(now) {
+    const dt = Math.min(2, (now - start) / 16.67);
     ctx.clearRect(0, 0, W, H);
-    let alive = false;
-    for (const p of parts) {
-      p.vy += 0.45;
-      p.vx *= 0.99;
-      p.x += p.vx;
-      p.y += p.vy;
-      p.rot += p.vr;
-      p.life -= 0.008;
-      if (p.life > 0 && p.y < H + 40) {
-        alive = true;
-        ctx.save();
-        ctx.translate(p.x, p.y);
-        ctx.rotate(p.rot);
-        ctx.globalAlpha = Math.max(0, p.life);
-        ctx.fillStyle = p.color;
-        ctx.fillRect(-p.w / 2, -p.h / 2, p.w, p.h);
-        ctx.restore();
-      }
+
+    // shockwave
+    if (ringA > 0.02) {
+      ringR += 9;
+      ringA *= 0.955;
+      ctx.beginPath();
+      ctx.arc(cx, cy, ringR, 0, Math.PI * 2);
+      ctx.strokeStyle = `rgba(255,214,120,${ringA.toFixed(3)})`;
+      ctx.lineWidth = 2.2;
+      ctx.stroke();
     }
-    if (alive) {
-      raf = requestAnimationFrame(tick);
+
+    let alive = false;
+    ctx.globalCompositeOperation = 'lighter';
+    for (const p of parts) {
+      if (p.life <= 0) continue;
+      p.vy += 0.045;         // gentle gravity
+      p.vx *= 0.985;
+      p.x += p.vx; p.y += p.vy;
+      p.life -= p.decay;
+      p.tw += 0.3;
+      if (p.life <= 0) continue;
+      alive = true;
+      const a = Math.max(0, p.life) * (0.6 + 0.4 * Math.sin(p.tw));
+      const r = p.r * (0.6 + p.life * 0.6);
+      const g = ctx.createRadialGradient(p.x, p.y, 0, p.x, p.y, r * 3);
+      g.addColorStop(0, `rgba(${p.col},${a.toFixed(3)})`);
+      g.addColorStop(1, `rgba(${p.col},0)`);
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, r * 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+    ctx.globalCompositeOperation = 'source-over';
+
+    if (alive || ringA > 0.02) {
+      _rewardRaf = requestAnimationFrame(frame);
     } else {
-      setTimeout(() => {
-        overlay.classList.add('hidden');
-        overlay.classList.remove('active');
-        cancelAnimationFrame(raf);
-      }, 300);
+      ctx.clearRect(0, 0, W, H);
     }
   }
-  tick();
+  _rewardRaf = requestAnimationFrame(frame);
 
-  setTimeout(() => {
+  const dismiss = () => {
     overlay.classList.add('hidden');
     overlay.classList.remove('active');
-    cancelAnimationFrame(raf);
-  }, 3200);
+    cancelAnimationFrame(_rewardRaf);
+    ctx.clearRect(0, 0, W, H);
+  };
+  _rewardTimer = setTimeout(dismiss, 3200);
+  overlay.onclick = dismiss;
 }
 
 // ─── Quests ─────────────────────────────────────────────────
@@ -650,36 +700,58 @@ function renderQuests() {
     <div class="section-label">Side Quests</div>
     <div class="quest-list">
     ${state.quests.map(q => {
-      const pending = q.my_status === 'pending';
-      const rejected = q.my_status === 'rejected';
+      const st = q.my_status;                 // null | pending | rejected | approved
+      const done     = st === 'approved';
+      const pending  = st === 'pending';
+      const rejected = st === 'rejected';
       const needsProof = q.proof_type && q.proof_type !== 'none';
+
+      // One clean status word for the card state (never clashes with reward).
+      const stateCls = done ? 'is-done' : pending ? 'is-pending' : rejected ? 'is-rejected' : 'is-open';
+
+      // Meta tags (T&C / proof kind) — only meaningful while the quest is open.
       const tags = [];
-      if (q.requires_terms) tags.push('§ T&amp;C');
-      if (needsProof) {
-        const pt = q.proof_type;
-        const label = PROOF_HINT[pt] || 'Proof';
-        const mark = pt === 'screenshot' ? `<span class="tag-ic">${icon('camera')}</span>` : '▣ ';
-        tags.push(mark + label);
+      if (!done && !pending) {
+        if (q.requires_terms) tags.push('§ T&amp;C');
+        if (needsProof) {
+          const label = PROOF_HINT[q.proof_type] || 'Proof';
+          const mark = q.proof_type === 'screenshot' ? `<span class="tag-ic">${icon('camera')}</span>` : '▣ ';
+          tags.push(mark + label);
+        }
       }
+
+      // Right-hand slot: ONE element only, chosen by state, so nothing overlaps.
+      let aside;
+      if (done) {
+        aside = `<div class="quest-aside done"><span class="qa-ic">${icon('check')}</span><span class="qa-amt">+${q.reward}</span></div>`;
+      } else if (pending) {
+        aside = `<div class="quest-aside pending"><span class="qa-ic spin">${icon('clock')}</span><span class="qa-txt">In&nbsp;review</span></div>`;
+      } else if (rejected) {
+        aside = `<div class="quest-aside retry"><span class="qa-txt">Retry</span><span class="qa-ic">${icon('arrow')}</span></div>`;
+      } else {
+        aside = `<div class="quest-aside reward">+${q.reward}<span>Ichor</span></div>`;
+      }
+
+      const clickable = !done && !pending;
       return `
-      <article class="quest${pending ? ' is-pending' : ''}${rejected ? ' is-rejected' : ''}" data-id="${q.id}">
+      <article class="quest ${stateCls}" data-id="${q.id}"${clickable ? '' : ' aria-disabled="true"'}>
         <span class="quest-liquid" aria-hidden="true"></span>
         <span class="quest-sheen" aria-hidden="true"></span>
         <div class="quest-icon">${questIcon(q.action_type)}</div>
         <div class="quest-body">
           <div class="quest-title">${escapeHtml(q.title)}</div>
           <div class="quest-desc">${escapeHtml(q.description)}</div>
+          ${rejected ? '<div class="quest-note retry">Rejected — tap to try again</div>' : ''}
           ${tags.length ? `<div class="quest-tags">${tags.map(t => `<span class="quest-tag">${t}</span>`).join('')}</div>` : ''}
         </div>
-        <div class="quest-reward">+${q.reward}<span>Ichor</span></div>
-        ${pending ? '<div class="quest-stamp">⧖ Pending review</div>' : ''}
-        ${rejected ? '<div class="quest-stamp retry">✗ Rejected · tap to retry</div>' : ''}
+        ${aside}
       </article>`;
     }).join('')}
     </div>
   `;
 
   mount.querySelectorAll('.quest').forEach(el => {
+    if (el.getAttribute('aria-disabled') === 'true') return;
     el.addEventListener('click', () => onQuestClick(el.dataset.id));
   });
 }
@@ -901,14 +973,16 @@ async function onQuestClick(questId) {
       return;
     }
 
-    // Approved immediately (no-proof quest): award + remove.
+    // Approved immediately (no-proof quest): award + mark done (stays visible).
     haptic('success');
-    if (state.user) state.user.points += res.reward || quest.reward;
+    const earned = res.reward || quest.reward;
+    if (state.user) state.user.points += earned;
     renderUser();
     pulsePill();
-    state.quests = state.quests.filter(q => String(q.id) !== String(questId));
+    quest.my_status = 'approved';
     renderQuests();
-    toast('+' + (res.reward || quest.reward) + ' Ichor');
+    showRewardOverlay('Quest Complete', earned);
+    toast('+' + earned + ' Ichor');
   } catch (err) {
     if (err.error === 'done') {
       quest.my_status = 'pending';
@@ -1011,7 +1085,7 @@ async function copyText(txt) {
   } catch { return false; }
 }
 
-// Build this soul's invite link from the Antechamber referral base + Sigil.
+// Build this soul's invite link from the Antechamber referral base + their summons token.
 function referralLink() {
   const base = state.ante?.referralBase || '';
   const sigil = state.user?.sigil || '';
@@ -1023,7 +1097,7 @@ function referralLink() {
 // ─── The Antechamber (invite-gate screen) ────────────────────────
 // Full-screen gate shown before the gates open. Two faces:
 //   'gate'    → a newcomer must carve a unique handle to claim a Primordial seat
-//   'standby' → claimed; show the Primordial badge, Sigil, invite link + progress
+//   'standby' → claimed; show the Primordial badge, summons link + progress
 function enterAntechamber() {
   document.getElementById('app').classList.add('hidden');
   document.getElementById('antechamber').classList.remove('hidden');
@@ -1059,6 +1133,11 @@ function progressHtml(a) {
 
 function gateHtml(a) {
   return `
+    <div class="ante-hero" aria-hidden="true">
+      <span class="ante-hero-ring"></span>
+      <span class="ante-hero-ring d2"></span>
+      <span class="ante-hero-clock">${icon('clock')}</span>
+    </div>
     <div class="ante-eyebrow">The Antechamber</div>
     <h1 class="ante-title">You stand before<br/>the sealed gates</h1>
     <p class="ante-sub">Only the first few are admitted. Carve your name into the stone and claim the founder's mark — a badge the latecomers will never wear.</p>
@@ -1070,7 +1149,7 @@ function gateHtml(a) {
       <div id="ante-hint" class="ante-hint">3–16 chars · letters, numbers, _ · locked in forever once claimed</div>
     </div>
     <button id="ante-claim" class="ante-pill" type="button">
-      <span class="ante-pill-txt">Carve your Sigil</span>
+      <span class="ante-pill-txt">Carve your name</span>
       <span class="ante-pill-arrow">${icon('arrow')}</span>
     </button>
     ${progressHtml(a)}`;
@@ -1088,20 +1167,15 @@ function standbyHtml(a) {
       <div class="prim-badge-label">Primordial</div>
       <div class="prim-badge-handle">@${escapeHtml(name)}</div>
     </div>
-    <p class="ante-sub">Your name is carved and your badge is yours alone. The gates stay sealed until enough souls are sworn in — bring them, and open the world sooner.</p>
+    <p class="ante-sub">Your name is carved and your badge is yours alone. The gates stay sealed until enough souls are sworn in — summon them, and open the world sooner.</p>
     ${progressHtml(a)}
     <div class="ante-oath">
       <div class="ante-oath-num">${state.oathbound}</div>
-      <div class="ante-oath-label">Oathbound by your Sigil</div>
+      <div class="ante-oath-label">souls you have summoned</div>
     </div>
     <div class="copy-pills">
-      <button id="copy-sigil" class="copy-pill" type="button">
-        <span class="copy-pill-k">Sigil</span>
-        <span class="copy-pill-v">${escapeHtml(u.sigil || '—')}</span>
-        <span class="copy-pill-ico">⧉</span>
-      </button>
-      <button id="copy-link" class="copy-pill wide" type="button" ${link ? '' : 'disabled'}>
-        <span class="copy-pill-k">Invite link</span>
+      <button id="copy-link" class="copy-pill wide solo" type="button" ${link ? '' : 'disabled'}>
+        <span class="copy-pill-k">Your summons link</span>
         <span class="copy-pill-v mono">${escapeHtml(link || 'unavailable')}</span>
         <span class="copy-pill-ico">⧉</span>
       </button>
@@ -1147,16 +1221,10 @@ function wireGate() {
 }
 
 function wireStandby() {
-  const u = state.user || {};
-  const sigilBtn = document.getElementById('copy-sigil');
   const linkBtn = document.getElementById('copy-link');
-  sigilBtn?.addEventListener('click', async () => {
-    if (await copyText(u.sigil || '')) { toast('Sigil copied'); haptic('success'); pulseEl(sigilBtn); }
-    else { toast('Copy failed'); haptic('error'); }
-  });
   linkBtn?.addEventListener('click', async () => {
     const link = referralLink();
-    if (link && await copyText(link)) { toast('Invite link copied'); haptic('success'); pulseEl(linkBtn); }
+    if (link && await copyText(link)) { toast('Summons link copied'); haptic('success'); pulseEl(linkBtn); }
     else { toast('Copy failed'); haptic('error'); }
   });
 }
@@ -1199,42 +1267,52 @@ async function claimPrimordial(handle) {
   }
 }
 
-// ─── Referral card (shown in the main app home pane) ──────────────────
+// ─── Summons page (its own tab) ──────────────────────────────────────
 function renderReferral() {
   const mount = document.getElementById('referral-mount');
   if (!mount) return;
   const u = state.user || {};
-  const sigil = u.sigil;
-  if (!sigil) { mount.innerHTML = ''; return; }
   const link = referralLink();
+  if (!u.sigil) {
+    mount.innerHTML = `<div class="empty"><span class="empty-ghost">${icon('ghost')}</span>Your summons link is being forged…</div>`;
+    return;
+  }
   mount.innerHTML = `
-    <div class="referral-card">
-      <div class="referral-head">
-        <div class="referral-title">Your Sigil</div>
-        <div class="referral-oath"><strong>${state.oathbound}</strong> Oathbound</div>
+    <div class="summon-card">
+      <div class="summon-crest" aria-hidden="true">
+        <span class="summon-crest-ring"></span>
+        <span class="summon-crest-ic">${icon('follow')}</span>
       </div>
-      <div class="copy-pills">
-        <button id="ref-copy-sigil" class="copy-pill" type="button">
-          <span class="copy-pill-k">Code</span>
-          <span class="copy-pill-v">${escapeHtml(sigil)}</span>
-          <span class="copy-pill-ico">⧉</span>
-        </button>
-        <button id="ref-copy-link" class="copy-pill wide" type="button" ${link ? '' : 'disabled'}>
-          <span class="copy-pill-k">Invite link</span>
-          <span class="copy-pill-v mono">${escapeHtml(link || 'unavailable')}</span>
-          <span class="copy-pill-ico">⧉</span>
-        </button>
+      <div class="summon-oath">
+        <div class="summon-oath-num">${state.oathbound}</div>
+        <div class="summon-oath-label">Oathbound</div>
       </div>
+      <p class="summon-copy">Share your summons link. Every soul who answers and swears in is bound to you — and climbs your legend in the Pantheon.</p>
+      <button id="ref-copy-link" class="summon-link" type="button" ${link ? '' : 'disabled'}>
+        <span class="summon-link-k">Your summons link</span>
+        <span class="summon-link-v mono">${escapeHtml(link || 'unavailable')}</span>
+        <span class="summon-link-ic">⧉ Copy</span>
+      </button>
+      <button id="ref-share-link" class="summon-share" type="button" ${link ? '' : 'disabled'}>
+        <span>Share the summons</span>
+        <span class="summon-share-ic">${icon('arrow')}</span>
+      </button>
     </div>`;
-  const sb = document.getElementById('ref-copy-sigil');
+
   const lb = document.getElementById('ref-copy-link');
-  sb?.addEventListener('click', async () => {
-    if (await copyText(sigil)) { toast('Sigil copied'); haptic('success'); pulseEl(sb); }
+  lb?.addEventListener('click', async () => {
+    if (link && await copyText(link)) { toast('Summons link copied'); haptic('success'); pulseEl(lb); }
     else { toast('Copy failed'); haptic('error'); }
   });
-  lb?.addEventListener('click', async () => {
-    if (link && await copyText(link)) { toast('Invite link copied'); haptic('success'); pulseEl(lb); }
-    else { toast('Copy failed'); haptic('error'); }
+  const sh = document.getElementById('ref-share-link');
+  sh?.addEventListener('click', () => {
+    if (!link) return;
+    haptic('light');
+    const text = 'I was summoned to HUBRIS. Answer the call and swear in before the gates seal.';
+    const url = `https://t.me/share/url?url=${encodeURIComponent(link)}&text=${encodeURIComponent(text)}`;
+    if (tg?.openTelegramLink) tg.openTelegramLink(url);
+    else if (tg?.openLink) tg.openLink(url);
+    else window.open(url, '_blank');
   });
 }
 

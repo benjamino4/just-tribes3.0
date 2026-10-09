@@ -57,8 +57,15 @@
           <span class="streak-label">day streak</span>
         </div>
         <div id="challenge-mount" class="challenge-mount"></div>
-        <div id="referral-mount" class="referral-mount"></div>
         <div id="quests-mount" class="quests-mount"></div>
+      </section>
+
+      <section class="tab-pane" data-pane="summon">
+        <div class="pane-head">
+          <h1 class="pane-title">Your Summons</h1>
+          <p class="pane-sub">Every soul who answers becomes Oathbound to you</p>
+        </div>
+        <div id="referral-mount" class="referral-mount"></div>
       </section>
 
       <section class="tab-pane" data-pane="board">
@@ -77,6 +84,12 @@
           <path d="M3 11l9-8 9 8"/><path d="M5 10v10h14V10"/>
         </svg>
         <span>Today</span>
+      </button>
+      <button class="tab-item" data-tab="summon">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+          <circle cx="9" cy="8" r="3.2"/><path d="M3.4 19.2a5.6 5.6 0 0 1 11.2 0"/><path d="M18.5 7v6M15.5 10h6"/>
+        </svg>
+        <span>Summon</span>
       </button>
       <button class="tab-item" data-tab="board">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
@@ -110,6 +123,12 @@
   <div id="reward-overlay" class="reward-overlay hidden">
     <canvas id="reward-canvas"></canvas>
     <div class="reward-content">
+      <div class="reward-halo" aria-hidden="true">
+        <span class="reward-ring r1"></span>
+        <span class="reward-ring r2"></span>
+        <span class="reward-ring r3"></span>
+        <span class="reward-gem"></span>
+      </div>
       <div class="reward-label" id="reward-label">Best Call</div>
       <div class="reward-points" id="reward-points">+100</div>
       <div class="reward-sub" id="reward-sub">Ichor added to your vault</div>

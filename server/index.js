@@ -384,8 +384,15 @@ app.get('/api/quests', requireUser, async (req, res) => {
        ON c.quest_id = q.id AND c.telegram_id = $1
      WHERE q.is_active = TRUE
        AND (q.expires_at IS NULL OR q.expires_at > NOW())
-       AND (c.status IS NULL OR c.status IN ('pending','rejected'))
-     ORDER BY q.created_at DESC`,
+     ORDER BY
+       CASE
+         WHEN c.status = 'rejected' THEN 0
+         WHEN c.status IS NULL      THEN 1
+         WHEN c.status = 'pending'  THEN 2
+         WHEN c.status = 'approved' THEN 3
+         ELSE 1
+       END,
+       q.created_at DESC`,
     [uid]
   );
   res.json({ quests: rows });
