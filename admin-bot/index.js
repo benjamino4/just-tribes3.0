@@ -173,6 +173,11 @@ bot.on('callback_query', async (query) => {
     // quests
     if (data === 'quest_add') return questTypeMenu(chatId);
     if (data.startsWith('qnew:')) return startQuestBuild(chatId, data.split(':')[1]);
+    if (data.startsWith('qpf:')) return chooseProofType(chatId, data.split(':')[1]);
+    if (data === 'qpend') return listPending(chatId);
+    if (data.startsWith('qview:')) return viewPending(chatId, data.split(':')[1]);
+    if (data.startsWith('qok:')) return reviewProof(chatId, data.split(':')[1], true);
+    if (data.startsWith('qno:')) return reviewProof(chatId, data.split(':')[1], false);
     if (data.startsWith('qtog:')) return toggleQuest(chatId, data.split(':')[1]);
     if (data.startsWith('qdel:')) return deleteQuest(chatId, data.split(':')[1]);
     if (data.startsWith('qrew:')) { S.mode = 'quest_rew'; S.ctx.qid = data.split(':')[1]; return send(chatId, `Send the new reward (number) for quest \`${S.ctx.qid}\`.`); }
@@ -353,11 +358,8 @@ bot.on('message', async (msg) => {
         S.draft.reward = Number(reward);
         S.draft.description = description || '';
         S.draft.url = url || null;
-        S.mode = 'quest_terms';
-        if (S.draft.action_type === 'terms') {
-          return send(chatId, '§ Send the *Terms & Conditions* text players must agree to before completing this quest.');
-        }
-        return send(chatId, 'Attach *Terms & Conditions* players must agree to before completing?\n\nSend the T&C text now, or /skip for none.');
+        S.mode = null;
+        return proofTypeMenu(chatId);
       }
       case 'quest_terms': {
         const skip = text.trim() === '/skip';
@@ -367,11 +369,12 @@ bot.on('message', async (msg) => {
         const terms_text = skip ? null : text.trim();
         const d = S.draft;
         const { rows } = await q(
-          `INSERT INTO quests (title, description, reward, action_url, action_type, requires_terms, terms_text)
-           VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING id`,
-          [d.title, d.description, d.reward, d.url, d.action_type, requires_terms, terms_text]);
+          `INSERT INTO quests (title, description, reward, action_url, action_type, requires_terms, terms_text, proof_type)
+           VALUES ($1,$2,$3,$4,$5,$6,$7,$8) RETURNING id`,
+          [d.title, d.description, d.reward, d.url, d.action_type, requires_terms, terms_text, d.proof_type || 'none']);
         reset();
-        return send(chatId, `◆ Quest #${rows[0].id} created (+${d.reward} ${UNIT})${requires_terms ? ' · T&C required' : ''}.`, homeMenu());
+        const pf = (d.proof_type && d.proof_type !== 'none') ? ` · proof: ${d.proof_type} (admin-reviewed)` : '';
+        return send(chatId, `◆ Quest #${rows[0].id} created (+${d.reward} ${UNIT})${requires_terms ? ' · T&C required' : ''}${pf}.`, homeMenu());
       }
       case 'quest_rew': {
         const r = Number(text);
@@ -648,6 +651,110 @@ async function deleteCall(chatId, id) {
   await q(`DELETE FROM challenges WHERE id=$1`, [id]);
   send(chatId, `Call #${id} deleted.`, { reply_markup: { inline_keyboard: [[{ text: '▤ Calls', callback_data: 'calls' }], backRow] } });
 }
+// ═══ AI providers (judges + chat) ════════════════
+// Env providers (groq / cerebras / gemini) are always listed; extra
+// OpenAI-compatible providers the admin registers live in the DB. The admin
+// can test, toggle, delete DB ones and chat with any that have a key.
+function aiKb() {
+  return { reply_markup: { inline_keyboard: [
+    [{ text: '◇ Providers & status', callback_data: 'ai_list' }],
+    [{ text: '□ Test / toggle a provider', callback_data: 'ai_list' }],
+    [{ text: '◈ Chat with an AI', callback_data: 'ai_pick' }],
+    [{ text: '＋ Add a provider', callback_data: 'ai_add' }],
+    backRow,
+  ] } };
+}
+
+async function aiMenu(chatId) {
+  reset();
+  let active = [];
+  try { active = await activeProviders(); } catch {}
+  const line = active.length
+    ? `*${active.length}* provider${active.length > 1 ? 's' : ''} ready to judge & chat.`
+    : '_No provider has a key yet._ Set `GROQ_API_KEY` / `CEREBRAS_API_KEY` / `GEMINI_API_KEY` in the environment, or add an OpenAI-compatible provider below.';
+  return send(chatId, `◇ *AI*\n\n${line}`, aiKb());
+}
+
+async function aiList(chatId) {
+  let providers = [];
+  try { providers = await listProviders(); } catch (e) { return send(chatId, '⚠ Could not read providers: ' + esc(e.message), aiKb()); }
+  if (!providers.length) return send(chatId, '◇ No providers. Add one with ＋ Add a provider.', aiKb());
+
+  const kb = [];
+  for (const p of providers) {
+    const dot = p.source === 'env' ? (p.hasKey ? '●' : '○') : (p.active ? '●' : '○');
+    const keyMark = p.hasKey ? '✓ key' : '✗ no key';
+    const tag = p.source === 'env' ? 'env' : 'db';
+    kb.push([{ text: `${dot} ${esc(p.name)} · ${esc(p.model)} · ${keyMark} · ${tag}`, callback_data: 'noop' }]);
+    const row = [{ text: '□ Test', callback_data: 'aitest:' + p.id }];
+    if (p.source === 'db') {
+      row.push({ text: p.active ? 'Deactivate' : 'Activate', callback_data: 'aitog:' + p.id });
+      row.push({ text: '✗ Delete', callback_data: 'aidel:' + p.id });
+    }
+    kb.push(row);
+  }
+  kb.push([{ text: '＋ Add a provider', callback_data: 'ai_add' }]);
+  kb.push(backRow);
+  send(chatId, '◇ *Providers*\n\n● active · ○ off · env keys come from the environment', { reply_markup: { inline_keyboard: kb } });
+}
+
+async function aiTest(chatId, id) {
+  send(chatId, '□ Testing …');
+  let r;
+  try { r = await testProvider(id); } catch (e) { r = { ok: false, error: e.message }; }
+  const back = { reply_markup: { inline_keyboard: [[{ text: '◇ Providers', callback_data: 'ai_list' }], backRow] } };
+  if (r && r.ok)
+    return send(chatId, `✓ *${esc(r.provider || id)}* replied:\n\n“${esc(r.content || '')}”`, back);
+  const detail = r?.status ? ` (HTTP ${r.status})` : '';
+  return send(chatId, `✗ *${esc(r?.provider || id)}* failed${detail}:\n\n${esc(r?.error || 'no response')}`, back);
+}
+
+function dbIdOf(id) {
+  const m = /^db:(\d+)$/.exec(String(id || ''));
+  return m ? Number(m[1]) : null;
+}
+async function aiToggle(chatId, id) {
+  const dbId = dbIdOf(id);
+  if (dbId == null) return send(chatId, 'Env providers can’t be toggled — set/unset their key in the environment.', aiKb());
+  try { await toggleProvider(dbId); } catch (e) { return send(chatId, '⚠ ' + esc(e.message), aiKb()); }
+  return aiList(chatId);
+}
+async function aiDelete(chatId, id) {
+  const dbId = dbIdOf(id);
+  if (dbId == null) return send(chatId, 'Env providers can’t be deleted — remove their key from the environment.', aiKb());
+  try { await deleteProvider(dbId); } catch (e) { return send(chatId, '⚠ ' + esc(e.message), aiKb()); }
+  return aiList(chatId);
+}
+
+async function aiPickToChat(chatId) {
+  let providers = [];
+  try { providers = await listProviders(); } catch (e) { return send(chatId, '⚠ ' + esc(e.message), aiKb()); }
+  const usable = providers.filter(p => p.hasKey && p.active);
+  if (!usable.length) return send(chatId, '◈ No provider with a key is active. Add one or set a key first.', aiKb());
+  const kb = usable.map(p => [{ text: `◈ ${esc(p.name)} · ${esc(p.model)}`, callback_data: 'aichat:' + p.id }]);
+  kb.push(backRow);
+  send(chatId, '◈ *Chat* — pick a provider to talk to.', { reply_markup: { inline_keyboard: kb } });
+}
+
+function chatControls() {
+  return { reply_markup: { inline_keyboard: [
+    [{ text: '■ End chat', callback_data: 'ai_endchat' }],
+    backRow,
+  ] } };
+}
+
+async function startChat(chatId, id) {
+  let p;
+  try { p = await getProvider(id); } catch { p = null; }
+  if (!p) return send(chatId, 'That provider is gone.', aiKb());
+  if (!p.hasKey) return send(chatId, `*${esc(p.name)}* has no API key, so it can’t chat.`, aiKb());
+  reset();
+  S.mode = 'ai_chat';
+  S.chatId = p.id;
+  S.chat = [];
+  return send(chatId, `◈ Chatting with *${esc(p.name)}* (${esc(p.model)}).\n\nSend a message. /cancel or ■ End chat to stop.`, chatControls());
+}
+
 // ═══ Quests ════════════════════════════
 // Quest types the admin builds from the bot. Each carries a monochrome glyph
 // the Mini App renders; 'terms' always gates completion on an "I agree" step.
@@ -686,15 +793,128 @@ function startQuestBuild(chatId, type) {
   send(chatId, `◆ *New ${questTypeLabel(type)}*\n\n${hint}\n\n/cancel to stop.`);
 }
 
+// Proof-of-completion routing: after the admin fills a quest's title/reward/
+// url, they choose what the player must submit. Anything but 'none' makes the
+// completion land in a pending queue the admin approves here before awarding.
+const PROOF_LABEL = { none: 'nothing (auto)', username: 'username', link: 'profile / post link', screenshot: 'screenshot' };
+function proofTypeMenu(chatId) {
+  send(chatId, '◆ *Proof of completion*\n\nAfter the player does this quest, what must they submit for you to review?', { reply_markup: { inline_keyboard: [
+    [{ text: '∅ Nothing — auto-complete', callback_data: 'qpf:none' }],
+    [{ text: '@ Their username', callback_data: 'qpf:username' }],
+    [{ text: '↗ A profile / post link', callback_data: 'qpf:link' }],
+    [{ text: '▣ A screenshot', callback_data: 'qpf:screenshot' }],
+  ] } });
+}
+function chooseProofType(chatId, type) {
+  if (!PROOF_LABEL[type]) type = 'none';
+  S.draft.proof_type = type;
+  S.mode = 'quest_terms';
+  if (S.draft.action_type === 'terms')
+    return send(chatId, '§ Send the *Terms & Conditions* text players must agree to before completing this quest.');
+  return send(chatId, 'Attach *Terms & Conditions* players must agree to before completing?\n\nSend the T&C text now, or /skip for none.');
+}
+
+function dataUrlToBuffer(dataUrl) {
+  try {
+    const m = /^data:image\/[a-z+]+;base64,(.+)$/i.exec(String(dataUrl || ''));
+    return m ? Buffer.from(m[1], 'base64') : null;
+  } catch { return null; }
+}
+
+// ═══ Pending review queue ═══
+async function listPending(chatId) {
+  const { rows } = await q(
+    `SELECT c.id, c.proof_type, c.telegram_id, q.title, q.reward, u.first_name, u.username
+     FROM quest_completions c
+     JOIN quests q ON q.id=c.quest_id
+     LEFT JOIN users u ON u.telegram_id=c.telegram_id
+     WHERE c.status='pending' ORDER BY c.completed_at ASC LIMIT 25`);
+  if (!rows.length)
+    return send(chatId, '⧖ *Pending reviews*\n\n_Nothing waiting._', { reply_markup: { inline_keyboard: [[{ text: '◆ Quests', callback_data: 'quests' }], backRow] } });
+  const kb = rows.map(r => [{
+    text: `${esc(r.first_name || r.username || r.telegram_id)} · ${esc(r.title).slice(0, 16)} · +${r.reward}`,
+    callback_data: 'qview:' + r.id,
+  }]);
+  kb.push([{ text: '◆ Quests', callback_data: 'quests' }], backRow);
+  send(chatId, `⧖ *Pending reviews* (${rows.length})\n\nTap one to inspect and decide.`, { reply_markup: { inline_keyboard: kb } });
+}
+
+async function viewPending(chatId, cid) {
+  const { rows } = await q(
+    `SELECT c.*, q.title, q.reward, u.first_name, u.username
+     FROM quest_completions c JOIN quests q ON q.id=c.quest_id
+     LEFT JOIN users u ON u.telegram_id=c.telegram_id WHERE c.id=$1`, [cid]);
+  if (!rows.length) return send(chatId, 'That submission is gone.', { reply_markup: { inline_keyboard: [[{ text: '⧖ Pending', callback_data: 'qpend' }], backRow] } });
+  const c = rows[0];
+  const who = esc(c.first_name || c.username || c.telegram_id);
+  const kb = { inline_keyboard: [
+    [{ text: `✓ Approve +${c.reward}`, callback_data: 'qok:' + cid }, { text: '✗ Reject', callback_data: 'qno:' + cid }],
+    [{ text: '⧖ Pending', callback_data: 'qpend' }], backRow,
+  ] };
+  const bodyText = `⧖ *Review submission*\n\nPlayer: ${who} (\`${c.telegram_id}\`)\nQuest: ${esc(c.title)} · +${c.reward} ${UNIT}\nProof type: _${PROOF_LABEL[c.proof_type] || c.proof_type}_` +
+    (c.status !== 'pending' ? `\nStatus: *${c.status}*` : '') +
+    (c.proof_value ? `\n\n${esc(c.proof_value)}` : '');
+  if (c.proof_type === 'screenshot' && c.proof_image) {
+    const buf = dataUrlToBuffer(c.proof_image);
+    if (buf) return bot.sendPhoto(chatId, buf, { caption: bodyText, parse_mode: 'Markdown', reply_markup: kb }, { filename: 'proof.jpg', contentType: 'image/jpeg' });
+  }
+  send(chatId, bodyText, { reply_markup: kb });
+}
+
+async function reviewProof(chatId, cid, approve) {
+  const { rows } = await q(
+    `SELECT c.*, q.title, q.reward FROM quest_completions c JOIN quests q ON q.id=c.quest_id WHERE c.id=$1`, [cid]);
+  const backKb = { reply_markup: { inline_keyboard: [[{ text: '⧖ Pending', callback_data: 'qpend' }], backRow] } };
+  if (!rows.length) return send(chatId, 'That submission is gone.', backKb);
+  const c = rows[0];
+  if (c.status !== 'pending') return send(chatId, `Already *${c.status}*.`, backKb);
+  if (approve) {
+    await q(`UPDATE quest_completions SET status='approved', reviewed_at=NOW() WHERE id=$1`, [cid]);
+    await q(`UPDATE users SET points = points + $1 WHERE telegram_id = $2`, [c.reward, c.telegram_id]);
+    send(chatId, `✓ Approved. +${c.reward} ${UNIT} awarded for “${esc(c.title)}”.`, backKb);
+    if (publicBot) { try { await publicBot.sendMessage(c.telegram_id, `✓ Your submission for “${esc(c.title)}” was approved. +${c.reward} ${UNIT} added to your vault.`); } catch {} }
+  } else {
+    await q(`UPDATE quest_completions SET status='rejected', reviewed_at=NOW() WHERE id=$1`, [cid]);
+    send(chatId, `✗ Rejected “${esc(c.title)}”.`, backKb);
+    if (publicBot) { try { await publicBot.sendMessage(c.telegram_id, `✗ Your submission for “${esc(c.title)}” wasn’t approved this time. You can try the quest again.`); } catch {} }
+  }
+}
+
+// Called by the web server when a player submits proof for admin review.
+export async function notifyPendingProof({ completionId, user, quest, proofType, proofValue, proofImage }) {
+  if (!ADMIN_SET) return;
+  const who = esc(user?.first_name || user?.username || user?.id);
+  const kb = { inline_keyboard: [
+    [{ text: `✓ Approve +${quest.reward}`, callback_data: 'qok:' + completionId },
+     { text: '✗ Reject', callback_data: 'qno:' + completionId }],
+    [{ text: '⧖ All pending', callback_data: 'qpend' }],
+  ] };
+  const bodyText = `⧖ *New quest proof*\n\nPlayer: ${who} (\`${user?.id}\`)\nQuest: ${esc(quest.title)} · +${quest.reward} ${UNIT}\nProof type: _${PROOF_LABEL[proofType] || proofType}_` +
+    (proofValue ? `\n\n${esc(proofValue)}` : '');
+  try {
+    if (proofType === 'screenshot' && proofImage) {
+      const buf = dataUrlToBuffer(proofImage);
+      if (buf) return await bot.sendPhoto(ADMIN, buf, { caption: bodyText, parse_mode: 'Markdown', reply_markup: kb }, { filename: 'proof.jpg', contentType: 'image/jpeg' });
+    }
+    await bot.sendMessage(ADMIN, bodyText, { parse_mode: 'Markdown', disable_web_page_preview: true, reply_markup: kb });
+  } catch (e) { console.error('notifyPendingProof send failed:', e.message); }
+}
+
 async function listQuests(chatId) {
   const { rows } = await q(
-    `SELECT q.*, (SELECT COUNT(*)::int FROM quest_completions c WHERE c.quest_id=q.id) done
+    `SELECT q.*, (SELECT COUNT(*)::int FROM quest_completions c WHERE c.quest_id=q.id AND c.status='approved') done
      FROM quests q ORDER BY created_at DESC LIMIT 20`);
-  const kb = [[{ text: '＋ New Quest', callback_data: 'quest_add' }]];
+  const { rows: pend } = await q(`SELECT COUNT(*)::int c FROM quest_completions WHERE status='pending'`);
+  const nPend = pend[0]?.c || 0;
+  const kb = [
+    [{ text: '＋ New Quest', callback_data: 'quest_add' }],
+    [{ text: `⧖ Pending reviews${nPend ? ' · ' + nPend : ''}`, callback_data: 'qpend' }],
+  ];
   for (const r of rows) {
     const g = (QUEST_TYPES[r.action_type] || QUEST_TYPES.link).glyph;
     const tc = r.requires_terms ? ' §' : '';
-    kb.push([{ text: `${r.is_active ? '●' : '○'} ${g} ${esc(r.title).slice(0, 22)}${tc} · +${r.reward} · ${r.done}✓`, callback_data: 'noop' }]);
+    const pf = (r.proof_type && r.proof_type !== 'none') ? ' ▣' : '';
+    kb.push([{ text: `${r.is_active ? '●' : '○'} ${g} ${esc(r.title).slice(0, 20)}${tc}${pf} · +${r.reward} · ${r.done}✓`, callback_data: 'noop' }]);
     kb.push([
       { text: r.is_active ? 'Deactivate' : 'Activate', callback_data: 'qtog:' + r.id },
       { text: '✎ Reward', callback_data: 'qrew:' + r.id },

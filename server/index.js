@@ -5,14 +5,14 @@ import { fileURLToPath } from 'url';
 import 'dotenv/config';
 import { q } from './db.js';
 import { requireUser } from './auth.js';
-import { adminWebhookPath, handleAdminUpdate, registerAdminWebhook } from '../admin-bot/index.js';
+import { adminWebhookPath, handleAdminUpdate, registerAdminWebhook, notifyPendingProof } from '../admin-bot/index.js';
 import { publicWebhookPath, handlePublicUpdate, registerPublicWebhook } from '../bot/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 const app = express();
 app.use(cors());
-app.use(express.json({ limit: '1mb' }));
+app.use(express.json({ limit: '2mb' }));
 
 // ═════════════════════════════════════════════════════
 // Public API  —  the Mini App talks only to these.
@@ -146,46 +146,88 @@ app.get('/api/challenge/:id/breakdown', async (req, res) => {
   res.json({ challenge, distribution: dist, total, pointsMap });
 });
 
-app.get('/api/quests', async (req, res) => {
+app.get('/api/quests', requireUser, async (req, res) => {
+  const uid = req.tgUser.id;
   const { rows } = await q(
-    `SELECT id, title, description, reward, action_url, action_type, verify_text,
-            requires_terms, terms_text
-     FROM quests WHERE is_active = TRUE
-       AND (expires_at IS NULL OR expires_at > NOW())
-     ORDER BY created_at DESC`
+    `SELECT q.id, q.title, q.description, q.reward, q.action_url, q.action_type,
+            q.verify_text, q.requires_terms, q.terms_text, q.proof_type,
+            c.status AS my_status
+     FROM quests q
+     LEFT JOIN quest_completions c
+       ON c.quest_id = q.id AND c.telegram_id = $1
+     WHERE q.is_active = TRUE
+       AND (q.expires_at IS NULL OR q.expires_at > NOW())
+       AND (c.status IS NULL OR c.status IN ('pending','rejected'))
+     ORDER BY q.created_at DESC`,
+    [uid]
   );
   res.json({ quests: rows });
 });
+
+// Downscaled JPEG data URLs only; keep screenshots well under the body limit.
+function validProofImage(s) {
+  return typeof s === 'string' && /^data:image\/(png|jpe?g|webp);base64,/.test(s) && s.length < 900000;
+}
 
 app.post('/api/quests/:id/complete', requireUser, async (req, res) => {
   const id = req.tgUser.id;
   const questId = req.params.id;
   const agreed = req.body?.agreed === true;
+  const proofValue = (req.body?.proof_value || '').toString().trim().slice(0, 400) || null;
+  const proofImage = req.body?.proof_image;
 
   const { rows: quest } = await q(
-    `SELECT reward, requires_terms FROM quests WHERE id = $1 AND is_active = TRUE`,
+    `SELECT title, reward, requires_terms, proof_type FROM quests WHERE id = $1 AND is_active = TRUE`,
     [questId]
   );
   if (!quest.length) return res.status(404).json({ error: 'no_quest' });
+  const { title, reward, requires_terms, proof_type } = quest[0];
 
   // Legal gate: quests flagged requires_terms only complete once the player
   // has explicitly agreed to the attached Terms & Conditions.
-  if (quest[0].requires_terms && !agreed) {
+  if (requires_terms && !agreed) {
     return res.status(400).json({ error: 'terms_required' });
   }
 
+  // Proof gate: quests that demand a username / profile link / screenshot are
+  // submitted for admin review and award NO points until approved.
+  const needsProof = proof_type && proof_type !== 'none';
+  if (needsProof) {
+    if ((proof_type === 'username' || proof_type === 'link') && !proofValue)
+      return res.status(400).json({ error: 'proof_required' });
+    if (proof_type === 'screenshot' && !validProofImage(proofImage))
+      return res.status(400).json({ error: 'proof_required' });
+  }
+
+  const status = needsProof ? 'pending' : 'approved';
   const insert = await q(
-    `INSERT INTO quest_completions (telegram_id, quest_id, agreed_terms)
-     VALUES ($1, $2, $3) ON CONFLICT DO NOTHING RETURNING id`,
-    [id, questId, agreed]
+    `INSERT INTO quest_completions
+       (telegram_id, quest_id, agreed_terms, status, proof_type, proof_value, proof_image)
+     VALUES ($1,$2,$3,$4,$5,$6,$7) ON CONFLICT DO NOTHING RETURNING id`,
+    [id, questId, agreed, status, proof_type || 'none', proofValue,
+     proof_type === 'screenshot' && validProofImage(proofImage) ? proofImage : null]
   );
   if (!insert.rows.length) return res.status(409).json({ error: 'done' });
 
-  await q(
-    `UPDATE users SET points = points + $1 WHERE telegram_id = $2`,
-    [quest[0].reward, id]
-  );
-  res.json({ ok: true, reward: quest[0].reward });
+  // Only auto-award when no admin review is required.
+  if (!needsProof) {
+    await q(`UPDATE users SET points = points + $1 WHERE telegram_id = $2`, [reward, id]);
+    return res.json({ ok: true, status: 'approved', reward });
+  }
+
+  // Hand the pending submission to the admin for review (fire-and-forget).
+  try {
+    notifyPendingProof({
+      completionId: insert.rows[0].id,
+      user: req.tgUser,
+      quest: { id: questId, title, reward },
+      proofType: proof_type,
+      proofValue,
+      proofImage: proof_type === 'screenshot' && validProofImage(proofImage) ? proofImage : null,
+    });
+  } catch (e) { console.error('notifyPendingProof failed:', e.message); }
+
+  res.json({ ok: true, status: 'pending', reward: 0 });
 });
 
 // ═════════════════════════════════════════════════════

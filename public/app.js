@@ -560,8 +560,15 @@ function showRewardOverlay(label, points) {
 }
 
 // ─── Quests ─────────────────────────────────────────────────
-const QUEST_GLYPH = { x_follow: '✕', task: '◆', research: '◇', terms: '§', link: '◈' };
-function questGlyph(t) { return QUEST_GLYPH[t] || QUEST_GLYPH.link; }
+const QUEST_ICON = {
+  x_follow: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><path d="M5 5l14 14M19 5L5 19"/></svg>',
+  task: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-12"/></svg>',
+  research: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.6-4.6"/></svg>',
+  terms: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 13h5M10 17h5"/></svg>',
+  link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5l5-5"/><path d="M10.5 7H8a4 4 0 0 0 0 8h2.5"/><path d="M13.5 17H16a4 4 0 0 0 0-8h-2.5"/></svg>',
+};
+function questIcon(t) { return QUEST_ICON[t] || QUEST_ICON.link; }
+const PROOF_HINT = { username: 'Submit username', link: 'Submit a link', screenshot: 'Submit a screenshot' };
 
 function renderQuests() {
   const mount = document.getElementById('quests-mount');
@@ -569,20 +576,74 @@ function renderQuests() {
 
   mount.innerHTML = `
     <div class="section-label">Side Quests</div>
-    ${state.quests.map(q => `
-      <div class="quest" data-id="${q.id}">
-        <div class="quest-icon">${questGlyph(q.action_type)}</div>
+    <div class="quest-list">
+    ${state.quests.map(q => {
+      const pending = q.my_status === 'pending';
+      const rejected = q.my_status === 'rejected';
+      const needsProof = q.proof_type && q.proof_type !== 'none';
+      const tags = [];
+      if (q.requires_terms) tags.push('§ T&amp;C');
+      if (needsProof) tags.push('▣ ' + (PROOF_HINT[q.proof_type] || 'Proof'));
+      return `
+      <article class="quest${pending ? ' is-pending' : ''}${rejected ? ' is-rejected' : ''}" data-id="${q.id}">
+        <span class="quest-liquid" aria-hidden="true"></span>
+        <span class="quest-sheen" aria-hidden="true"></span>
+        <div class="quest-icon">${questIcon(q.action_type)}</div>
         <div class="quest-body">
-          <div class="quest-title">${escapeHtml(q.title)}${q.requires_terms ? ' <span class="quest-flag">§ T&amp;C</span>' : ''}</div>
+          <div class="quest-title">${escapeHtml(q.title)}</div>
           <div class="quest-desc">${escapeHtml(q.description)}</div>
+          ${tags.length ? `<div class="quest-tags">${tags.map(t => `<span class="quest-tag">${t}</span>`).join('')}</div>` : ''}
         </div>
-        <div class="quest-reward">+${q.reward}</div>
-      </div>
-    `).join('')}
+        <div class="quest-reward">+${q.reward}<span>Ichor</span></div>
+        ${pending ? '<div class="quest-stamp">⧖ Pending review</div>' : ''}
+        ${rejected ? '<div class="quest-stamp retry">✗ Rejected · tap to retry</div>' : ''}
+      </article>`;
+    }).join('')}
+    </div>
   `;
 
   mount.querySelectorAll('.quest').forEach(el => {
     el.addEventListener('click', () => onQuestClick(el.dataset.id));
+  });
+}
+
+// ─ small UI helpers ─
+let _toastTimer = null;
+function toast(msg) {
+  let el = document.getElementById('toast');
+  if (!el) { el = document.createElement('div'); el.id = 'toast'; el.className = 'toast'; document.body.appendChild(el); }
+  el.textContent = msg;
+  requestAnimationFrame(() => el.classList.add('show'));
+  clearTimeout(_toastTimer);
+  _toastTimer = setTimeout(() => el.classList.remove('show'), 2200);
+}
+function pulsePill() {
+  const p = document.querySelector('.points-pill');
+  if (!p) return;
+  p.classList.add('pulse');
+  setTimeout(() => p.classList.remove('pulse'), 600);
+}
+function shakeEl(el) { el.classList.remove('shake'); void el.offsetWidth; el.classList.add('shake'); }
+
+// Downscale a chosen screenshot to a compact JPEG data URL for review.
+function downscaleImage(file, maxDim, quality) {
+  return new Promise((resolve, reject) => {
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      let w = img.width, h = img.height;
+      const scale = Math.min(1, maxDim / Math.max(w, h));
+      w = Math.round(w * scale); h = Math.round(h * scale);
+      const canvas = document.createElement('canvas');
+      canvas.width = w; canvas.height = h;
+      canvas.getContext('2d').drawImage(img, 0, 0, w, h);
+      let qf = quality, out = canvas.toDataURL('image/jpeg', qf);
+      while (out.length > 860000 && qf > 0.4) { qf -= 0.12; out = canvas.toDataURL('image/jpeg', qf); }
+      resolve(out);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error('img')); };
+    img.src = url;
   });
 }
 
@@ -640,9 +701,91 @@ function showTermsOverlay(quest) {
   });
 }
 
+// Proof submission sheet: text field for username/link, file picker for screenshot.
+function showProofSheet(quest) {
+  return new Promise(resolve => {
+    const type = quest.proof_type;
+    const back = document.createElement('div');
+    back.className = 'terms-overlay';
+    const sheet = document.createElement('div');
+    sheet.className = 'terms-sheet proof-sheet';
+
+    const h = document.createElement('div');
+    h.className = 'terms-head';
+    h.textContent = 'Submit proof';
+    const sub = document.createElement('div');
+    sub.className = 'terms-sub';
+    sub.textContent = quest.title;
+
+    const field = document.createElement('div');
+    field.className = 'proof-field';
+    let getValue = () => null;
+
+    if (type === 'screenshot') {
+      const drop = document.createElement('label');
+      drop.className = 'proof-drop';
+      drop.innerHTML = '<span class="proof-drop-ic">▣</span><span class="proof-drop-tx">Tap to choose a screenshot</span>';
+      const input = document.createElement('input');
+      input.type = 'file'; input.accept = 'image/*'; input.hidden = true;
+      const preview = document.createElement('img');
+      preview.className = 'proof-preview'; preview.hidden = true;
+      let dataUrl = null;
+      input.addEventListener('change', async () => {
+        const file = input.files && input.files[0];
+        if (!file) return;
+        try {
+          dataUrl = await downscaleImage(file, 1000, 0.82);
+          preview.src = dataUrl; preview.hidden = false;
+          drop.querySelector('.proof-drop-tx').textContent = 'Change screenshot';
+        } catch { toast('Could not read that image'); }
+      });
+      drop.appendChild(input); drop.appendChild(preview);
+      field.appendChild(drop);
+      getValue = () => dataUrl ? { image: dataUrl } : null;
+    } else {
+      const input = document.createElement('input');
+      input.type = type === 'link' ? 'url' : 'text';
+      input.className = 'proof-input';
+      input.placeholder = type === 'link' ? 'https://… link to your post' : '@yourusername';
+      input.autocomplete = 'off'; input.spellcheck = false;
+      field.appendChild(input);
+      getValue = () => { const v = input.value.trim(); return v ? { value: v } : null; };
+      setTimeout(() => input.focus(), 350);
+    }
+
+    const note = document.createElement('div');
+    note.className = 'proof-note';
+    note.textContent = 'An admin reviews your submission before Ichor is awarded.';
+
+    const actions = document.createElement('div');
+    actions.className = 'terms-actions';
+    const cancel = document.createElement('button');
+    cancel.className = 'terms-btn ghost'; cancel.textContent = 'Cancel';
+    const submit = document.createElement('button');
+    submit.className = 'terms-btn primary'; submit.textContent = 'Submit';
+
+    const close = (val) => { back.classList.remove('active'); setTimeout(() => back.remove(), 220); resolve(val); };
+    cancel.addEventListener('click', () => { haptic('light'); close(null); });
+    submit.addEventListener('click', () => {
+      const v = getValue();
+      if (!v) { haptic('error'); shakeEl(sheet); return; }
+      haptic('success'); close(v);
+    });
+    back.addEventListener('click', (e) => { if (e.target === back) close(null); });
+
+    actions.appendChild(cancel); actions.appendChild(submit);
+    sheet.appendChild(h); sheet.appendChild(sub); sheet.appendChild(field); sheet.appendChild(note); sheet.appendChild(actions);
+    back.appendChild(sheet); document.body.appendChild(back);
+    requestAnimationFrame(() => back.classList.add('active'));
+  });
+}
+
 async function onQuestClick(questId) {
   const quest = state.quests.find(q => String(q.id) === String(questId));
   if (!quest) return;
+
+  // Already submitted — waiting on an admin. Don't let them resubmit.
+  if (quest.my_status === 'pending') { haptic('light'); toast('Awaiting admin review…'); return; }
   haptic('light');
 
   if (quest.action_url) {
@@ -658,22 +801,43 @@ async function onQuestClick(questId) {
     if (!agreed) return;
   }
 
+  // Proof gate: collect the admin-chosen evidence before completing.
+  const needsProof = quest.proof_type && quest.proof_type !== 'none';
+  let proof = {};
+  if (needsProof) {
+    proof = await showProofSheet(quest);
+    if (!proof) return; // cancelled
+  }
+
   try {
     const res = await api(`/api/quests/${questId}/complete`, {
       method: 'POST',
-      body: JSON.stringify({ agreed }),
+      body: JSON.stringify({ agreed, proof_value: proof.value, proof_image: proof.image }),
     });
+
+    // Pending review: keep the card, flip it to a pending state, no award yet.
+    if (res.status === 'pending') {
+      haptic('success');
+      quest.my_status = 'pending';
+      renderQuests();
+      toast('Submitted — pending admin review');
+      return;
+    }
+
+    // Approved immediately (no-proof quest): award + remove.
     haptic('success');
     if (state.user) state.user.points += res.reward || quest.reward;
     renderUser();
-    document.querySelector('.points-pill')?.classList.add('pulse');
-    setTimeout(() => document.querySelector('.points-pill')?.classList.remove('pulse'), 600);
+    pulsePill();
     state.quests = state.quests.filter(q => String(q.id) !== String(questId));
     renderQuests();
+    toast('+' + (res.reward || quest.reward) + ' Ichor');
   } catch (err) {
     if (err.error === 'done') {
-      state.quests = state.quests.filter(q => String(q.id) !== String(questId));
+      quest.my_status = 'pending';
       renderQuests();
+    } else if (err.error === 'proof_required') {
+      haptic('error'); toast('This quest needs proof to continue');
     } else haptic('error');
   }
 }
@@ -737,8 +901,74 @@ function escapeHtml(s) {
 }
 
 // ─── Boot ───────────────────────────────────────────────────
+// ─── Device tilt + shake (iOS liquid-glass parallax / shake-to-roll) ─────────
+// Tilt feeds --mx/--my onto :root so the quest sheen tracks the gyroscope.
+// Shake jiggles the quest cards with haptic feedback. On iOS 13+ the motion
+// APIs need a user-gesture permission grant, so we lazily request it on the
+// first tap and fall back silently when unavailable (Android/desktop just
+// get the plain static glass).
+let _motionReady = false;
+function initLiveMotion() {
+  if (_motionReady) return;
+  _motionReady = true;
+
+  const root = document.documentElement;
+  let mx = 0, my = 0, tx = 0, ty = 0, raf = 0;
+  const ease = () => {
+    mx += (tx - mx) * 0.12; my += (ty - my) * 0.12;
+    root.style.setProperty('--mx', mx.toFixed(3));
+    root.style.setProperty('--my', my.toFixed(3));
+    raf = (Math.abs(tx - mx) > 0.001 || Math.abs(ty - my) > 0.001) ? requestAnimationFrame(ease) : 0;
+  };
+  const nudge = () => { if (!raf) raf = requestAnimationFrame(ease); };
+
+  function onOrient(e) {
+    if (e.gamma == null || e.beta == null) return;
+    tx = Math.max(-1, Math.min(1, e.gamma / 35));        // left/right ±35°
+    ty = Math.max(-1, Math.min(1, (e.beta - 45) / 35));  // front/back around 45°
+    nudge();
+  }
+
+  // Shake detection via total acceleration spikes with a cooldown.
+  let lastShake = 0;
+  function onMotion(e) {
+    const a = e.accelerationIncludingGravity;
+    if (!a) return;
+    const mag = Math.hypot(a.x || 0, a.y || 0, a.z || 0);
+    const now = Date.now();
+    if (mag > 24 && now - lastShake > 900) {
+      lastShake = now;
+      haptic('medium');
+      document.querySelectorAll('.quest').forEach(shakeEl);
+    }
+  }
+
+  const attach = () => {
+    window.addEventListener('deviceorientation', onOrient, { passive: true });
+    window.addEventListener('devicemotion', onMotion, { passive: true });
+  };
+
+  const DOE = window.DeviceOrientationEvent, DME = window.DeviceMotionEvent;
+  const needGrant = (DOE && typeof DOE.requestPermission === 'function') ||
+                    (DME && typeof DME.requestPermission === 'function');
+  if (needGrant) {
+    const req = async () => {
+      try {
+        if (DOE && typeof DOE.requestPermission === 'function') await DOE.requestPermission();
+        if (DME && typeof DME.requestPermission === 'function') await DME.requestPermission();
+        attach();
+      } catch {}
+      window.removeEventListener('pointerdown', req);
+    };
+    window.addEventListener('pointerdown', req, { once: true });
+  } else {
+    attach();
+  }
+}
+
 async function boot() {
   setupTabBar();
+  initLiveMotion();
 
   try {
     const [meRes, todayRes, questsRes, boardRes] = await Promise.all([

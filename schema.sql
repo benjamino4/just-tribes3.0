@@ -67,22 +67,36 @@ CREATE TABLE IF NOT EXISTS quests (
 -- Self-heal: richer quest types + optional legal T&C agreement.
 --   action_type : link | task | x_follow | research | terms
 --   requires_terms / terms_text : gate completion behind an "I agree" step
+--   proof_type  : none | username | link | screenshot
+--                 what the player must submit after doing the task; anything
+--                 other than 'none' routes the completion through admin review.
 ALTER TABLE quests ADD COLUMN IF NOT EXISTS action_type    TEXT DEFAULT 'link';
 ALTER TABLE quests ADD COLUMN IF NOT EXISTS verify_text    TEXT;
 ALTER TABLE quests ADD COLUMN IF NOT EXISTS requires_terms BOOLEAN DEFAULT FALSE;
 ALTER TABLE quests ADD COLUMN IF NOT EXISTS terms_text     TEXT;
+ALTER TABLE quests ADD COLUMN IF NOT EXISTS proof_type     TEXT DEFAULT 'none';
 
 CREATE TABLE IF NOT EXISTS quest_completions (
   id           SERIAL PRIMARY KEY,
   telegram_id  BIGINT NOT NULL,
   quest_id     INTEGER NOT NULL,
   agreed_terms BOOLEAN DEFAULT FALSE,
+  status       TEXT DEFAULT 'approved',   -- pending | approved | rejected
+  proof_type   TEXT DEFAULT 'none',
+  proof_value  TEXT,                       -- username / profile link
+  proof_image  TEXT,                       -- data URL of a submitted screenshot
+  reviewed_at  TIMESTAMPTZ,
   completed_at TIMESTAMPTZ DEFAULT NOW(),
   UNIQUE(telegram_id, quest_id)
 );
 
--- Self-heal for legacy quest_completions created before T&C tracking.
+-- Self-heal for legacy quest_completions created before T&C / review tracking.
 ALTER TABLE quest_completions ADD COLUMN IF NOT EXISTS agreed_terms BOOLEAN DEFAULT FALSE;
+ALTER TABLE quest_completions ADD COLUMN IF NOT EXISTS status      TEXT DEFAULT 'approved';
+ALTER TABLE quest_completions ADD COLUMN IF NOT EXISTS proof_type  TEXT DEFAULT 'none';
+ALTER TABLE quest_completions ADD COLUMN IF NOT EXISTS proof_value TEXT;
+ALTER TABLE quest_completions ADD COLUMN IF NOT EXISTS proof_image TEXT;
+ALTER TABLE quest_completions ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
 
 CREATE TABLE IF NOT EXISTS ai_chats (
   id          SERIAL PRIMARY KEY,

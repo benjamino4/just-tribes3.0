@@ -127,41 +127,77 @@ Return ONLY valid JSON in this exact shape:
 Allowed ids: ${ids}`;
 }
 
-// Low-level call. `json:true` asks for a JSON ranking object; `json:false`
-// returns the raw assistant text (used by chat).
-async function callOne(provider, messages, { json = true } = {}) {
+// Robust JSON extraction: strips ```fences``` and pulls the first {...} block
+// so providers that ignore response_format (or wrap it in prose) still parse.
+function extractJson(text) {
+  if (!text) return null;
+  let t = String(text).trim();
+  t = t.replace(/^```(?:json)?\s*/i, '').replace(/\s*```$/i, '').trim();
+  try { return JSON.parse(t); } catch {}
+  const s = t.indexOf('{'), e = t.lastIndexOf('}');
+  if (s !== -1 && e > s) { try { return JSON.parse(t.slice(s, e + 1)); } catch {} }
+  return null;
+}
+
+// Single HTTP call to one OpenAI-compatible provider.
+// Returns { ok, status, content, error } and NEVER throws, so every caller can
+// surface a precise reason instead of a silent null.
+async function rawCall(provider, messages, { json = false, forceJsonFormat = true } = {}) {
   const key = typeof provider.key === 'function' ? provider.key() : provider.key;
-  if (!key) return null;
+  if (!key) return { ok: false, status: 0, error: 'missing_api_key' };
+  const body = { model: provider.model, messages, temperature: json ? 0 : 0.7 };
+  if (json && forceJsonFormat) body.response_format = { type: 'json_object' };
+
+  let res;
   try {
-    const body = {
-      model: provider.model,
-      messages,
-      temperature: json ? 0 : 0.7,
-    };
-    if (json) body.response_format = { type: 'json_object' };
-    const res = await fetch(provider.url, {
+    res = await fetch(provider.url, {
       method: 'POST',
-      headers: {
-        Authorization: `Bearer ${key}`,
-        'Content-Type': 'application/json',
-      },
+      headers: { Authorization: `Bearer ${key}`, 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
     });
-    if (!res.ok) return null;
-    const data = await res.json();
-    const content = data.choices?.[0]?.message?.content ?? '';
-    if (!json) return { provider: provider.name, model: provider.model, content };
-    const parsed = JSON.parse(content);
-    if (!Array.isArray(parsed.ranking)) return null;
-    return {
-      model: provider.model,
-      provider: provider.name,
-      ranking: parsed.ranking,
-      reason: parsed.reason ?? '',
-    };
-  } catch {
+  } catch (e) {
+    return { ok: false, status: 0, error: 'network: ' + (e.message || 'fetch failed') };
+  }
+
+  const raw = await res.text().catch(() => '');
+  if (!res.ok) {
+    // Many providers (e.g. some Gemini/Cerebras models) reject response_format.
+    // Retry once WITHOUT it before giving up.
+    if (json && forceJsonFormat &&
+        (res.status === 400 || res.status === 404 || res.status === 422 || /response_format|json|schema/i.test(raw))) {
+      return rawCall(provider, messages, { json, forceJsonFormat: false });
+    }
+    let msg = raw;
+    try { msg = JSON.parse(raw)?.error?.message || raw; } catch {}
+    return { ok: false, status: res.status, error: String(msg || res.statusText || 'request_failed').slice(0, 300) };
+  }
+
+  let data;
+  try { data = JSON.parse(raw); } catch { return { ok: false, status: res.status, error: 'bad_json_response' }; }
+  const content = data.choices?.[0]?.message?.content ?? '';
+  return { ok: true, status: res.status, content };
+}
+
+// Ranking/chat wrapper used by the judge path. Returns a normalised vote (json)
+// or raw-content object (chat), or null on failure (so callers can filter).
+async function callOne(provider, messages, { json = true } = {}) {
+  const r = await rawCall(provider, messages, { json });
+  if (!r.ok) {
+    console.error(`[ai] ${provider.name} failed (${r.status}): ${r.error}`);
     return null;
   }
+  if (!json) return { provider: provider.name, model: provider.model, content: r.content };
+  const parsed = extractJson(r.content);
+  if (!parsed || !Array.isArray(parsed.ranking)) {
+    console.error(`[ai] ${provider.name} returned an unparseable ranking`);
+    return null;
+  }
+  return {
+    model: provider.model,
+    provider: provider.name,
+    ranking: parsed.ranking,
+    reason: parsed.reason ?? '',
+  };
 }
 
 // Merge multiple AI rankings into one consensus ranking via Borda count.
@@ -203,15 +239,21 @@ export async function judgeWithRanking(question, outcome, options) {
 export async function chatProvider(id, messages) {
   const p = await getProvider(id);
   if (!p) return { error: 'no_such_provider' };
-  if (!p.hasKey) return { error: 'no_key' };
-  const r = await callOne(p, messages, { json: false });
-  if (!r) return { error: 'no_response' };
+  if (!p.hasKey) return { error: 'missing_api_key' };
+  const r = await rawCall(p, messages, { json: false });
+  if (!r.ok) return { error: r.error || 'no_response', status: r.status };
   return { content: r.content, provider: p.name, model: p.model };
 }
 
-// Quick liveness probe used by the admin "test" button.
+// Quick liveness probe used by the admin "test" button. Surfaces the real
+// HTTP status + error text so a bad key / wrong model / dead endpoint is obvious.
 export async function testProvider(id) {
-  return chatProvider(id, [{ role: 'user', content: 'Reply with just the word: ok' }]);
+  const p = await getProvider(id);
+  if (!p) return { ok: false, error: 'no_such_provider' };
+  if (!p.hasKey) return { ok: false, error: 'missing_api_key', provider: p.name, model: p.model };
+  const r = await rawCall(p, [{ role: 'user', content: 'Reply with just the word: ok' }], { json: false });
+  if (!r.ok) return { ok: false, status: r.status, error: r.error, provider: p.name, model: p.model };
+  return { ok: true, provider: p.name, model: p.model, content: (r.content || '').trim().slice(0, 120) };
 }
 
 // Back-compat single/all helpers (json ranking style).
