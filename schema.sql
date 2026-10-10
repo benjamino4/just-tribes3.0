@@ -152,3 +152,34 @@ INSERT INTO app_settings (key, value) VALUES
   ('antechamber_forced_open', 'false'),
   ('antechamber_announced',   'false')
 ON CONFLICT (key) DO NOTHING;
+
+-- ══════════════════════════════════════════════════
+-- DAILY REPLIES  (the "what you actually wanted to say" layer)
+--   One reply per player per challenge. No edits, no deletes. Written only
+--   AFTER the reveal, so it never influences scoring. Capped to 280 chars.
+--   status: pending  → private, waiting in the moderation queue
+--           featured → admin-picked, shown anonymously under the challenge
+--           rejected → silently dropped (AI slur/URL filter) OR admin-rejected;
+--                      always stays private to the writer either way
+--   auto_flag: TRUE when the slur/URL filter rejected it before the queue
+--   admin_note: optional one-line comment the admin writes on a featured reply
+-- ══════════════════════════════════════════════════
+CREATE TABLE IF NOT EXISTS replies (
+  id            SERIAL PRIMARY KEY,
+  challenge_id  INTEGER NOT NULL,
+  telegram_id   BIGINT NOT NULL,
+  body          TEXT NOT NULL,
+  status        TEXT DEFAULT 'pending',   -- pending | featured | rejected
+  auto_flag     BOOLEAN DEFAULT FALSE,
+  admin_note    TEXT,
+  created_at    TIMESTAMPTZ DEFAULT NOW(),
+  reviewed_at   TIMESTAMPTZ,
+  UNIQUE(telegram_id, challenge_id)
+);
+CREATE INDEX IF NOT EXISTS idx_replies_challenge ON replies(challenge_id);
+CREATE INDEX IF NOT EXISTS idx_replies_status    ON replies(status);
+
+-- Self-heal for legacy DBs created before the replies feature.
+ALTER TABLE replies ADD COLUMN IF NOT EXISTS auto_flag  BOOLEAN DEFAULT FALSE;
+ALTER TABLE replies ADD COLUMN IF NOT EXISTS admin_note TEXT;
+ALTER TABLE replies ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;

@@ -112,6 +112,7 @@ function homeMenu() {
         [{ text: '◆ Quests', callback_data: 'quests' }, { text: '● Users', callback_data: 'users' }],
         [{ text: '▧ Broadcast', callback_data: 'bc' }, { text: '⚙ Mini App', callback_data: 'miniapp' }],
         [{ text: '◇ AI', callback_data: 'ai' }, { text: '⟡ Antechamber', callback_data: 'ante' }],
+        [{ text: '◍ Replies', callback_data: 'replies' }, { text: '⤓ Export data', callback_data: 'export' }],
         [{ text: '⚠ Danger Zone', callback_data: 'danger' }],
       ],
     },
@@ -252,6 +253,20 @@ bot.on('callback_query', async (query) => {
     if (data.startsWith('aitog:')) return aiToggle(chatId, data.slice('aitog:'.length));
     if (data.startsWith('aidel:')) return aiDelete(chatId, data.slice('aidel:'.length));
     if (data.startsWith('aitest:')) return aiTest(chatId, data.slice('aitest:'.length));
+
+    // daily replies (moderation / featuring)
+    if (data === 'replies') return repliesMenu(chatId);
+    if (data === 'rep_queue') return listReplyQueue(chatId);
+    if (data === 'rep_featured') return listFeatured(chatId);
+    if (data === 'rep_channel') { S.mode = 'reply_channel'; return send(chatId, '◍ *Reply broadcast channel*\n\nSend the @username or numeric id of the channel/group where featured replies should be posted (the admin bot must be an admin there). Send `-` to clear it (featured replies then only show in-app).', { reply_markup: { inline_keyboard: [[{ text: '‹ Replies', callback_data: 'replies' }]] } }); }
+    if (data.startsWith('repview:')) return viewReply(chatId, data.split(':')[1]);
+    if (data.startsWith('repfeat:')) return featureReply(chatId, data.split(':')[1], false);
+    if (data.startsWith('repfc:')) { S.mode = 'reply_comment'; S.ctx.rid = data.split(':')[1]; return send(chatId, '✎ Send a *one-line comment* to attach to this featured reply (shown anonymously beneath it), or send `-` to feature it with no comment.', { reply_markup: { inline_keyboard: [[{ text: '‹ Replies', callback_data: 'rep_queue' }]] } }); }
+    if (data.startsWith('repno:')) return rejectReply(chatId, data.split(':')[1]);
+
+    // data export (.txt documents)
+    if (data === 'export') return exportMenu(chatId);
+    if (data.startsWith('exp:')) return exportData(chatId, data.split(':')[1]);
 
     // danger zone (two-step confirm)
     if (data === 'dz_leader') return confirm(chatId, 'dz_leader', `zero out *all* ${UNIT} for every player (reset the leaderboard)`);
@@ -508,6 +523,19 @@ bot.on('message', async (msg) => {
         }
         S.chat.push({ role: 'assistant', content: r.content });
         return send(chatId, r.content || '(empty reply)', chatControls());
+      }
+      case 'reply_channel': {
+        const v = text.trim();
+        if (v === '-') { await setSetting('reply_channel', ''); reset(); return repliesMenu(chatId, '✓ Channel cleared — featured replies now show in-app only.'); }
+        await setSetting('reply_channel', v);
+        reset();
+        return repliesMenu(chatId, `✓ Featured replies will post to \`${esc(v)}\`. (Make sure this bot is an admin there.)`);
+      }
+      case 'reply_comment': {
+        const rid = S.ctx.rid;
+        const note = text.trim() === '-' ? null : text.trim().slice(0, 160);
+        reset();
+        return featureReply(chatId, rid, false, note);
       }
     }
   } catch (e) {
@@ -1038,6 +1066,240 @@ async function deleteUser(chatId, uid) {
 }
 
 // ═══ Mini-app-wide controls ═══════════════════
+// ═══ DAILY REPLIES — moderation + featuring ═══════════════════
+// Clean replies arrive in a pending queue; the admin may FEATURE 1–2 a day
+// (shown anonymously under the challenge, with an optional one-line comment and
+// an optional post to a Telegram channel), or REJECT them (they stay private to
+// the writer). Slur/URL-filtered replies never reach this queue at all.
+const MAX_FEATURE_PER_DAY = 2;
+
+async function repliesMenu(chatId, note) {
+  let pending = 0, featuredToday = 0, chq = null, chan = '';
+  try {
+    pending = (await q(`SELECT COUNT(*)::int c FROM replies WHERE status='pending'`)).rows[0].c;
+    featuredToday = (await q(`SELECT COUNT(*)::int c FROM replies WHERE status='featured' AND reviewed_at::date = NOW()::date`)).rows[0].c;
+    const today = new Date().toISOString().split('T')[0];
+    const { rows } = await q(`SELECT id, question FROM challenges WHERE challenge_date=$1`, [today]);
+    chq = rows[0] || null;
+    chan = (await getSetting('reply_channel', '')) || '';
+  } catch { /* table may not exist yet */ }
+  const body =
+    '◍ *Daily Replies*\n' +
+    (note ? `\n${note}\n` : '') +
+    `\nPending to review: *${pending}*\n` +
+    `Featured today: *${featuredToday} / ${MAX_FEATURE_PER_DAY}*\n` +
+    `Today's call: ${chq ? `_${esc(chq.question).slice(0, 48)}_` : '_none_'}\n` +
+    `Broadcast channel: ${chan ? `\`${esc(chan)}\`` : '_in-app only_'}`;
+  const kb = [
+    [{ text: `⌘ Review queue${pending ? ' · ' + pending : ''}`, callback_data: 'rep_queue' }],
+    [{ text: '★ Featured (recent)', callback_data: 'rep_featured' }],
+    [{ text: '◈ Set broadcast channel', callback_data: 'rep_channel' }],
+    [{ text: '↻ Refresh', callback_data: 'replies' }],
+    backRow,
+  ];
+  send(chatId, body, { reply_markup: { inline_keyboard: kb } });
+}
+
+async function listReplyQueue(chatId) {
+  const { rows } = await q(
+    `SELECT r.id, r.body, r.created_at, u.first_name, u.username, u.telegram_id,
+            c.question, c.challenge_date
+     FROM replies r
+     LEFT JOIN users u ON u.telegram_id = r.telegram_id
+     LEFT JOIN challenges c ON c.id = r.challenge_id
+     WHERE r.status='pending'
+     ORDER BY r.created_at ASC LIMIT 25`);
+  if (!rows.length)
+    return send(chatId, '⌘ *Reply queue*\n\n_Nothing waiting._', { reply_markup: { inline_keyboard: [[{ text: '◍ Replies', callback_data: 'replies' }], backRow] } });
+  const kb = rows.map(r => [{
+    text: `${esc(r.first_name || r.username || r.telegram_id)} · ${esc(r.body).slice(0, 28)}`,
+    callback_data: 'repview:' + r.id,
+  }]);
+  kb.push([{ text: '◍ Replies', callback_data: 'replies' }], backRow);
+  send(chatId, `⌘ *Reply queue* (${rows.length})\n\nTap one to read it and decide.`, { reply_markup: { inline_keyboard: kb } });
+}
+
+async function viewReply(chatId, rid) {
+  const { rows } = await q(
+    `SELECT r.*, u.first_name, u.username, c.question
+     FROM replies r
+     LEFT JOIN users u ON u.telegram_id = r.telegram_id
+     LEFT JOIN challenges c ON c.id = r.challenge_id
+     WHERE r.id=$1`, [rid]);
+  if (!rows.length) return send(chatId, 'That reply is gone.', { reply_markup: { inline_keyboard: [[{ text: '⌘ Queue', callback_data: 'rep_queue' }], backRow] } });
+  const r = rows[0];
+  const who = esc(r.first_name || r.username || r.telegram_id);
+  const kb = { inline_keyboard: [
+    [{ text: '★ Feature', callback_data: 'repfeat:' + rid }, { text: '✎ Feature + comment', callback_data: 'repfc:' + rid }],
+    [{ text: '✗ Reject', callback_data: 'repno:' + rid }],
+    [{ text: '⌘ Queue', callback_data: 'rep_queue' }], backRow,
+  ] };
+  send(chatId,
+    `◍ *Reply*\n\nPlayer: ${who} (\`${r.telegram_id}\`)\nCall: _${esc(r.question || '').slice(0, 48)}_\nStatus: *${esc(r.status)}*\n\n“${esc(r.body)}”`,
+    { reply_markup: kb });
+}
+
+async function featureReply(chatId, rid, _unused, note = null) {
+  const back = { reply_markup: { inline_keyboard: [[{ text: '⌘ Queue', callback_data: 'rep_queue' }], backRow] } };
+  const { rows } = await q(`SELECT * FROM replies WHERE id=$1`, [rid]);
+  if (!rows.length) return send(chatId, 'That reply is gone.', back);
+  const r = rows[0];
+  if (r.status === 'featured') return send(chatId, 'Already featured.', back);
+  // Soft daily cap (admin can override by rejecting then re-featuring).
+  const todayN = (await q(`SELECT COUNT(*)::int c FROM replies WHERE status='featured' AND reviewed_at::date = NOW()::date`)).rows[0].c;
+  if (todayN >= MAX_FEATURE_PER_DAY)
+    return send(chatId, `⚠ You've already featured *${todayN}* replies today (cap ${MAX_FEATURE_PER_DAY}). Try again tomorrow, or reject one first.`, back);
+  await q(`UPDATE replies SET status='featured', admin_note=$2, reviewed_at=NOW() WHERE id=$1`, [rid, note]);
+  send(chatId, `★ Featured anonymously${note ? ' with your comment' : ''}. It now shows under the call in-app.`, back);
+  // Optional: post to the configured channel.
+  try {
+    const chan = (await getSetting('reply_channel', '')) || '';
+    if (chan && publicBot) {
+      const { rows: cq } = await q(`SELECT question FROM challenges WHERE id=$1`, [r.challenge_id]);
+      const q0 = cq[0]?.question ? `_${esc(cq[0].question).slice(0, 80)}_\n\n` : '';
+      const text = `◍ *A voice from HUBRIS*\n\n${q0}“${esc(r.body)}”` + (note ? `\n\n— ${esc(note)}` : '');
+      await publicBot.sendMessage(chan, text, { parse_mode: 'Markdown', disable_web_page_preview: true });
+    }
+  } catch (e) { console.error('reply channel post failed:', e.message); }
+}
+
+async function rejectReply(chatId, rid) {
+  const back = { reply_markup: { inline_keyboard: [[{ text: '⌘ Queue', callback_data: 'rep_queue' }], backRow] } };
+  const { rows } = await q(`UPDATE replies SET status='rejected', reviewed_at=NOW() WHERE id=$1 RETURNING id`, [rid]);
+  if (!rows.length) return send(chatId, 'That reply is gone.', back);
+  send(chatId, '✗ Rejected — it stays private to the writer and never appears in-app.', back);
+}
+
+async function listFeatured(chatId) {
+  const { rows } = await q(
+    `SELECT r.body, r.admin_note, r.reviewed_at, c.question
+     FROM replies r LEFT JOIN challenges c ON c.id = r.challenge_id
+     WHERE r.status='featured' ORDER BY r.reviewed_at DESC NULLS LAST LIMIT 10`);
+  if (!rows.length)
+    return send(chatId, '★ *Featured replies*\n\n_None featured yet._', { reply_markup: { inline_keyboard: [[{ text: '◍ Replies', callback_data: 'replies' }], backRow] } });
+  const body = rows.map(r =>
+    `• “${esc(r.body).slice(0, 120)}”` + (r.admin_note ? `\n   — ${esc(r.admin_note)}` : '')).join('\n\n');
+  send(chatId, `★ *Featured replies* (recent)\n\n${body}`, { reply_markup: { inline_keyboard: [[{ text: '◍ Replies', callback_data: 'replies' }], backRow] } });
+}
+
+// Called by the web server when a player posts a clean (pending) reply.
+export async function notifyNewReply({ replyId, user, question, body }) {
+  if (!ADMIN_SET) return;
+  const who = esc(user?.first_name || user?.username || user?.id);
+  const kb = { inline_keyboard: [
+    [{ text: '★ Feature', callback_data: 'repfeat:' + replyId }, { text: '✎ Feature + comment', callback_data: 'repfc:' + replyId }],
+    [{ text: '✗ Reject', callback_data: 'repno:' + replyId }, { text: '⌘ Queue', callback_data: 'rep_queue' }],
+  ] };
+  try {
+    await bot.sendMessage(ADMIN,
+      `◍ *New reply*\n\nPlayer: ${who} (\`${user?.id}\`)\nCall: _${esc(question || '').slice(0, 48)}_\n\n“${esc(body)}”`,
+      { parse_mode: 'Markdown', disable_web_page_preview: true, reply_markup: kb });
+  } catch (e) { console.error('notifyNewReply send failed:', e.message); }
+}
+
+// ═══ DATA EXPORT — dump tables as .txt documents via the bot ═══════════════════
+function exportMenu(chatId) {
+  send(chatId,
+    '⤓ *Export data*\n\nPick a dataset — it is delivered here as a plain `.txt` file you can save or share.',
+    { reply_markup: { inline_keyboard: [
+      [{ text: '▤ Calls', callback_data: 'exp:calls' }, { text: '◆ Quests', callback_data: 'exp:quests' }],
+      [{ text: '● Users', callback_data: 'exp:users' }, { text: '▨ Picks', callback_data: 'exp:picks' }],
+      [{ text: '◍ Replies', callback_data: 'exp:replies' }, { text: '◈ Everything', callback_data: 'exp:all' }],
+      backRow,
+    ] } });
+}
+
+// Send a string as a .txt document (Buffer upload, no temp file needed).
+function sendTxt(chatId, filename, content) {
+  const buf = Buffer.from(content || '(no data)\n', 'utf8');
+  return bot.sendDocument(chatId, buf, {}, { filename, contentType: 'text/plain' });
+}
+
+function rule(t) { return `${t}\n${'─'.repeat(Math.min(60, t.length + 4))}\n`; }
+
+async function dumpCalls() {
+  const { rows } = await q(`SELECT * FROM challenges ORDER BY challenge_date DESC`);
+  let out = rule(`HUBRIS — Calls (${rows.length})  ·  exported ${new Date().toISOString()}`);
+  for (const c of rows) {
+    out += `#${c.id}  ${c.challenge_date}  [${c.status}]\n`;
+    out += `Q: ${esc(c.question)}\n`;
+    out += `Options: ${(c.options || []).map(o => `${o.id}=${esc(o.text)}`).join(' | ')}\n`;
+    out += `Reveal: ${c.reveal_at ? fmt(c.reveal_at) : '-'}\n`;
+    if (c.ranking) out += `Ranking: ${JSON.stringify(c.ranking)}\n`;
+    if (c.outcome_text) out += `Outcome: ${esc(c.outcome_text)}\n`;
+    if (c.ai_reason) out += `Reason: ${esc(c.ai_reason)}\n`;
+    out += '\n';
+  }
+  return out;
+}
+async function dumpQuests() {
+  const { rows } = await q(`SELECT q.*, (SELECT COUNT(*)::int FROM quest_completions c WHERE c.quest_id=q.id AND c.status='approved') done FROM quests q ORDER BY created_at DESC`);
+  let out = rule(`HUBRIS — Quests (${rows.length})  ·  exported ${new Date().toISOString()}`);
+  for (const r of rows) {
+    out += `#${r.id}  ${r.is_active ? 'ACTIVE' : 'inactive'}  +${r.reward} ${UNIT}  ·  ${r.done} approved\n`;
+    out += `Title: ${esc(r.title)}\n`;
+    if (r.description) out += `Desc: ${esc(r.description)}\n`;
+    out += `Type: ${esc(r.action_type)}  Proof: ${esc(r.proof_type || 'none')}  T&C: ${r.requires_terms ? 'yes' : 'no'}\n`;
+    if (r.action_url) out += `URL: ${esc(r.action_url)}\n`;
+    out += '\n';
+  }
+  return out;
+}
+async function dumpUsers() {
+  const { rows } = await q(`SELECT telegram_id, first_name, username, points, streak, best_streak, handle, primordial_no, is_primordial, banned, referred_by FROM users ORDER BY points DESC`);
+  let out = rule(`HUBRIS — Users (${rows.length})  ·  exported ${new Date().toISOString()}`);
+  for (const u of rows) {
+    out += `${u.telegram_id}\t${esc(u.first_name || u.username || '')}` +
+      `${u.username ? ' (@' + esc(u.username) + ')' : ''}\t${u.points} ${UNIT}\tstreak ${u.streak}/${u.best_streak}` +
+      `${u.is_primordial ? `\tPrimordial No${u.primordial_no}` : ''}${u.handle ? ' @' + esc(u.handle) : ''}` +
+      `${u.banned ? '\tBANNED' : ''}${u.referred_by ? '\tref<-' + u.referred_by : ''}\n`;
+  }
+  return out;
+}
+async function dumpPicks() {
+  const { rows } = await q(
+    `SELECT p.telegram_id, p.challenge_id, p.choice, p.points_earned, c.challenge_date
+     FROM picks p LEFT JOIN challenges c ON c.id=p.challenge_id
+     ORDER BY p.challenge_id DESC, p.telegram_id`);
+  let out = rule(`HUBRIS — Picks (${rows.length})  ·  exported ${new Date().toISOString()}`);
+  for (const p of rows) {
+    out += `call#${p.challenge_id} (${p.challenge_date || '-'})\tuser ${p.telegram_id}\tchose ${esc(p.choice)}\t+${p.points_earned ?? 0}\n`;
+  }
+  return out;
+}
+async function dumpReplies() {
+  const { rows } = await q(
+    `SELECT r.id, r.challenge_id, r.telegram_id, r.body, r.status, r.auto_flag, r.admin_note, r.created_at
+     FROM replies r ORDER BY r.challenge_id DESC, r.id`);
+  let out = rule(`HUBRIS — Replies (${rows.length})  ·  exported ${new Date().toISOString()}`);
+  for (const r of rows) {
+    out += `#${r.id}  call#${r.challenge_id}  user ${r.telegram_id}  [${r.status}${r.auto_flag ? '/auto-flag' : ''}]\n`;
+    out += `  “${esc(r.body)}”\n`;
+    if (r.admin_note) out += `  note: ${esc(r.admin_note)}\n`;
+  }
+  return out;
+}
+
+async function exportData(chatId, which) {
+  const stamp = new Date().toISOString().slice(0, 10);
+  try {
+    bot.sendChatAction(chatId, 'upload_document').catch(() => {});
+    if (which === 'calls')   { await sendTxt(chatId, `hubris-calls-${stamp}.txt`, await dumpCalls()); }
+    else if (which === 'quests')  { await sendTxt(chatId, `hubris-quests-${stamp}.txt`, await dumpQuests()); }
+    else if (which === 'users')   { await sendTxt(chatId, `hubris-users-${stamp}.txt`, await dumpUsers()); }
+    else if (which === 'picks')   { await sendTxt(chatId, `hubris-picks-${stamp}.txt`, await dumpPicks()); }
+    else if (which === 'replies') { await sendTxt(chatId, `hubris-replies-${stamp}.txt`, await dumpReplies()); }
+    else if (which === 'all') {
+      const all = [await dumpCalls(), await dumpQuests(), await dumpUsers(), await dumpPicks(), await dumpReplies()]
+        .join('\n\n' + '═'.repeat(60) + '\n\n');
+      await sendTxt(chatId, `hubris-export-${stamp}.txt`, all);
+    }
+    send(chatId, '⤓ Export delivered above.', { reply_markup: { inline_keyboard: [[{ text: '⤓ Export', callback_data: 'export' }], backRow] } });
+  } catch (e) {
+    send(chatId, '⚠ Export failed: ' + (e.message || 'error'), { reply_markup: { inline_keyboard: [[{ text: '⤓ Export', callback_data: 'export' }], backRow] } });
+  }
+}
+
 function miniAppMenu(chatId) {
   send(chatId,
     '⚙ *Mini App controls*\n\nActions that touch the whole app at once.',
@@ -1225,6 +1487,23 @@ cron.schedule('* * * * *', async () => {
     await q(`ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_antechamber_at TIMESTAMPTZ`);
     await q(`CREATE TABLE IF NOT EXISTS app_settings (
               key TEXT PRIMARY KEY, value TEXT, updated_at TIMESTAMPTZ DEFAULT NOW())`);
+    // Daily-replies table (legacy DBs that predate the feature).
+    await q(`CREATE TABLE IF NOT EXISTS replies (
+              id SERIAL PRIMARY KEY,
+              challenge_id INTEGER NOT NULL,
+              telegram_id BIGINT NOT NULL,
+              body TEXT NOT NULL,
+              status TEXT DEFAULT 'pending',
+              auto_flag BOOLEAN DEFAULT FALSE,
+              admin_note TEXT,
+              created_at TIMESTAMPTZ DEFAULT NOW(),
+              reviewed_at TIMESTAMPTZ,
+              UNIQUE(telegram_id, challenge_id))`);
+    await q(`ALTER TABLE replies ADD COLUMN IF NOT EXISTS auto_flag BOOLEAN DEFAULT FALSE`);
+    await q(`ALTER TABLE replies ADD COLUMN IF NOT EXISTS admin_note TEXT`);
+    await q(`ALTER TABLE replies ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ`);
+    await q(`CREATE INDEX IF NOT EXISTS idx_replies_challenge ON replies(challenge_id)`);
+    await q(`CREATE INDEX IF NOT EXISTS idx_replies_status ON replies(status)`);
   } catch (e) { console.error('self-heal skipped:', e.message); }
 })();
 

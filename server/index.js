@@ -7,7 +7,8 @@ import 'dotenv/config';
 import { q } from './db.js';
 import { requireUser } from './auth.js';
 import { getSetting, getSettings, setSetting } from './settings.js';
-import { adminWebhookPath, handleAdminUpdate, registerAdminWebhook, notifyPendingProof, notifyNewPrimordial, notifyGatesOpen } from '../admin-bot/index.js';
+import { adminWebhookPath, handleAdminUpdate, registerAdminWebhook, notifyPendingProof, notifyNewPrimordial, notifyGatesOpen, notifyNewReply } from '../admin-bot/index.js';
+import { moderateReply } from './moderation.js';
 import { publicWebhookPath, handlePublicUpdate, registerPublicWebhook } from '../bot/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -462,6 +463,121 @@ app.post('/api/quests/:id/complete', requireUser, async (req, res) => {
   } catch (e) { console.error('notifyPendingProof failed:', e.message); }
 
   res.json({ ok: true, status: 'pending', reward: 0 });
+});
+
+// ═════════════════════════════════════════════════
+// DAILY REPLIES  —  one voice per player, per challenge, after the reveal
+//   • Only writable AFTER the reveal, so it can never leak a pick or sway
+//     scoring (picks are already locked + resolved by then).
+//   • One per player per challenge, no edits, no deletes (DB UNIQUE guard).
+//   • 280-char cap. Runs the slur/URL filter first: a tripped reply is stored
+//     as 'rejected' (silently) — the slot is spent, the writer still sees their
+//     own words, but it never reaches the admin queue or the public wall.
+//   • Clean replies land as 'pending' and are pushed to the admin to feature.
+// ══════════════════════════════════════════════════
+const REPLY_MAX = 280;
+
+// A challenge is "revealed" once its reveal time has passed (or it's resolved).
+function isRevealed(ch) {
+  if (!ch) return false;
+  if (ch.status && ch.status !== 'open') return true;
+  return ch.reveal_at ? new Date(ch.reveal_at) <= new Date() : false;
+}
+
+async function todaysChallenge() {
+  const today = new Date().toISOString().split('T')[0];
+  const { rows } = await q(
+    `SELECT id, challenge_date, question, reveal_at, status
+     FROM challenges WHERE challenge_date = $1`, [today]);
+  return rows[0] || null;
+}
+
+// Featured replies for the most recent PAST challenge that has any — "yesterday".
+async function yesterdayFeatured(beforeDate) {
+  try {
+    const { rows: ch } = await q(
+      `SELECT c.id, c.challenge_date, c.question
+       FROM challenges c
+       WHERE c.challenge_date < $1
+         AND EXISTS (SELECT 1 FROM replies r WHERE r.challenge_id = c.id AND r.status='featured')
+       ORDER BY c.challenge_date DESC LIMIT 1`, [beforeDate]);
+    if (!ch.length) return { challenge: null, replies: [] };
+    const { rows: reps } = await q(
+      `SELECT body, admin_note FROM replies
+       WHERE challenge_id=$1 AND status='featured'
+       ORDER BY reviewed_at ASC NULLS LAST, id ASC LIMIT 3`, [ch[0].id]);
+    return { challenge: { question: ch[0].question, date: ch[0].challenge_date }, replies: reps };
+  } catch { return { challenge: null, replies: [] }; }
+}
+
+app.get('/api/replies/today', requireUser, async (req, res) => {
+  const id = req.tgUser.id;
+  const ch = await todaysChallenge();
+  const today = new Date().toISOString().split('T')[0];
+  const revealed = isRevealed(ch);
+
+  let myReply = null, featured = [];
+  if (ch) {
+    const { rows: mine } = await q(
+      `SELECT body, status FROM replies WHERE telegram_id=$1 AND challenge_id=$2`, [id, ch.id]);
+    // Writer always sees their OWN reply, whatever its status (incl. rejected).
+    if (mine.length) myReply = { body: mine[0].body, status: mine[0].status };
+    if (revealed) {
+      const { rows: feat } = await q(
+        `SELECT body, admin_note FROM replies
+         WHERE challenge_id=$1 AND status='featured'
+         ORDER BY reviewed_at ASC NULLS LAST, id ASC LIMIT 3`, [ch.id]);
+      featured = feat;
+    }
+  }
+
+  const yest = await yesterdayFeatured(ch ? ch.challenge_date : today);
+
+  res.json({
+    hasChallenge: !!ch,
+    revealed,
+    canReply: !!ch && revealed && !myReply,
+    maxLen: REPLY_MAX,
+    myReply,
+    featured,
+    yesterday: yest,
+  });
+});
+
+app.post('/api/replies', requireUser, async (req, res) => {
+  const id = req.tgUser.id;
+  const body = (req.body?.body || '').toString().trim().replace(/\s+/g, ' ').slice(0, REPLY_MAX);
+  if (!body) return res.status(400).json({ error: 'empty' });
+
+  const ch = await todaysChallenge();
+  if (!ch) return res.status(404).json({ error: 'no_challenge' });
+  if (!isRevealed(ch)) return res.status(400).json({ error: 'not_revealed' });
+
+  // Spent your one slot already? (no edits, no deletes)
+  const { rows: existing } = await q(
+    `SELECT status FROM replies WHERE telegram_id=$1 AND challenge_id=$2`, [id, ch.id]);
+  if (existing.length) return res.status(409).json({ error: 'already_replied' });
+
+  // Slur / URL filter runs FIRST. A tripped reply is stored rejected + silent.
+  const verdict = moderateReply(body);
+  const status = verdict.clean ? 'pending' : 'rejected';
+
+  const ins = await q(
+    `INSERT INTO replies (challenge_id, telegram_id, body, status, auto_flag)
+     VALUES ($1,$2,$3,$4,$5) ON CONFLICT DO NOTHING RETURNING id`,
+    [ch.id, id, body, status, !verdict.clean]);
+  if (!ins.rows.length) return res.status(409).json({ error: 'already_replied' });
+
+  // Only clean replies reach the admin's featuring queue.
+  if (verdict.clean) {
+    try {
+      notifyNewReply({ replyId: ins.rows[0].id, user: req.tgUser, question: ch.question, body });
+    } catch (e) { console.error('notifyNewReply failed:', e.message); }
+  }
+
+  // Response is identical whether clean or silently rejected — the writer can't
+  // tell their reply was filtered; it simply shows as their private reply.
+  res.json({ ok: true, status: 'pending', myReply: { body, status: 'pending' } });
 });
 
 // ═════════════════════════════════════════════════════

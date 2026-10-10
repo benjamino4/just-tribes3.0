@@ -481,6 +481,23 @@ function showRevealOverlay(choiceId) {
   };
 }
 
+// Map a 1-based rank to a distinct colour on a gold→cold ramp. Rank 1 is the
+// warm Ichor gold; each lower rank cools toward slate. Deliberate break from
+// the monochrome shell — the ranking is the one place colour earns its keep.
+function rankColor(rank, total) {
+  const n = Math.max(1, total);
+  // t: 0 at the top (gold), 1 at the bottom (cold).
+  const t = n === 1 ? 0 : (rank - 1) / (n - 1);
+  const hue = 44 + (218 - 44) * t;        // 44 (gold) → 218 (cold blue)
+  const sat = 90 - (90 - 20) * t;         // vivid at top, muted at bottom
+  const light = 58 - (58 - 50) * t;
+  return {
+    c:    `hsl(${hue.toFixed(0)} ${sat.toFixed(0)}% ${light.toFixed(0)}%)`,
+    soft: `hsl(${hue.toFixed(0)} ${sat.toFixed(0)}% ${light.toFixed(0)}% / 0.16)`,
+    glow: `hsl(${hue.toFixed(0)} ${sat.toFixed(0)}% ${light.toFixed(0)}% / 0.40)`,
+  };
+}
+
 async function renderRevealed(mount, ch) {
   mount.innerHTML = `<div class="empty"><span class="loader"></span></div>`;
 
@@ -517,15 +534,19 @@ async function renderRevealed(mount, ch) {
             const opt = optionsById[r.id] || { text: r.id };
             const dist = distribution[r.id] || { percent: 0, count: 0 };
             const mine = r.id === myChoice;
+            const rc = rankColor(r.rank, ranking.length);
             return `
-              <div class="result-row ${r.rank === 1 ? 'best' : ''} ${mine ? 'mine' : ''}" style="--i:${i}">
+              <div class="result-row rank-tier ${r.rank === 1 ? 'best' : ''} ${mine ? 'mine' : ''}"
+                   style="--i:${i}; --rc:${rc.c}; --rc-soft:${rc.soft}; --rc-glow:${rc.glow}">
+                <div class="result-rankpip">${r.rank === 1 ? '★' : '#' + r.rank}</div>
                 <div class="result-letter">${escapeHtml(r.id.toUpperCase())}</div>
                 <div class="result-info">
                   <div class="result-text">${escapeHtml(opt.text)}</div>
                   <div class="result-meta">
-                    <span>Rank #${r.rank}</span>
-                    <span>+${r.points} Ichor</span>
-                    <span>${dist.count} picks</span>
+                    <span class="rm-rank">Rank #${r.rank}</span>
+                    <span class="rm-pts">+${r.points} Ichor</span>
+                    <span class="rm-picks">${dist.count} ${dist.count === 1 ? 'pick' : 'picks'}</span>
+                    ${mine ? '<span class="rm-mine">Your call</span>' : ''}
                   </div>
                   <div class="result-bar">
                     <div class="result-bar-fill" style="--w:${dist.percent}%"></div>
@@ -544,10 +565,109 @@ async function renderRevealed(mount, ch) {
           </div>
         ` : ''}
       </div>
+      <div id="replies-mount" class="replies-mount"></div>
     `;
+    renderReplies();
   } catch (e) {
     mount.innerHTML = `<div class="empty">Could not load result</div>`;
     console.error(e);
+  }
+}
+
+// ─── Daily replies — one voice per player, after the reveal ──────────────────
+// Rendered beneath the result. Shows (in order): yesterday's featured voices,
+// today's featured voices, the player's own reply (any status), and the compose
+// box when they still have their one slot. No edits, no deletes.
+async function renderReplies() {
+  const mount = document.getElementById('replies-mount');
+  if (!mount) return;
+  let data;
+  try { data = await api('/api/replies/today'); }
+  catch { mount.innerHTML = ''; return; }
+
+  const esc = escapeHtml;
+  const featuredHtml = (list, title) => (list && list.length) ? `
+    <div class="replies-block">
+      <div class="replies-title">${title}</div>
+      ${list.map(r => `
+        <div class="reply-feat">
+          <span class="reply-feat-q">“</span>
+          <div class="reply-feat-body">${esc(r.body)}</div>
+          ${r.admin_note ? `<div class="reply-feat-note">— ${esc(r.admin_note)}</div>` : ''}
+        </div>`).join('')}
+    </div>` : '';
+
+  const yest = data.yesterday && data.yesterday.replies && data.yesterday.replies.length
+    ? `
+      <div class="replies-block yest">
+        <div class="replies-title">Yesterday’s voices${data.yesterday.challenge?.question ? ` · <span class="replies-sub">${esc(data.yesterday.challenge.question).slice(0, 42)}</span>` : ''}</div>
+        ${data.yesterday.replies.map(r => `
+          <div class="reply-feat ghosted">
+            <div class="reply-feat-body">${esc(r.body)}</div>
+            ${r.admin_note ? `<div class="reply-feat-note">— ${esc(r.admin_note)}</div>` : ''}
+          </div>`).join('')}
+      </div>` : '';
+
+  let mineOrCompose = '';
+  if (data.myReply) {
+    mineOrCompose = `
+      <div class="reply-mine">
+        <div class="reply-mine-tag">Your reply · private</div>
+        <div class="reply-mine-body">${esc(data.myReply.body)}</div>
+        <div class="reply-mine-foot">One voice per call · no edits, no deletes.</div>
+      </div>`;
+  } else if (data.canReply) {
+    mineOrCompose = `
+      <div class="reply-compose">
+        <div class="reply-compose-head">
+          <span>Say your piece</span>
+          <span class="reply-count" id="reply-count">${data.maxLen}</span>
+        </div>
+        <textarea id="reply-text" class="reply-input" maxlength="${data.maxLen}"
+          placeholder="One line, once. Scoring is done — this is just your voice."></textarea>
+        <button id="reply-send" class="reply-send" type="button">
+          <span>Send your one reply</span>
+          <span class="reply-send-ic">${icon('arrow')}</span>
+        </button>
+        <div class="reply-fine">Private by default. The best few are featured anonymously.</div>
+      </div>`;
+  }
+
+  const featTitle = 'Featured voices';
+  const hasAny = yest || featuredHtml(data.featured, featTitle) || mineOrCompose;
+  mount.innerHTML = hasAny ? `
+    <div class="replies">
+      <div class="replies-rule"><span>The Agora</span></div>
+      ${featuredHtml(data.featured, featTitle)}
+      ${mineOrCompose}
+      ${yest}
+    </div>` : '';
+
+  // Wire the compose box.
+  const ta = document.getElementById('reply-text');
+  const cnt = document.getElementById('reply-count');
+  const btn = document.getElementById('reply-send');
+  if (ta && cnt) {
+    const upd = () => { cnt.textContent = String((data.maxLen || 280) - ta.value.length); };
+    ta.addEventListener('input', upd); upd();
+  }
+  if (btn && ta) {
+    btn.addEventListener('click', async () => {
+      const body = ta.value.trim();
+      if (!body) { shakeEl(ta); haptic('error'); return; }
+      btn.classList.add('busy'); btn.disabled = true;
+      try {
+        await api('/api/replies', { method: 'POST', body: JSON.stringify({ body }) });
+        haptic('success');
+        toast('Your voice is cast');
+        await renderReplies();
+      } catch (e) {
+        haptic('error');
+        if (e.error === 'already_replied') { toast('You’ve already spoken'); await renderReplies(); }
+        else toast('Could not send — try again');
+        btn.classList.remove('busy'); btn.disabled = false;
+      }
+    });
   }
 }
 
@@ -1382,8 +1502,62 @@ function initLiveMotion() {
   }
 }
 
+// ─── Universal tap / press feedback ─────────────────────────────────
+// Makes EVERY interactive element feel alive: a ripple blooms from the touch
+// point and the element gives a short press-in. One delegated pointerdown
+// listener, a pooled fixed-position ripple layer, transform/opacity only — no
+// per-element wiring, no layout thrash, nothing allocated in a rAF loop.
+const TAP_SELECTOR = [
+  'button', '.lock', '.ante-pill', '.summon-share', '.summon-link', '.copy-pill',
+  '.tab-item', '.deck-card', '.reply-send', '.quest', '.result-row',
+  '.ante-input', '[role="button"]', '.card-hint .lock',
+].join(',');
+
+let _tapLayer = null;
+function initTapFX() {
+  if (_tapLayer) return;
+  _tapLayer = document.createElement('div');
+  _tapLayer.id = 'tapfx-layer';
+  _tapLayer.setAttribute('aria-hidden', 'true');
+  document.body.appendChild(_tapLayer);
+
+  // A tiny pool of ripple nodes reused round-robin (no churn on rapid taps).
+  const POOL = 6;
+  const ripples = [];
+  for (let i = 0; i < POOL; i++) {
+    const r = document.createElement('span');
+    r.className = 'tapfx-ripple';
+    _tapLayer.appendChild(r);
+    ripples.push(r);
+  }
+  let rp = 0;
+
+  document.addEventListener('pointerdown', (e) => {
+    const el = e.target.closest(TAP_SELECTOR);
+    if (!el || el.disabled) return;
+
+    // Press-in on the element itself (transform only; auto-released).
+    el.classList.add('is-pressing');
+    const release = () => el.classList.remove('is-pressing');
+    el.addEventListener('pointerup', release, { once: true });
+    el.addEventListener('pointercancel', release, { once: true });
+    el.addEventListener('pointerleave', release, { once: true });
+
+    // Ripple from the touch point. Gold on gold-accented controls, else cool.
+    const warm = el.matches('.ante-pill, .reply-send, .summon-share, .lock, .result-row.best, .tab-item.active');
+    const r = ripples[rp = (rp + 1) % POOL];
+    r.classList.remove('go');
+    void r.offsetWidth;
+    r.style.left = e.clientX + 'px';
+    r.style.top = e.clientY + 'px';
+    r.dataset.tone = warm ? 'warm' : 'cool';
+    r.classList.add('go');
+  }, { passive: true });
+}
+
 async function boot() {
   initLiveMotion();
+  initTapFX();
 
   // The Antechamber gate decides everything: read /api/me FIRST, then route.
   let meRes;
