@@ -247,6 +247,7 @@ bot.on('callback_query', async (query) => {
     if (data === 'ai') return aiMenu(chatId);
     if (data === 'ai_list') return aiList(chatId);
     if (data === 'ai_pick') return aiPickToChat(chatId);
+    if (data === 'ai_persona') { S.mode = 'ai_persona'; return send(chatId, '✎ *AI persona / instructions*\n\nSend the system instructions the chat AI should follow — a role, voice, tone, or house rules (e.g. _“You are the Oracle of HUBRIS. Answer in terse, mythic one-liners.”_).\n\nThis is prepended to every new chat you open here. Send `-` to clear it.\n\n/cancel to stop.', { reply_markup: { inline_keyboard: [[{ text: '‹ AI', callback_data: 'ai' }]] } }); }
     if (data.startsWith('aichat:')) return startChat(chatId, data.slice('aichat:'.length));
     if (data === 'ai_endchat') { const was = !!S.chat; reset(); return send(chatId, was ? '◇ Chat ended.' : 'No chat was open.', aiKb()); }
     if (data === 'ai_add') { S.mode = 'ai_add'; return send(chatId, '◇ *Register an AI provider*\n\nSend it on one line as:\n`name | endpoint_url | model | api_key`\n\nThe endpoint must be an OpenAI-compatible `chat/completions` URL, e.g.\n`myai | https://api.example.com/v1/chat/completions | gpt-4o-mini | sk-...`\n\n/cancel to stop.', { reply_markup: { inline_keyboard: [[{ text: '‹ AI', callback_data: 'ai' }]] } }); }
@@ -509,11 +510,22 @@ bot.on('message', async (msg) => {
         reset();
         return send(chatId, `◇ Provider *${esc(name)}* registered (#${id}). It is active and will now judge calls and is available to chat.`, aiKb());
       }
+      case 'ai_persona': {
+        const v = text.trim();
+        if (v === '-') { await setSetting('ai_persona', ''); reset(); return send(chatId, '✓ Persona cleared — chats now open with no custom instructions.', aiKb()); }
+        await setSetting('ai_persona', v.slice(0, 1200));
+        reset();
+        return send(chatId, '✓ Persona saved. Every new chat you open will start with these instructions.', aiKb());
+      }
       case 'ai_chat': {
         if (!S.chat || !S.chatId) { reset(); return send(chatId, 'Chat is no longer open.', aiKb()); }
         S.chat.push({ role: 'user', content: text });
-        // keep history bounded (last ~20 turns)
-        if (S.chat.length > 40) S.chat = S.chat.slice(-40);
+        // keep history bounded (last ~20 turns) but always preserve a leading
+        // system/persona message so the AI keeps its instructions.
+        if (S.chat.length > 40) {
+          const sys = S.chat[0] && S.chat[0].role === 'system' ? [S.chat[0]] : [];
+          S.chat = [...sys, ...S.chat.slice(-40 + sys.length)];
+        }
         bot.sendChatAction(chatId, 'typing').catch(() => {});
         const r = await chatProvider(S.chatId, S.chat);
         if (r.error) {
@@ -746,6 +758,7 @@ function aiKb() {
     [{ text: '◇ Providers & status', callback_data: 'ai_list' }],
     [{ text: '□ Test / toggle a provider', callback_data: 'ai_list' }],
     [{ text: '◈ Chat with an AI', callback_data: 'ai_pick' }],
+    [{ text: '✎ AI persona / instructions', callback_data: 'ai_persona' }],
     [{ text: '＋ Add a provider', callback_data: 'ai_add' }],
     backRow,
   ] } };
@@ -758,7 +771,12 @@ async function aiMenu(chatId) {
   const line = active.length
     ? `*${active.length}* provider${active.length > 1 ? 's' : ''} ready to judge & chat.`
     : '_No provider has a key yet._ Set `GROQ_API_KEY` / `CEREBRAS_API_KEY` / `GEMINI_API_KEY` in the environment, or add an OpenAI-compatible provider below.';
-  return send(chatId, `◇ *AI*\n\n${line}`, aiKb());
+  let persona = '';
+  try { persona = (await getSetting('ai_persona', '')) || ''; } catch {}
+  const personaLine = persona
+    ? `\n\n✎ *Persona set* — every chat opens with your custom instructions:\n_${esc(persona.slice(0, 180))}${persona.length > 180 ? '…' : ''}_`
+    : '\n\n✎ _No custom persona._ Tap “AI persona / instructions” to give the chat AI a voice, role, or house rules.';
+  return send(chatId, `◇ *AI*\n\n${line}${personaLine}`, aiKb());
 }
 
 async function aiList(chatId) {
@@ -838,7 +856,11 @@ async function startChat(chatId, id) {
   S.mode = 'ai_chat';
   S.chatId = p.id;
   S.chat = [];
-  return send(chatId, `◈ Chatting with *${esc(p.name)}* (${esc(p.model)}).\n\nSend a message. /cancel or ■ End chat to stop.`, chatControls());
+  let persona = '';
+  try { persona = (await getSetting('ai_persona', '')) || ''; } catch {}
+  if (persona.trim()) S.chat.push({ role: 'system', content: persona.trim() });
+  const personaNote = persona.trim() ? '\n\n✎ Using your saved persona.' : '';
+  return send(chatId, `◈ Chatting with *${esc(p.name)}* (${esc(p.model)}).${personaNote}\n\nSend a message. /cancel or ■ End chat to stop.`, chatControls());
 }
 
 // ═══ Quests ════════════════════════════

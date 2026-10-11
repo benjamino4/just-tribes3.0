@@ -1849,19 +1849,28 @@ html, body {
 .ante-seat-ic { font-size: 13px; line-height: 0; vertical-align: -2px; color: var(--accent); }
 .ante-seat-ic svg { width: 1em; height: 1em; }
 
-/* Primordial badge gem (replaces the old Nº number) — Ichor-gold diamond */
+/* Primordial badge gem (replaces the old Nº number) — Ichor-gold diamond.
+   Sized to FILL the whole badge circle: it sits as a centred layer behind the
+   label/handle text, spanning the ring's inner diameter. */
 .prim-badge-gem {
-  position: relative; z-index: 1;
-  font-size: 54px; line-height: 0; color: var(--accent);
-  margin: 2px 0 6px;
-  filter: drop-shadow(0 2px 14px var(--accent-glow));
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  display: grid; place-items: center;
+  font-size: 196px; line-height: 0; color: var(--accent);
+  pointer-events: none;
+  filter: drop-shadow(0 2px 22px var(--accent-glow));
   animation: gem-breathe 3.4s var(--ease-in-out) infinite;
 }
 @keyframes gem-breathe {
-  0%,100% { transform: scale(1); filter: drop-shadow(0 2px 14px var(--accent-glow)); }
-  50%     { transform: scale(1.06); filter: drop-shadow(0 2px 22px var(--accent-glow)); }
+  0%,100% { transform: scale(1);    filter: drop-shadow(0 2px 18px var(--accent-glow)); }
+  50%     { transform: scale(1.035); filter: drop-shadow(0 2px 30px var(--accent-glow)); }
 }
 .prim-badge-gem svg { width: 1em; height: 1em; }
+/* text rides on top of the gem, with a dark halo so it stays readable */
+.prim-badge-label, .prim-badge-handle, .prim-badge-no { z-index: 2; }
+.prim-badge-label { text-shadow: 0 1px 10px var(--bg), 0 0 20px var(--bg); }
+.prim-badge-handle { text-shadow: 0 1px 10px var(--bg), 0 0 20px var(--bg); }
 
 /* diamond gem inside the header chip + leaderboard mark */
 .prim-chip { display: inline-flex; align-items: center; gap: 5px; }
@@ -2052,34 +2061,79 @@ html, body {
   overflow: hidden;
 }
 .tapfx-ripple {
+  --fx: rgba(255,255,255,0.7);
+  --fx-soft: rgba(255,255,255,0.16);
   position: absolute;
   top: 0; left: 0;
-  width: 14px; height: 14px;
-  margin: -7px 0 0 -7px;
+  width: 46px; height: 46px;
+  margin: -23px 0 0 -23px;
   border-radius: 50%;
   opacity: 0;
   transform: scale(0.2);
   will-change: transform, opacity;
-  background: radial-gradient(circle, rgba(255,255,255,0.55), rgba(255,255,255,0.12) 55%, transparent 72%);
+  /* the gooey liquid core — a soft blurred blob of “water” pushing out */
+  background: radial-gradient(circle at 50% 42%, var(--fx), var(--fx-soft) 48%, transparent 70%);
+  filter: blur(2px);
+}
+/* surface-tension wavefront — the thin “nylon” ring that stretches outward */
+.tapfx-ripple::after {
+  content: '';
+  position: absolute; inset: 0;
+  border-radius: 50%;
+  border: 1.5px solid var(--fx);
+  opacity: 0;
+  transform: scale(0.5);
+  will-change: transform, opacity;
+}
+/* wet specular glint that pops at the touch point */
+.tapfx-ripple::before {
+  content: '';
+  position: absolute;
+  top: 32%; left: 36%;
+  width: 22%; height: 22%;
+  border-radius: 50%;
+  background: radial-gradient(circle, rgba(255,255,255,0.95), transparent 70%);
+  opacity: 0;
+  will-change: transform, opacity;
 }
 .tapfx-ripple[data-tone="warm"] {
-  background: radial-gradient(circle, var(--accent-glow), rgba(246,196,86,0.14) 55%, transparent 72%);
+  --fx: var(--accent);
+  --fx-soft: rgba(246,196,86,0.18);
 }
 .tapfx-ripple[data-tone="cool"] {
-  background: radial-gradient(circle, rgba(150,180,255,0.42), rgba(150,180,255,0.10) 55%, transparent 72%);
+  --fx: rgba(150,180,255,0.75);
+  --fx-soft: rgba(150,180,255,0.14);
 }
-.tapfx-ripple.go { animation: tapfxBloom 0.5s var(--ease-out) forwards; }
-@keyframes tapfxBloom {
-  0%   { opacity: 0.9; transform: scale(0.2); }
-  100% { opacity: 0;   transform: scale(9); }
+.tapfx-ripple.go { animation: tapfxBlob 0.62s var(--ease-out) forwards; }
+.tapfx-ripple.go::after { animation: tapfxRing 0.66s var(--ease-out) forwards; }
+.tapfx-ripple.go::before { animation: tapfxGlint 0.46s var(--ease-out) forwards; }
+/* the core: squashes in like a water bulge then swells & relaxes (membrane give) */
+@keyframes tapfxBlob {
+  0%   { opacity: 0;    transform: scale(0.2); }
+  18%  { opacity: 0.95; transform: scale(0.72); }
+  45%  { opacity: 0.7;  transform: scale(1.5); }
+  100% { opacity: 0;    transform: scale(3.1); }
 }
+@keyframes tapfxRing {
+  0%   { opacity: 0;    transform: scale(0.5); }
+  22%  { opacity: 0.85; transform: scale(1); }
+  100% { opacity: 0;    transform: scale(3.6); }
+}
+@keyframes tapfxGlint {
+  0%   { opacity: 0;    transform: scale(0.4); }
+  30%  { opacity: 0.9;  transform: scale(1.1); }
+  100% { opacity: 0;    transform: scale(0.6); }
+}
+/* press-in: a soft jelly give. On release the class is removed and elements
+   that already carry a spring transform-transition (deck cards, locks, quests…)
+   rebound naturally — so we never override their existing transitions here. */
 .is-pressing {
-  transform: scale(0.955);
-  opacity: 0.9;
-  transition: transform 0.08s var(--ease-out), opacity 0.08s var(--ease-out);
+  transform: scale(0.93);
+  opacity: 0.92;
+  transition: transform 0.09s var(--ease-out), opacity 0.09s var(--ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
-  .tapfx-ripple.go { animation: none; }
+  .tapfx-ripple.go, .tapfx-ripple.go::after, .tapfx-ripple.go::before { animation: none; }
   .is-pressing { transform: none; opacity: 0.82; }
 }
 
