@@ -110,13 +110,34 @@
   </section>
 
   <div id="reveal-overlay" class="reveal-overlay hidden">
-    <div class="reveal-card">
-      <div class="reveal-ring"></div>
-      <div class="reveal-icon">◈</div>
-      <h2 class="reveal-title" id="reveal-title">Locked In</h2>
-      <p class="reveal-sub" id="reveal-sub">The judges are deliberating. Return at reveal time.</p>
-      <div class="reveal-time" id="reveal-time">—</div>
-      <button class="reveal-btn" id="reveal-btn">Got it</button>
+    <div class="reveal-flip" id="reveal-flip">
+      <!-- front: the card the player just locked, face down -->
+      <div class="reveal-face reveal-front">
+        <div class="reveal-ring"></div>
+        <div class="reveal-icon" id="reveal-icon" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.3" stroke-linejoin="round"><path d="M12 2 15 9l7 .6-5.3 4.6L18.3 21 12 17.3 5.7 21l1.6-6.8L2 9.6 9 9z"/></svg>
+        </div>
+        <h2 class="reveal-title">Locked In</h2>
+        <p class="reveal-sub">Turning your card&hellip;</p>
+      </div>
+      <!-- back: the admin's details for this option, then your opinion -->
+      <div class="reveal-face reveal-back">
+        <div class="reveal-opt-letter" id="reveal-opt-letter">&mdash;</div>
+        <h2 class="reveal-title" id="reveal-title">Locked In</h2>
+        <div class="reveal-detail" id="reveal-detail"></div>
+        <div class="reveal-op" id="reveal-op">
+          <label class="reveal-op-label" for="reveal-opinion">Your take <span>(optional)</span></label>
+          <textarea id="reveal-opinion" class="reveal-opinion" maxlength="280" rows="3" placeholder="Why this call? Say your piece…"></textarea>
+          <div class="reveal-op-foot"><span class="reveal-op-count" id="reveal-op-count">0/280</span></div>
+          <div class="reveal-actions">
+            <button class="reveal-btn ghost" id="reveal-keep" type="button">Keep private</button>
+            <button class="reveal-btn" id="reveal-send" type="button">Send anonymously</button>
+          </div>
+          <p class="reveal-op-note" id="reveal-op-note">Anonymous takes are moderated before anyone sees them.</p>
+        </div>
+        <div class="reveal-time" id="reveal-time">&mdash;</div>
+        <button class="reveal-btn ghost wide" id="reveal-btn" type="button">Got it</button>
+      </div>
     </div>
   </div>
 

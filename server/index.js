@@ -580,6 +580,56 @@ app.post('/api/replies', requireUser, async (req, res) => {
   res.json({ ok: true, status: 'pending', myReply: { body, status: 'pending' } });
 });
 
+// ─── Post-pick opinion ────────────────────────────────────────────────
+// Captured right after a player locks a card: an optional "take" they can
+// keep private (writer-only) OR send anonymously to the group. Reuses the
+// replies table (one take per player per challenge). Anonymous takes run the
+// slur/URL filter FIRST — a tripped take is stored rejected + silent (the
+// writer can't tell), exactly like the Agora. Clean ones hit the admin's
+// featuring queue, which posts them to the configured group/channel.
+app.post('/api/opinion', requireUser, async (req, res) => {
+  const id = req.tgUser.id;
+  const challengeId = Number(req.body?.challengeId);
+  const visibility = req.body?.visibility === 'public' ? 'public' : 'private';
+  const body = (req.body?.body || '').toString().trim().replace(/\s+/g, ' ').slice(0, REPLY_MAX);
+  if (!challengeId) return res.status(400).json({ error: 'no_challenge' });
+  if (!body) return res.json({ ok: true, status: 'empty' });   // nothing to store
+
+  // Must have actually locked a card on this challenge.
+  const { rows: pk } = await q(
+    `SELECT 1 FROM picks WHERE telegram_id=$1 AND challenge_id=$2`, [id, challengeId]);
+  if (!pk.length) return res.status(403).json({ error: 'not_picked' });
+
+  // One take per challenge (shared with the Agora reply — whoever writes first).
+  const { rows: existing } = await q(
+    `SELECT 1 FROM replies WHERE telegram_id=$1 AND challenge_id=$2`, [id, challengeId]);
+  if (existing.length) return res.status(409).json({ error: 'already_replied' });
+
+  if (visibility === 'private') {
+    await q(
+      `INSERT INTO replies (challenge_id, telegram_id, body, status, visibility)
+       VALUES ($1,$2,$3,'private','private') ON CONFLICT DO NOTHING`,
+      [challengeId, id, body]);
+    return res.json({ ok: true, status: 'private' });
+  }
+
+  // Anonymous → group. Filter first, then (if clean) push to the admin queue.
+  const verdict = moderateReply(body);
+  const status = verdict.clean ? 'pending' : 'rejected';
+  const { rows: ch } = await q(`SELECT question FROM challenges WHERE id=$1`, [challengeId]);
+  const ins = await q(
+    `INSERT INTO replies (challenge_id, telegram_id, body, status, auto_flag, visibility)
+     VALUES ($1,$2,$3,$4,$5,'public') ON CONFLICT DO NOTHING RETURNING id`,
+    [challengeId, id, body, status, !verdict.clean]);
+  if (ins.rows.length && verdict.clean) {
+    try {
+      notifyNewReply({ replyId: ins.rows[0].id, user: req.tgUser, question: ch[0]?.question || '', body });
+    } catch (e) { console.error('notifyNewReply failed:', e.message); }
+  }
+  // Identical response whether clean or silently rejected.
+  res.json({ ok: true, status: 'pending' });
+});
+
 // ═════════════════════════════════════════════════════
 // Static Mini App  +  SPA fallback
 // ═════════════════════════════════════════════════════

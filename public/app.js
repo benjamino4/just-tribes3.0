@@ -62,6 +62,14 @@ const ICONS = {
   camera:  '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5A2.5 2.5 0 0 1 5.5 6h1.3l.9-1.6A1.5 1.5 0 0 1 9.9 3.6h4.2a1.5 1.5 0 0 1 1.3.8L16.2 6h1.3A2.5 2.5 0 0 1 21 8.5v8A2.5 2.5 0 0 1 18.5 19h-13A2.5 2.5 0 0 1 3 16.5z"/><circle cx="12" cy="12.4" r="3.1"/></svg>',
   follow:  '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="8" r="3.2"/><path d="M3.6 19a5.4 5.4 0 0 1 10.8 0"/><path d="M18.5 7v6M15.5 10h6"/></svg>',
   check:   '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 6.5 9.2 17.5 4 12.3"/></svg>',
+  // Real brand / platform marks (monochrome, inherit currentColor).
+  xlogo:   '<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M17.53 3H20.5l-6.5 7.43L21.75 21h-5.98l-4.68-6.12L5.7 21H2.73l6.95-7.95L2.5 3h6.13l4.23 5.59L17.53 3Zm-1.05 16.2h1.65L7.6 4.71H5.83L16.48 19.2Z"/></svg>',
+  telegram:'<svg viewBox="0 0 24 24" width="1em" height="1em" fill="currentColor"><path d="M21.9 4.3 2.9 11.6c-1 .4-1 1.8.1 2.1l4.6 1.4 1.8 5.6c.2.7 1.1.9 1.6.3l2.5-2.7 4.7 3.5c.6.4 1.5.1 1.7-.6L23.9 5.5c.2-.9-.7-1.6-1.5-1.2Zm-3.4 3.3-7.6 6.9c-.1.1-.2.2-.2.4l-.3 3.3c0 .1-.2.1-.2 0l-1.4-4.3 9.3-6.5c.3-.2.6.2.4.3Z"/></svg>',
+  link_ext:'<svg viewBox="0 0 24 24" width="1em" height="1em" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 4h6v6M20 4l-9 9M18 14v4a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4"/></svg>',
+  // The uploaded clock, recoloured monochrome + Ichor-gold to fill the badge
+  // circle: dark-glass face, gold rim + quarter-arc + long hand, pale short
+  // hand, dark hub. Static crest (the badge itself breathes).
+  primClock:'<svg viewBox="0 0 512 512" width="1em" height="1em"><circle cx="256" cy="258" r="190" fill="rgba(13,13,17,0.55)" stroke="#F6C456" stroke-width="10"/><path d="M94 258a162 162 0 0 1 170-162" fill="none" stroke="#F6C456" stroke-width="12" stroke-linecap="round"/><path d="M256 258 337 128" fill="none" stroke="#F6C456" stroke-width="15" stroke-linecap="round"/><path d="M256 258 256 388" fill="none" stroke="#F5F5F8" stroke-width="12" stroke-linecap="round"/><circle cx="256" cy="258" r="18" fill="#F6C456"/><circle cx="256" cy="258" r="7" fill="#0D0D11"/></svg>',
 };
 function icon(name) { return ICONS[name] || ''; }
 
@@ -465,20 +473,70 @@ async function commitPick(choiceId) {
 
 function showRevealOverlay(choiceId) {
   const overlay = document.getElementById('reveal-overlay');
-  const timeEl = document.getElementById('reveal-time');
-  const subEl = document.getElementById('reveal-sub');
+  const flip = document.getElementById('reveal-flip');
+  const ch = state.challenge || {};
+  const opt = (ch.options || []).find(o => o.id === choiceId) || {};
+  const revealTime = new Date(ch.reveal_at);
 
-  const revealTime = new Date(state.challenge.reveal_at);
-  timeEl.textContent = `Reveal at ${formatTime(revealTime)}`;
-  subEl.textContent = 'You locked in ' + choiceId.toUpperCase() +
-    '. The AIs are ranking every path. The best call pays the most.';
+  // Back face: the admin's details for the chosen option, then your take.
+  document.getElementById('reveal-opt-letter').textContent = (choiceId || '?').toUpperCase();
+  document.getElementById('reveal-title').textContent = opt.text || 'Locked In';
+  const detail = (opt.details || '').trim();
+  document.getElementById('reveal-detail').innerHTML = detail
+    ? escapeHtml(detail).replace(/\n/g, '<br>')
+    : '<span class="muted">Path locked. The AIs are ranking every option — the best call pays the most.</span>';
+  document.getElementById('reveal-time').textContent = `Reveal at ${formatTime(revealTime)}`;
+
+  const opEl    = document.getElementById('reveal-op');
+  const ta      = document.getElementById('reveal-opinion');
+  const count   = document.getElementById('reveal-op-count');
+  const note    = document.getElementById('reveal-op-note');
+  const keepBtn = document.getElementById('reveal-keep');
+  const sendBtn = document.getElementById('reveal-send');
+  const doneBtn = document.getElementById('reveal-btn');
+
+  // Reset the overlay for a fresh pick.
+  flip.classList.remove('flipped');
+  opEl.style.display = '';
+  doneBtn.style.display = 'none';
+  ta.value = '';
+  count.textContent = '0/280';
+  note.className = 'reveal-op-note';
+  note.textContent = 'Anonymous takes are moderated before anyone sees them.';
+  keepBtn.disabled = sendBtn.disabled = false;
+
+  ta.oninput = () => { count.textContent = `${ta.value.length}/280`; };
+
+  async function submitOpinion(visibility) {
+    const body = ta.value.trim();
+    keepBtn.disabled = sendBtn.disabled = true;
+    try {
+      if (body) {
+        await api('/api/opinion', {
+          method: 'POST',
+          body: JSON.stringify({ challengeId: ch.id, body, visibility }),
+        });
+      }
+      haptic('success');
+    } catch (err) {
+      // Moderation rejections stay silent per spec — never shout at the writer.
+      haptic('light');
+    }
+    note.className = 'reveal-op-note ok';
+    note.textContent = visibility === 'public' && body
+      ? 'Sent for review — thanks for your take.'
+      : 'Locked in.';
+    opEl.style.display = 'none';
+    doneBtn.style.display = '';
+  }
+
+  keepBtn.onclick = () => { haptic('medium'); submitOpinion('private'); };
+  sendBtn.onclick = () => { haptic('medium'); submitOpinion('public'); };
+  doneBtn.onclick = () => { haptic('light'); overlay.classList.add('hidden'); };
 
   overlay.classList.remove('hidden');
-
-  document.getElementById('reveal-btn').onclick = () => {
-    haptic('light');
-    overlay.classList.add('hidden');
-  };
+  // Flip to the detail/opinion face once the card has settled.
+  requestAnimationFrame(() => setTimeout(() => flip.classList.add('flipped'), 420));
 }
 
 // Map a 1-based rank to a distinct colour on a gold→cold ramp. Rank 1 is the
@@ -805,10 +863,14 @@ const QUEST_ICON = {
   terms: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 13h5M10 17h5"/></svg>',
   link: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 14.5l5-5"/><path d="M10.5 7H8a4 4 0 0 0 0 8h2.5"/><path d="M13.5 17H16a4 4 0 0 0 0-8h-2.5"/></svg>',
 };
-// Follow quests use the uploaded "add user" mark; screenshot proofs use a camera.
-QUEST_ICON.x_follow = icon('follow');
+// X follows get the real X mark; group/channel joins get the Telegram mark;
+// generic follows use the "add user" mark; screenshot proofs use a camera.
+QUEST_ICON.x_follow = icon('xlogo');
 QUEST_ICON.follow = icon('follow');
 QUEST_ICON.screenshot = icon('camera');
+QUEST_ICON.join_group = icon('telegram');
+QUEST_ICON.join_channel = icon('telegram');
+QUEST_ICON.telegram = icon('telegram');
 function questIcon(t) { return QUEST_ICON[t] || QUEST_ICON.link; }
 const PROOF_HINT = { username: 'Submit username', link: 'Submit a link', screenshot: 'Submit a screenshot' };
 
@@ -835,8 +897,9 @@ function renderQuests() {
         if (q.requires_terms) tags.push('§ T&amp;C');
         if (needsProof) {
           const label = PROOF_HINT[q.proof_type] || 'Proof';
-          const mark = q.proof_type === 'screenshot' ? `<span class="tag-ic">${icon('camera')}</span>` : '▣ ';
-          tags.push(mark + label);
+          const markIc = q.proof_type === 'screenshot' ? 'camera'
+            : q.proof_type === 'link' ? 'link_ext' : 'terms';
+          tags.push(`<span class="tag-ic">${icon(markIc)}</span>` + label);
         }
       }
 
@@ -1283,7 +1346,7 @@ function standbyHtml(a) {
     <div class="ante-eyebrow">Welcome, Founder</div>
     <div class="prim-badge">
       <div class="prim-badge-ring"></div>
-      <div class="prim-badge-gem">${icon('diamond')}</div>
+      <div class="prim-badge-gem prim-badge-clock">${icon('primClock')}</div>
       <div class="prim-badge-label">Primordial</div>
       <div class="prim-badge-handle">@${escapeHtml(name)}</div>
     </div>
@@ -1502,62 +1565,38 @@ function initLiveMotion() {
   }
 }
 
-// ─── Universal tap / press feedback ─────────────────────────────────
-// Makes EVERY interactive element feel alive: a ripple blooms from the touch
-// point and the element gives a short press-in. One delegated pointerdown
-// listener, a pooled fixed-position ripple layer, transform/opacity only — no
-// per-element wiring, no layout thrash, nothing allocated in a rAF loop.
+// ─── Universal press feedback (iOS-style spring) ────────────────────
+// Every interactive element gives a short, springy press-in (scale + subtle
+// dim) with a light haptic tick — the way a native iOS control feels under
+// the thumb. One delegated pointerdown listener, transform/opacity only,
+// nothing allocated per tap and no rAF loop. No ripple, no "water".
 const TAP_SELECTOR = [
   'button', '.lock', '.ante-pill', '.summon-share', '.summon-link', '.copy-pill',
   '.tab-item', '.deck-card', '.reply-send', '.quest', '.result-row',
   '.ante-input', '[role="button"]', '.card-hint .lock',
 ].join(',');
 
-let _tapLayer = null;
-function initTapFX() {
-  if (_tapLayer) return;
-  _tapLayer = document.createElement('div');
-  _tapLayer.id = 'tapfx-layer';
-  _tapLayer.setAttribute('aria-hidden', 'true');
-  document.body.appendChild(_tapLayer);
-
-  // A tiny pool of ripple nodes reused round-robin (no churn on rapid taps).
-  const POOL = 6;
-  const ripples = [];
-  for (let i = 0; i < POOL; i++) {
-    const r = document.createElement('span');
-    r.className = 'tapfx-ripple';
-    _tapLayer.appendChild(r);
-    ripples.push(r);
-  }
-  let rp = 0;
+function initPressFX() {
+  if (initPressFX._on) return;
+  initPressFX._on = true;
 
   document.addEventListener('pointerdown', (e) => {
     const el = e.target.closest(TAP_SELECTOR);
-    if (!el || el.disabled) return;
+    if (!el || el.disabled || el.getAttribute('aria-disabled') === 'true') return;
 
-    // Press-in on the element itself (transform only; auto-released).
+    // Press-in (transform only; the spring release lives in the CSS transition).
     el.classList.add('is-pressing');
+    haptic('light');
     const release = () => el.classList.remove('is-pressing');
     el.addEventListener('pointerup', release, { once: true });
     el.addEventListener('pointercancel', release, { once: true });
     el.addEventListener('pointerleave', release, { once: true });
-
-    // Ripple from the touch point. Gold on gold-accented controls, else cool.
-    const warm = el.matches('.ante-pill, .reply-send, .summon-share, .lock, .result-row.best, .tab-item.active');
-    const r = ripples[rp = (rp + 1) % POOL];
-    r.classList.remove('go');
-    void r.offsetWidth;
-    r.style.left = e.clientX + 'px';
-    r.style.top = e.clientY + 'px';
-    r.dataset.tone = warm ? 'warm' : 'cool';
-    r.classList.add('go');
   }, { passive: true });
 }
 
 async function boot() {
   initLiveMotion();
-  initTapFX();
+  initPressFX();
 
   // The Antechamber gate decides everything: read /api/me FIRST, then route.
   let meRes;

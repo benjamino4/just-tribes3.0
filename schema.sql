@@ -183,3 +183,5 @@ CREATE INDEX IF NOT EXISTS idx_replies_status    ON replies(status);
 ALTER TABLE replies ADD COLUMN IF NOT EXISTS auto_flag  BOOLEAN DEFAULT FALSE;
 ALTER TABLE replies ADD COLUMN IF NOT EXISTS admin_note TEXT;
 ALTER TABLE replies ADD COLUMN IF NOT EXISTS reviewed_at TIMESTAMPTZ;
+-- A take can be kept private (writer-only) or sent anonymously to the group.
+ALTER TABLE replies ADD COLUMN IF NOT EXISTS visibility TEXT DEFAULT 'public';

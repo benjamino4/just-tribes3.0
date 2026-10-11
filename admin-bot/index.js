@@ -33,6 +33,39 @@ import { getSetting, getSettings, setSetting } from '../server/settings.js';
 const ADMIN = Number(process.env.ADMIN_TELEGRAM_ID);
 const ADMIN_SET = Number.isFinite(ADMIN) && ADMIN > 0;
 
+// ── Admin roster: the env creator PLUS any co-admins stored in settings ──
+// The creator (ADMIN_TELEGRAM_ID) can never be removed; co-admins live in the
+// `extra_admins` setting (comma-separated numeric ids) and are merged in here.
+const adminIds = new Set();
+if (ADMIN_SET) adminIds.add(ADMIN);
+async function loadAdmins() {
+  try {
+    const raw = (await getSetting('extra_admins')) || '';
+    adminIds.clear();
+    if (ADMIN_SET) adminIds.add(ADMIN);
+    raw.split(',')
+      .map(s => Number(String(s).trim()))
+      .filter(n => Number.isFinite(n) && n > 0)
+      .forEach(n => adminIds.add(n));
+  } catch { /* keep whatever roster we already have */ }
+}
+loadAdmins();
+
+// ── Optional PIN lock (a second factor on top of the Telegram id check) ──
+// If an `admin_pin` is set, every admin CHAT must `/unlock <pin>` once per
+// process before any command works. Wrong guesses are rate-limited so the PIN
+// can't be brute-forced if someone ever gets hold of an admin account.
+const unlockedChats = new Set();       // chatIds unlocked in this process
+const pinTries = new Map();            // chatId -> { n, until }
+async function pinSet() {
+  try { return !!String((await getSetting('admin_pin')) || '').trim(); }
+  catch { return false; }
+}
+function isUnlocked(chatId) { return unlockedChats.has(chatId); }
+function promptUnlock(chatId) {
+  return send(chatId, '🔒 *Locked.*\n\nThis control panel is PIN-protected. Send `/unlock <pin>` to continue.');
+}
+
 if (!process.env.ADMIN_BOT_TOKEN) {
   console.error('✗ ADMIN_BOT_TOKEN is missing. Set it in your environment (a DIFFERENT bot token from the public game bot) and restart.');
 }
@@ -65,7 +98,10 @@ async function openAppLink() {
   return MINI_APP_URL;
 }
 
-const isAdmin = (msg) => ADMIN_SET && msg?.from?.id === ADMIN;
+const isAdmin = (msg) => {
+  const id = msg?.from?.id;
+  return Number.isFinite(id) && adminIds.has(id);
+};
 const UNIT = 'Ichor';
 
 // Single-admin conversation state.
@@ -113,6 +149,7 @@ function homeMenu() {
         [{ text: '▧ Broadcast', callback_data: 'bc' }, { text: '⚙ Mini App', callback_data: 'miniapp' }],
         [{ text: '◇ AI', callback_data: 'ai' }, { text: '⟡ Antechamber', callback_data: 'ante' }],
         [{ text: '◍ Replies', callback_data: 'replies' }, { text: '⤓ Export data', callback_data: 'export' }],
+        [{ text: '⚿ Access', callback_data: 'access' }],
         [{ text: '⚠ Danger Zone', callback_data: 'danger' }],
       ],
     },
@@ -145,18 +182,39 @@ function onboard(msg) {
       `Your numeric Telegram ID is:\n\u2192 \`${id}\`\n\n` +
       'Set `ADMIN_TELEGRAM_ID` to that value in your environment (Render → the admin worker → Environment), redeploy, then send /start again.');
   }
-  // Configured but this isn't the admin.
-  return send(chatId,
-    '⛔ *Not authorized.*\n\n' +
-    `This admin bot only answers the creator.\n\nYour ID is \`${id}\`.\n` +
-    (id !== ADMIN
-      ? `The configured admin ID is \`${ADMIN}\`. If that’s wrong, update \`ADMIN_TELEGRAM_ID\` and redeploy.`
-      : ''));
+  // Configured, but the sender is not on the admin roster. Give nothing away
+  // — no ids, no hints about who the admin is.
+  return send(chatId, '⛔ *Not authorized.*');
 }
 
-bot.onText(/^\/(start|home|menu)\b/, (msg) => {
+bot.onText(/^\/(start|home|menu)\b/, async (msg) => {
   if (!isAdmin(msg)) return onboard(msg);
+  if (await pinSet() && !isUnlocked(msg.chat.id)) return promptUnlock(msg.chat.id);
   greet(msg.chat.id);
+});
+// Second-factor unlock. Only an admin can even attempt it; wrong guesses are
+// rate-limited (5 tries → 60s cooldown) to resist brute force.
+bot.onText(/^\/unlock\b(.*)/, async (msg, m) => {
+  const id = msg.from.id, chatId = msg.chat.id;
+  if (!adminIds.has(id)) return onboard(msg);
+  const pin = String((await getSetting('admin_pin')) || '').trim();
+  if (!pin) return send(chatId, '✓ No PIN is set — you already have full access.', homeMenu());
+  const t = pinTries.get(chatId) || { n: 0, until: 0 };
+  if (t.until > Date.now()) {
+    const secs = Math.ceil((t.until - Date.now()) / 1000);
+    return send(chatId, `⛔ Too many attempts. Try again in ${secs}s.`);
+  }
+  const given = String(m[1] || '').trim();
+  if (!given) return send(chatId, 'Send `/unlock <pin>` with your admin PIN.');
+  if (given === pin) {
+    unlockedChats.add(chatId);
+    pinTries.delete(chatId);
+    return greet(chatId);
+  }
+  t.n += 1;
+  if (t.n >= 5) { t.n = 0; t.until = Date.now() + 60000; }
+  pinTries.set(chatId, t);
+  return send(chatId, '⛔ Wrong PIN.');
 });
 bot.onText(/^\/myid\b/, (msg) => {
   send(msg.chat.id, `Your Telegram ID: \`${msg.from.id}\``);
@@ -174,7 +232,11 @@ bot.onText(/^\/help\b/, (msg) => {
 });
 // ═══ Callback router ═════════════════════════
 bot.on('callback_query', async (query) => {
-  if (!ADMIN_SET || query.from.id !== ADMIN) { try { bot.answerCallbackQuery(query.id); } catch {} return; }
+  if (!adminIds.has(query.from.id)) { try { bot.answerCallbackQuery(query.id); } catch {} return; }
+  if (await pinSet() && !isUnlocked(query.message.chat.id)) {
+    try { bot.answerCallbackQuery(query.id); } catch {}
+    return promptUnlock(query.message.chat.id);
+  }
   const chatId = query.message.chat.id;
   const data = query.data || '';
   try { bot.answerCallbackQuery(query.id); } catch {}
@@ -224,7 +286,7 @@ bot.on('callback_query', async (query) => {
     if (data.startsWith('del:')) return deleteCall(chatId, data.split(':')[1]);
     if (data.startsWith('cedit:')) return editCallMenu(chatId, data.split(':')[1]);
     if (data.startsWith('cedq:')) { S.mode = 'edit_question'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *question* text.'); }
-    if (data.startsWith('cedo:')) { S.mode = 'edit_options'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *options*, one per line (`id|text` or plain). 2–6.\n\n⚠ Existing picks keep their letter; keep ids if picks exist.'); }
+    if (data.startsWith('cedo:')) { S.mode = 'edit_options'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *options*, one per line (`id|text`, `id|text|details`, or plain). 2–6.\n\n⚠ Existing picks keep their letter; keep ids if picks exist.'); }
     if (data.startsWith('cedr:')) { S.mode = 'edit_reveal'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *reveal time*: `+8h` · `20:00` · `2026-10-09 20:00`'); }
     if (data.startsWith('creopen:')) return reopenCall(chatId, data.split(':')[1]);
     if (data.startsWith('cann:')) return announceCall(chatId, data.split(':')[1]);
@@ -275,6 +337,12 @@ bot.on('callback_query', async (query) => {
     if (data === 'dz_calls') return confirm(chatId, 'dz_calls', 'delete *all* calls and their picks');
     if (data === 'dz_users') return confirm(chatId, 'dz_users', 'delete *all* users (full wipe of players)');
     if (data.startsWith('do:')) return runDanger(chatId, data.split(':')[1]);
+
+    // access & security (admin roster + optional PIN)
+    if (data === 'access') return accessMenu(chatId);
+    if (data === 'adm_add') { S.mode = 'admin_add'; return send(chatId, '⚿ *Add an admin*\n\nSend the new admin’s *numeric Telegram id*. They can get it by sending `/start` to this bot — it is now shown to them.\n\n/cancel to stop.', { reply_markup: { inline_keyboard: [[{ text: '‹ Access', callback_data: 'access' }]] } }); }
+    if (data.startsWith('adm_rm:')) return removeAdmin(chatId, data.split(':')[1]);
+    if (data === 'adm_pin') { S.mode = 'admin_pin'; return send(chatId, '⚿ *Set / change the PIN*\n\nSend a new PIN (4–32 chars). Every admin chat must then `/unlock <pin>` once per restart. Send `-` to *remove* the PIN entirely.\n\n/cancel to stop.', { reply_markup: { inline_keyboard: [[{ text: '‹ Access', callback_data: 'access' }]] } }); }
   } catch (e) {
     console.error(e);
     send(chatId, '⚠ ' + (e.message || 'error'), homeMenu());
@@ -323,7 +391,8 @@ function startNewCall(chatId) {
 
 // ═══ Text / conversation handler ══════════════════
 bot.on('message', async (msg) => {
-  if (!ADMIN_SET || msg?.from?.id !== ADMIN) return;   // ignore the whole world but the creator
+  if (!adminIds.has(msg?.from?.id)) return;   // ignore everyone but the admin roster
+  if (await pinSet() && !isUnlocked(msg.chat.id)) return;  // must /unlock first
   if (!msg.text) return;
   // Commands are handled elsewhere — except /skip, which some builder steps accept.
   if (msg.text.startsWith('/') && msg.text.trim() !== '/skip') return;
@@ -332,11 +401,35 @@ bot.on('message', async (msg) => {
   const text = msg.text.trim();
   try {
     switch (S.mode) {
+      case 'admin_add': {
+        const id = Number(text.replace(/[^\d]/g, ''));
+        if (!Number.isFinite(id) || id <= 0) return send(chatId, 'That is not a valid numeric id. Try again, or /cancel.');
+        const cur = ((await getSetting('extra_admins')) || '').split(',').map(s => s.trim()).filter(Boolean);
+        if (!cur.includes(String(id))) cur.push(String(id));
+        await setSetting('extra_admins', cur.join(','));
+        await loadAdmins();
+        reset();
+        return accessMenu(chatId, `✓ Added admin \`${id}\`.`);
+      }
+      case 'admin_pin': {
+        if (text === '-') {
+          await setSetting('admin_pin', '');
+          unlockedChats.clear();
+          reset();
+          return accessMenu(chatId, '✓ PIN removed. The panel is no longer PIN-locked.');
+        }
+        if (text.length < 4 || text.length > 32) return send(chatId, 'PIN must be 4–32 characters. Try again, or send `-` to remove.');
+        await setSetting('admin_pin', text);
+        unlockedChats.clear();
+        unlockedChats.add(chatId);   // the admin who just set it stays unlocked here
+        reset();
+        return accessMenu(chatId, '✓ PIN set. Other admin chats must `/unlock <pin>` once per restart.');
+      }
       case 'new_question':
         S.draft.question = text;
         S.mode = 'new_options';
         return send(chatId,
-          '＋ *New Call* — step 2 / 3\n\nSend the *options*, one per line. Either plain lines or `id|text`:\n\n`Hold the line`\n`Push now`\n\n(2–6 options)');
+          '＋ *New Call* — step 2 / 3\n\nSend the *options*, one per line. Plain, `id|text`, or `id|text|details`:\n\n`Hold the line`\n`push|Push now|What charging early really costs us`\n\n(2–6 options · the optional 3rd field is the long-form detail shown behind the reveal card flip)');
       case 'new_options': {
         const opts = parseOptions(text);
         if (opts.length < 2) return send(chatId, 'Need at least 2 options. Try again.');
@@ -561,9 +654,17 @@ function parseOptions(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   const letters = 'abcdefgh';
   return lines.map((line, i) => {
+    // Supports:  plain text  |  id|text  |  id|text|details
+    // The optional 3rd field is the long-form “details” shown behind the
+    // reveal card flip in the Mini App.
     if (line.includes('|')) {
-      const [id, ...rest] = line.split('|');
-      return { id: id.trim().toLowerCase(), text: rest.join('|').trim() };
+      const parts = line.split('|').map(s => s.trim());
+      const id = parts[0].toLowerCase() || letters[i];
+      const txt = parts[1] || '';
+      const details = parts.slice(2).join('|').trim();
+      const o = { id, text: txt };
+      if (details) o.details = details;
+      return o;
     }
     return { id: letters[i], text: line };
   });
@@ -1095,7 +1196,45 @@ async function deleteUser(chatId, uid) {
 // the writer). Slur/URL-filtered replies never reach this queue at all.
 const MAX_FEATURE_PER_DAY = 2;
 
+// ═══ Access & security: admin roster + optional PIN ═══
+async function accessMenu(chatId, note) {
+  await loadAdmins();
+  const locked = await pinSet();
+  const ids = [...adminIds];
+  const rows = ids.map(id => {
+    const isOwner = ADMIN_SET && id === ADMIN;
+    const label = isOwner ? `★ ${id} (owner)` : `● ${id}`;
+    // The env-configured owner can't be removed from here (edit the env var).
+    return isOwner
+      ? [{ text: label, callback_data: 'noop' }]
+      : [{ text: label, callback_data: 'noop' }, { text: '✕ Remove', callback_data: 'adm_rm:' + id }];
+  });
+  const body =
+    '⚿ *Access & security*\n\n' +
+    (note ? note + '\n\n' : '') +
+    `*Admins (${ids.length})* — everyone here can command this bot.\n` +
+    `*PIN lock* — ${locked ? '🔒 ON (admins must /unlock each restart)' : 'off'}\n\n` +
+    'The env `ADMIN_TELEGRAM_ID` owner is marked ★ and can only be changed in the environment.';
+  return send(chatId, body, { reply_markup: { inline_keyboard: [
+    ...rows,
+    [{ text: '＋ Add admin', callback_data: 'adm_add' }],
+    [{ text: locked ? '⚿ Change / remove PIN' : '⚿ Set PIN', callback_data: 'adm_pin' }],
+    backRow,
+  ] } });
+}
+async function removeAdmin(chatId, idStr) {
+  const id = Number(idStr);
+  if (ADMIN_SET && id === ADMIN) return accessMenu(chatId, '⚠ The env-configured owner cannot be removed here.');
+  const cur = ((await getSetting('extra_admins')) || '').split(',').map(s => s.trim()).filter(Boolean);
+  const next = cur.filter(x => x !== String(id));
+  await setSetting('extra_admins', next.join(','));
+  await loadAdmins();
+  unlockedChats.delete(id);   // best-effort; chatId≈userId in private chats
+  return accessMenu(chatId, `✓ Removed admin \`${id}\`.`);
+}
+
 async function repliesMenu(chatId, note) {
+  // (access menu lives just above)
   let pending = 0, featuredToday = 0, chq = null, chan = '';
   try {
     pending = (await q(`SELECT COUNT(*)::int c FROM replies WHERE status='pending'`)).rows[0].c;
