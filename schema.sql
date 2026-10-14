@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS challenges (
   id              SERIAL PRIMARY KEY,
   challenge_date  DATE UNIQUE NOT NULL,
   question        TEXT NOT NULL,
-  options         JSONB NOT NULL,      -- [{ id, text }]
+  options         JSONB NOT NULL,      -- [{ id, text, details, points }]  (points optional: admin-set award for picking that option)
   outcome_text    TEXT,
   use_ai          BOOLEAN DEFAULT TRUE,
   reveal_at       TIMESTAMPTZ NOT NULL,
@@ -132,6 +132,10 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS referred_by           TEXT;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS is_primordial         BOOLEAN DEFAULT FALSE;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS primordial_no         INTEGER;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_antechamber_at TIMESTAMPTZ;
+-- Running total of Ichor this player has earned from the souls they referred
+-- (flat per-head bounty and/or a % cut of their picks). Shown on the Summon
+-- screen so referrals produce a visible, real, calculated result.
+ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_earned INTEGER DEFAULT 0;
 
 -- Case-insensitive uniqueness for handles; unique sigils; fast referral counts.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle ON users (lower(handle)) WHERE handle IS NOT NULL;
@@ -150,7 +154,16 @@ INSERT INTO app_settings (key, value) VALUES
   ('antechamber_enabled',     'true'),
   ('antechamber_threshold',   '50'),
   ('antechamber_forced_open', 'false'),
-  ('antechamber_announced',   'false')
+  ('antechamber_announced',   'false'),
+  -- Referral reward engine (admin-tunable from the admin bot):
+  --   referral_reward_type  : 'percent' = referrer earns N% of each referred
+  --                           soul's pick winnings (calculated every reveal);
+  --                           'points'  = flat N Ichor bounty the moment a new
+  --                           soul is attributed to the referrer.
+  --   referral_reward_value : the number N for whichever mode is active.
+  -- Default 0 = referrals award nothing until the admin sets a value.
+  ('referral_reward_type',    'percent'),
+  ('referral_reward_value',   '0')
 ON CONFLICT (key) DO NOTHING;
 
 -- ══════════════════════════════════════════════════

@@ -858,6 +858,8 @@ function showRewardOverlay(label, points) {
 const QUEST_ICON = {
   x_follow: null,  // resolved from ICONS below
   follow:   null,
+  x_like: '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 20.3l-1.3-1.17C6.06 14.86 3 12.1 3 8.73 3 6.17 5.02 4.2 7.6 4.2c1.46 0 2.86.67 3.78 1.73l.62.72.62-.72A5.02 5.02 0 0 1 16.4 4.2C18.98 4.2 21 6.17 21 8.73c0 3.37-3.06 6.13-7.7 10.4L12 20.3z"/></svg>',
+  x_retweet: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 8l3-3 3 3"/><path d="M7 5v9a3 3 0 0 0 3 3h7"/><path d="M20 16l-3 3-3-3"/><path d="M17 19v-9a3 3 0 0 0-3-3H7"/></svg>',
   task: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round"><path d="M4 12.5l5 5 11-12"/></svg>',
   research: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"><circle cx="11" cy="11" r="6"/><path d="M20 20l-4.6-4.6"/></svg>',
   terms: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14H7z"/><path d="M14 3v4h4"/><path d="M10 13h5M10 17h5"/></svg>',
@@ -1322,9 +1324,9 @@ function gateHtml(a) {
       <span class="ante-hero-clock">${icon('clock')}</span>
     </div>
     <div class="ante-eyebrow">The Antechamber</div>
-    <h1 class="ante-title">You stand before<br/>the sealed gates</h1>
-    <p class="ante-sub">Only the first few are admitted. Carve your name into the stone and claim the founder's mark — a badge the latecomers will never wear.</p>
-    <div class="ante-seat"><span class="ante-seat-ic">${icon('diamond')}</span> ${a.claimed ?? 0} founders already sworn in</div>
+    <h1 class="ante-title">Claim your spot<br/>before the gates open</h1>
+    <p class="ante-sub">Only the earliest few get in. Lock in your handle now to claim an early spot — a founder's mark the latecomers will never wear.</p>
+    <div class="ante-seat"><span class="ante-seat-ic">${icon('diamond')}</span> ${a.claimed ?? 0} spots already claimed</div>
     <div class="ante-field">
       <input id="ante-handle" class="ante-input" type="text" inputmode="text"
              autocomplete="off" autocapitalize="off" spellcheck="false"
@@ -1332,7 +1334,7 @@ function gateHtml(a) {
       <div id="ante-hint" class="ante-hint">3–16 chars · letters, numbers, _ · locked in forever once claimed</div>
     </div>
     <button id="ante-claim" class="ante-pill" type="button">
-      <span class="ante-pill-txt">Carve your name</span>
+      <span class="ante-pill-txt">Claim your spot</span>
       <span class="ante-pill-arrow">${icon('arrow')}</span>
     </button>
     ${progressHtml(a)}`;
@@ -1343,14 +1345,14 @@ function standbyHtml(a) {
   const name = u.handle || u.username || 'nameless';
   const link = referralLink();
   return `
-    <div class="ante-eyebrow">Welcome, Founder</div>
+    <div class="ante-eyebrow">Your spot is secured</div>
     <div class="prim-badge">
       <div class="prim-badge-ring"></div>
       <div class="prim-badge-gem prim-badge-clock">${icon('primClock')}</div>
       <div class="prim-badge-label">Primordial</div>
       <div class="prim-badge-handle">@${escapeHtml(name)}</div>
     </div>
-    <p class="ante-sub">Your name is carved and your badge is yours alone. The gates stay sealed until enough souls are sworn in — summon them, and open the world sooner.</p>
+    <p class="ante-sub">Your early spot is locked in and your badge is yours alone. The gates stay sealed until enough people have claimed theirs — invite others, and open the world sooner.</p>
     ${progressHtml(a)}
     <div class="ante-oath">
       <div class="ante-oath-num">${state.oathbound}</div>

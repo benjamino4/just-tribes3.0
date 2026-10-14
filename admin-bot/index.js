@@ -17,6 +17,7 @@ import {
   testProvider,
 } from '../server/ai.js';
 import { buildPointsMap } from '../server/scoring.js';
+import { creditReferralPercentForChallenge } from '../server/referral.js';
 import { getSetting, getSettings, setSetting } from '../server/settings.js';
 
 // ═════════════════════════════════════════
@@ -261,6 +262,11 @@ bot.on('callback_query', async (query) => {
     if (data === 'ante_link') { S.mode = 'ante_link'; return send(chatId, 'Send the *base Mini App link* used for referral/invite URLs, e.g. `https://t.me/YourBot/app`.\n\nReferral links become `that?startapp=SIGIL`. Send `-` to clear it (falls back to env).'); }
     if (data === 'ante_dayzero') { S.mode = 'ante_dayzero'; return send(chatId, 'Send the *"Day 1" date* in `YYYY-MM-DD` format (e.g. `2026-10-01`). This is counted as Day 1 — every call\'s "Day N" is measured from it.\n\nSend `-` to clear it (defaults to the first call\'s date).'); }
     if (data === 'ante_reset') return confirm(chatId, 'ante_reset', 'wipe *every* Primordial claim (handles, ordinals, Sigils, referral links) and re-arm the Antechamber from zero');
+    // referral reward engine
+    if (data === 'ante_reward') return anteRewardMenu(chatId);
+    if (data === 'ante_rtype:percent') { await setSetting('referral_reward_type', 'percent'); return anteRewardMenu(chatId, '✓ Mode set to → % of winnings.'); }
+    if (data === 'ante_rtype:points') { await setSetting('referral_reward_type', 'points'); return anteRewardMenu(chatId, '✓ Mode set to → flat Ichor per recruit.'); }
+    if (data === 'ante_rval') { S.mode = 'ante_reward_value'; const a = await anteStats(); return send(chatId, a.rewardType === 'percent' ? 'Send the *percentage* a referrer earns of each recruit’s pick winnings (a whole number, e.g. `10` for 10%). Send `0` to turn referral rewards off.' : `Send the *flat ${UNIT}* a referrer earns the moment a new recruit joins (a whole number). Send \`0\` to turn referral rewards off.`, { reply_markup: { inline_keyboard: [[{ text: '‹ Referral reward', callback_data: 'ante_reward' }]] } }); }
     if (data === 'bc') { S.mode = 'broadcast'; return send(chatId, '▧ Type the broadcast message. It goes to *every* player as the game bot.\n\n/cancel to stop.', { reply_markup: { inline_keyboard: [backRow] } }); }
 
     // quests
@@ -286,7 +292,7 @@ bot.on('callback_query', async (query) => {
     if (data.startsWith('del:')) return deleteCall(chatId, data.split(':')[1]);
     if (data.startsWith('cedit:')) return editCallMenu(chatId, data.split(':')[1]);
     if (data.startsWith('cedq:')) { S.mode = 'edit_question'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *question* text.'); }
-    if (data.startsWith('cedo:')) { S.mode = 'edit_options'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *options*, one per line (`id|text`, `id|text|details`, or plain). 2–6.\n\n⚠ Existing picks keep their letter; keep ids if picks exist.'); }
+    if (data.startsWith('cedo:')) { S.mode = 'edit_options'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *options*, one per line (`id|text`, `id|text|points|details`, or plain). 2–6.\n\n· field 3 = a *number* → exact Ichor award for that option (optional)\n· field 4 = long-form detail behind the reveal flip\n⚠ Existing picks keep their letter; keep ids if picks exist.'); }
     if (data.startsWith('cedr:')) { S.mode = 'edit_reveal'; S.ctx.id = data.split(':')[1]; return send(chatId, 'Send the new *reveal time*: `+8h` · `20:00` · `2026-10-09 20:00`'); }
     if (data.startsWith('creopen:')) return reopenCall(chatId, data.split(':')[1]);
     if (data.startsWith('cann:')) return announceCall(chatId, data.split(':')[1]);
@@ -429,7 +435,7 @@ bot.on('message', async (msg) => {
         S.draft.question = text;
         S.mode = 'new_options';
         return send(chatId,
-          '＋ *New Call* — step 2 / 3\n\nSend the *options*, one per line. Plain, `id|text`, or `id|text|details`:\n\n`Hold the line`\n`push|Push now|What charging early really costs us`\n\n(2–6 options · the optional 3rd field is the long-form detail shown behind the reveal card flip)');
+          '＋ *New Call* — step 2 / 3\n\nSend the *options*, one per line. Plain, `id|text`, or `id|text|points|details`:\n\n`Hold the line`\n`push|Push now|120|What charging early really costs us`\n\n(2–6 options)\n· field 3 = a *number* → the exact Ichor that option pays (optional)\n· field 4 = the long-form detail shown behind the reveal card flip\nLeave points out and the automatic rank curve decides the award.');
       case 'new_options': {
         const opts = parseOptions(text);
         if (opts.length < 2) return send(chatId, 'Need at least 2 options. Try again.');
@@ -515,6 +521,13 @@ bot.on('message', async (msg) => {
         await setSetting('day_zero', v);
         reset();
         return anteMenu(chatId, `✓ "Day 1" date set to *${v}*. Calls now count their Day N from this date.`);
+      }
+      case 'ante_reward_value': {
+        const n = parseInt(text.replace(/[^0-9]/g, ''), 10);
+        if (isNaN(n) || n < 0) return send(chatId, 'Send a whole number ≥ 0.');
+        await setSetting('referral_reward_value', String(n));
+        reset();
+        return anteRewardMenu(chatId, n === 0 ? '✓ Referral rewards turned *off*.' : `✓ Reward value set to *${n}*.`);
       }
       case 'quest_build': {
         const [title, reward, description, url] = text.split('|').map(s => (s || '').trim());
@@ -654,16 +667,28 @@ function parseOptions(text) {
   const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
   const letters = 'abcdefgh';
   return lines.map((line, i) => {
-    // Supports:  plain text  |  id|text  |  id|text|details
-    // The optional 3rd field is the long-form “details” shown behind the
-    // reveal card flip in the Mini App.
+    // Supports:
+    //   plain text
+    //   id|text
+    //   id|text|details
+    //   id|text|points|details     (points = a bare number in field 3)
+    //   id|text|points             (details omitted)
+    // The admin can set an exact Ichor award per option via the numeric field;
+    // if field 3 is not a number it's treated as the long-form details.
     if (line.includes('|')) {
       const parts = line.split('|').map(s => s.trim());
       const id = parts[0].toLowerCase() || letters[i];
       const txt = parts[1] || '';
-      const details = parts.slice(2).join('|').trim();
       const o = { id, text: txt };
-      if (details) o.details = details;
+      const third = parts[2];
+      if (third !== undefined && third !== '' && /^-?\d+$/.test(third)) {
+        o.points = Math.max(0, parseInt(third, 10));
+        const details = parts.slice(3).join('|').trim();
+        if (details) o.details = details;
+      } else {
+        const details = parts.slice(2).join('|').trim();
+        if (details) o.details = details;
+      }
       return o;
     }
     return { id: letters[i], text: line };
@@ -772,7 +797,18 @@ function startManualResolve(chatId, id) {
 // show_reason controls whether players see ANY reason at all; ai_reason now
 // holds either the judges' reason OR an admin-authored custom reason.
 async function applyResolution(chatId, id, ranking, ai_votes, ai_reason, show_reason = true) {
-  const { map, ordered } = buildPointsMap(ranking);
+  // Pull the admin-set per-option awards (if any) so they override the
+  // automatic rank curve. Options are stored as [{ id, text, details, points }].
+  let optionPoints = {};
+  try {
+    const { rows: cr } = await q(`SELECT options FROM challenges WHERE id=$1`, [id]);
+    const opts = cr[0]?.options || [];
+    (Array.isArray(opts) ? opts : []).forEach(o => {
+      if (o && o.id != null && o.points !== undefined && o.points !== null && o.points !== '')
+        optionPoints[o.id] = Number(o.points);
+    });
+  } catch { /* fall back to the automatic curve */ }
+  const { map, ordered } = buildPointsMap(ranking, optionPoints);
   const winner_id = ranking[0];
 
   await q(
@@ -786,6 +822,9 @@ async function applyResolution(chatId, id, ranking, ai_votes, ai_reason, show_re
   await q(
     `UPDATE users u SET points = u.points + COALESCE(p.points_earned,0)
      FROM picks p WHERE p.telegram_id=u.telegram_id AND p.challenge_id=$1`, [id]);
+  // Pay referrers their % cut of the winnings their recruits just earned.
+  let referralPaid = 0;
+  try { referralPaid = await creditReferralPercentForChallenge(q, id); } catch { /* non-fatal */ }
   await q(
     `UPDATE users u
      SET streak = CASE WHEN p.choice=$2 THEN u.streak+1 ELSE 0 END,
@@ -794,11 +833,12 @@ async function applyResolution(chatId, id, ranking, ai_votes, ai_reason, show_re
 
   reset();
   const line = ordered.map(o => `*${o.id.toUpperCase()}* · #${o.rank} · +${o.points}`).join('\n');
+  const refLine = referralPaid > 0 ? `\n\n⌯ ${referralPaid} ${UNIT} shared to referrers.` : '';
   const reasonLine = (show_reason && ai_reason) ? `\n\n_“${esc(ai_reason)}”_`
     : (!show_reason ? `\n\n_(no reason shown to players)_` : '');
   send(chatId,
     `◈ *Call #${id} resolved.*\n\nConsensus: ${ranking.map(x => x.toUpperCase()).join(' › ')}\n\n${line}` +
-    reasonLine +
+    refLine + reasonLine +
     `\n\n${UNIT} awarded and streaks updated.`,
     { reply_markup: { inline_keyboard: [[{ text: '▧ Announce result', callback_data: 'cann:' + id }], backRow] } });
 }
@@ -968,7 +1008,9 @@ async function startChat(chatId, id) {
 // Quest types the admin builds from the bot. Each carries a monochrome glyph
 // the Mini App renders; 'terms' always gates completion on an "I agree" step.
 const QUEST_TYPES = {
-  x_follow: { label: 'Follow-X quest', glyph: '✕' },
+  x_follow:   { label: 'Follow-X quest',  glyph: '✕' },
+  x_like:     { label: 'Like-on-X quest', glyph: '♡' },
+  x_retweet:  { label: 'Repost-on-X quest', glyph: '↻' },
   task:     { label: 'Task',          glyph: '◆' },
   research: { label: 'Research task',  glyph: '◇' },
   terms:    { label: 'T&C agreement',  glyph: '§' },
@@ -980,6 +1022,8 @@ function questTypeMenu(chatId) {
   reset();
   send(chatId, '◆ *New Quest* — choose a type', { reply_markup: { inline_keyboard: [
     [{ text: '✕ Follow an X account', callback_data: 'qnew:x_follow' }],
+    [{ text: '♡ Like an X post', callback_data: 'qnew:x_like' }],
+    [{ text: '↻ Repost an X post', callback_data: 'qnew:x_retweet' }],
     [{ text: '◆ Link / generic task', callback_data: 'qnew:task' }],
     [{ text: '◇ AI / research task', callback_data: 'qnew:research' }],
     [{ text: '§ Terms & Conditions', callback_data: 'qnew:terms' }],
@@ -994,6 +1038,10 @@ function startQuestBuild(chatId, type) {
   S.draft = { action_type: type };
   const hint = type === 'x_follow'
     ? 'Send: `title | reward | description | x_profile_url`\ne.g. `Follow us on X | 50 | Follow @hubris for the alpha | https://x.com/hubris`'
+    : type === 'x_like'
+    ? 'Send: `title | reward | description | x_post_url`\ne.g. `Like the launch post | 40 | Smash like on our pinned post | https://x.com/hubris/status/123`'
+    : type === 'x_retweet'
+    ? 'Send: `title | reward | description | x_post_url`\ne.g. `Repost the launch | 60 | Repost our pinned announcement | https://x.com/hubris/status/123`'
     : type === 'research'
     ? 'Send: `title | reward | description | url`\ne.g. `Read the partner report | 80 | Review our revenue-share partner | https://…`'
     : type === 'terms'
@@ -1477,6 +1525,7 @@ async function anteStats() {
   const s = await getSettings([
     'antechamber_enabled', 'antechamber_threshold',
     'antechamber_forced_open', 'referral_link', 'day_zero',
+    'referral_reward_type', 'referral_reward_value',
   ]);
   let claimed = 0;
   try {
@@ -1489,6 +1538,8 @@ async function anteStats() {
     threshold: Math.max(0, parseInt(s.antechamber_threshold, 10) || 0),
     link: (s.referral_link || '').trim(),
     dayZero: (s.day_zero || '').trim(),
+    rewardType: (s.referral_reward_type || 'percent').trim() === 'points' ? 'points' : 'percent',
+    rewardValue: Math.max(0, Number(s.referral_reward_value) || 0),
     claimed,
   };
 }
@@ -1504,6 +1555,11 @@ async function anteMenu(chatId, note) {
         ? 'OPEN — threshold reached'
         : 'LOCKED — gathering Primordials';
   const bar = a.threshold > 0 ? `${a.claimed} / ${a.threshold}` : `${a.claimed} (no threshold set)`;
+  const rewardLine = a.rewardValue <= 0
+    ? '_off (referrals award nothing)_'
+    : a.rewardType === 'percent'
+      ? `*${a.rewardValue}%* of each recruit's winnings`
+      : `*${a.rewardValue} ${UNIT}* flat per recruit`;
   const body =
     `⟡ *The Antechamber*\n` +
     (note ? `\n${note}\n` : '') +
@@ -1511,6 +1567,7 @@ async function anteMenu(chatId, note) {
     `Primordials: *${bar}*\n` +
     `Gate: ${a.enabled ? 'enabled' : 'disabled'}\n` +
     `Referral base: ${a.link ? `\`${esc(a.link)}\`` : '_env fallback_'}\n` +
+    `Referral reward: ${rewardLine}\n` +
     `Day 1 date: ${a.dayZero ? `\`${esc(a.dayZero)}\`` : '_not set (defaults to first call)_'}`;
   const kb = [
     [{ text: a.enabled ? '◉ Gate: ON (tap to disable)' : '○ Gate: OFF (tap to enable)', callback_data: 'ante_toggle' }],
@@ -1519,10 +1576,34 @@ async function anteMenu(chatId, note) {
       ? [{ text: '▤ Re-lock (undo force-open)', callback_data: 'ante_close' }]
       : [{ text: '▤ Force gates open now', callback_data: 'ante_open' }],
     [{ text: '→ Set referral/invite link', callback_data: 'ante_link' }],
+    [{ text: '⌯ Referral reward', callback_data: 'ante_reward' }],
     [{ text: `◷ Set "Day 1" date${a.dayZero ? ` (now ${a.dayZero})` : ''}`, callback_data: 'ante_dayzero' }],
     [{ text: '✖ Reset all Primordials', callback_data: 'ante_reset' }],
     [{ text: '↻ Refresh', callback_data: 'ante' }],
     backRow,
+  ];
+  send(chatId, body, { reply_markup: { inline_keyboard: kb } });
+}
+
+async function anteRewardMenu(chatId, note) {
+  const a = await anteStats();
+  const activeLine = a.rewardValue <= 0
+    ? '_Referrals currently award nothing._'
+    : a.rewardType === 'percent'
+      ? `A referrer earns *${a.rewardValue}%* of every recruit's pick winnings — paid out automatically each time a call they recruited for resolves.`
+      : `A referrer earns *${a.rewardValue} ${UNIT}* the moment each new recruit claims a handle.`;
+  const body =
+    `⌯ *Referral reward engine*\n` +
+    (note ? `\n${note}\n` : '') +
+    `\nMode: *${a.rewardType === 'percent' ? '% of winnings' : `flat ${UNIT} per recruit`}*\n` +
+    `Value: *${a.rewardValue}${a.rewardType === 'percent' ? '%' : ` ${UNIT}`}*\n\n` +
+    activeLine;
+  const kb = [
+    [{ text: `${a.rewardType === 'percent' ? '◉' : '○'} % of winnings`, callback_data: 'ante_rtype:percent' }],
+    [{ text: `${a.rewardType === 'points' ? '◉' : '○'} Flat ${UNIT} per recruit`, callback_data: 'ante_rtype:points' }],
+    [{ text: `▣ Set value (now ${a.rewardValue})`, callback_data: 'ante_rval' }],
+    [{ text: '↻ Refresh', callback_data: 'ante_reward' }],
+    [{ text: '‹ Antechamber', callback_data: 'ante' }],
   ];
   send(chatId, body, { reply_markup: { inline_keyboard: kb } });
 }
