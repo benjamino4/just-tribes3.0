@@ -251,6 +251,7 @@ bot.on('callback_query', async (query) => {
     if (data === 'quests') return listQuests(chatId);
     if (data === 'users') return listUsers(chatId);
     if (data === 'miniapp') return miniAppMenu(chatId);
+    if (data === 'lb_toggle') return toggleLeaderboard(chatId);
     if (data === 'danger') return dangerMenu(chatId);
 
     // antechamber (invite-gate controls)
@@ -1413,7 +1414,8 @@ function exportMenu(chatId) {
     { reply_markup: { inline_keyboard: [
       [{ text: '▤ Calls', callback_data: 'exp:calls' }, { text: '◆ Quests', callback_data: 'exp:quests' }],
       [{ text: '● Users', callback_data: 'exp:users' }, { text: '▨ Picks', callback_data: 'exp:picks' }],
-      [{ text: '◍ Replies', callback_data: 'exp:replies' }, { text: '◈ Everything', callback_data: 'exp:all' }],
+      [{ text: '◍ Replies', callback_data: 'exp:replies' }, { text: '◷ Activity', callback_data: 'exp:activity' }],
+      [{ text: '◈ Everything', callback_data: 'exp:all' }],
       backRow,
     ] } });
 }
@@ -1489,6 +1491,31 @@ async function dumpReplies() {
   return out;
 }
 
+async function dumpActivity() {
+  // Human-readable "how active is everyone" report for the ACTIVITY board:
+  // when & how they joined, current/longest streak, lifetime active days, last seen.
+  const { rows } = await q(
+    `SELECT telegram_id, first_name, username, handle, created_at, last_active,
+            streak, best_streak, active_days, referred_by, is_primordial, primordial_no
+     FROM users
+     ORDER BY streak DESC, active_days DESC, best_streak DESC, created_at ASC`);
+  let out = rule(`HUBRIS — Player activity (${rows.length})  ·  exported ${new Date().toISOString()}`);
+  out += `Ranked by current day-streak, then lifetime active days.\n\n`;
+  let rank = 0;
+  for (const u of rows) {
+    rank++;
+    const who = esc(u.first_name || u.username || String(u.telegram_id));
+    const tag = u.handle ? '  @' + esc(u.handle) : (u.username ? '  (@' + esc(u.username) + ')' : '');
+    const joined = u.created_at ? String(u.created_at).slice(0, 10) : 'unknown';
+    const how = u.referred_by ? `referred (by ${esc(String(u.referred_by))})` : (u.is_primordial ? 'direct · Primordial' : 'direct');
+    const last = u.last_active ? String(u.last_active).slice(0, 10) : 'never';
+    out += `#${rank}  ${who}${tag}  ·  id ${u.telegram_id}\n`;
+    out += `     joined ${joined} via ${how}${u.is_primordial && u.primordial_no ? ` · Nº${String(u.primordial_no).padStart(3, '0')}` : ''}\n`;
+    out += `     streak ${u.streak || 0}d (best ${u.best_streak || 0}d)  ·  ${u.active_days || 0} active days total  ·  last seen ${last}\n\n`;
+  }
+  return out;
+}
+
 async function exportData(chatId, which) {
   const stamp = new Date().toISOString().slice(0, 10);
   try {
@@ -1498,8 +1525,9 @@ async function exportData(chatId, which) {
     else if (which === 'users')   { await sendTxt(chatId, `hubris-users-${stamp}.txt`, await dumpUsers()); }
     else if (which === 'picks')   { await sendTxt(chatId, `hubris-picks-${stamp}.txt`, await dumpPicks()); }
     else if (which === 'replies') { await sendTxt(chatId, `hubris-replies-${stamp}.txt`, await dumpReplies()); }
+    else if (which === 'activity') { await sendTxt(chatId, `hubris-activity-${stamp}.txt`, await dumpActivity()); }
     else if (which === 'all') {
-      const all = [await dumpCalls(), await dumpQuests(), await dumpUsers(), await dumpPicks(), await dumpReplies()]
+      const all = [await dumpCalls(), await dumpQuests(), await dumpUsers(), await dumpPicks(), await dumpReplies(), await dumpActivity()]
         .join('\n\n' + '═'.repeat(60) + '\n\n');
       await sendTxt(chatId, `hubris-export-${stamp}.txt`, all);
     }
@@ -1509,15 +1537,28 @@ async function exportData(chatId, which) {
   }
 }
 
-function miniAppMenu(chatId) {
-  send(chatId,
-    '⚙ *Mini App controls*\n\nActions that touch the whole app at once.',
-    { reply_markup: { inline_keyboard: [
-      [{ text: `◈ Gift ${UNIT} to everyone`, callback_data: 'giftall' }],
-      [{ text: '↺ Reset all streaks', callback_data: 'ma_streak0' }],
-      [{ text: '▧ Push a reminder', callback_data: 'ma_remind' }],
-      backRow,
-    ] } });
+function miniAppMenu(chatId, note) {
+  return (async () => {
+    const lbOn = (await getSetting('leaderboard_enabled')) === 'true';
+    send(chatId,
+      (note ? note + '\n\n' : '') + '⚙ *Mini App controls*\n\nActions that touch the whole app at once.\n\n' +
+        `◉ *Leaderboard* — currently *${lbOn ? 'VISIBLE' : 'hidden'}* to players.`,
+      { reply_markup: { inline_keyboard: [
+        [{ text: lbOn ? '◉ Hide leaderboard' : '◈ Show leaderboard', callback_data: 'lb_toggle' }],
+        [{ text: `◈ Gift ${UNIT} to everyone`, callback_data: 'giftall' }],
+        [{ text: '↺ Reset all streaks', callback_data: 'ma_streak0' }],
+        [{ text: '▧ Push a reminder', callback_data: 'ma_remind' }],
+        backRow,
+      ] } });
+  })();
+}
+
+async function toggleLeaderboard(chatId) {
+  const on = (await getSetting('leaderboard_enabled')) === 'true';
+  await setSetting('leaderboard_enabled', on ? 'false' : 'true');
+  return miniAppMenu(chatId, on
+    ? '✓ Leaderboard *hidden* — players no longer see the rankings.'
+    : '✓ Leaderboard *now visible* — players can see ACTIVITY & POINTS rankings.');
 }
 
 // ═══ The Antechamber (invite-gate controls) ══════════

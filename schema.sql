@@ -136,6 +136,12 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS joined_antechamber_at TIMESTAMPTZ;
 -- (flat per-head bounty and/or a % cut of their picks). Shown on the Summon
 -- screen so referrals produce a visible, real, calculated result.
 ALTER TABLE users ADD COLUMN IF NOT EXISTS referral_earned INTEGER DEFAULT 0;
+-- Activity tracking for the leaderboard's "most active" board + admin export:
+--   last_active : the last calendar day (UTC) this player opened the app
+--   active_days : total distinct days they have shown up
+-- (streak / best_streak already exist above and are maintained on every visit.)
+ALTER TABLE users ADD COLUMN IF NOT EXISTS last_active  DATE;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS active_days  INTEGER DEFAULT 0;
 
 -- Case-insensitive uniqueness for handles; unique sigils; fast referral counts.
 CREATE UNIQUE INDEX IF NOT EXISTS idx_users_handle ON users (lower(handle)) WHERE handle IS NOT NULL;
@@ -163,7 +169,10 @@ INSERT INTO app_settings (key, value) VALUES
   --   referral_reward_value : the number N for whichever mode is active.
   -- Default 0 = referrals award nothing until the admin sets a value.
   ('referral_reward_type',    'percent'),
-  ('referral_reward_value',   '0')
+  ('referral_reward_value',   '0'),
+  -- Leaderboard visibility: hidden until the admin flips this on, then the
+  -- Pantheon tab + both boards (points & activity) appear for everyone.
+  ('leaderboard_enabled',     'false')
 ON CONFLICT (key) DO NOTHING;
 
 -- ══════════════════════════════════════════════════

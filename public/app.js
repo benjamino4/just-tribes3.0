@@ -14,13 +14,17 @@ const state = {
   challenge: null,
   quests: [],
   board: [],
+  boardPoints: [],   // leaderboard — Ichor accumulated
+  boardActivity: [], // leaderboard — pure activity (streak / days)
+  leaderboard: false,// admin-gated visibility of the Pantheon
+  boardView: 'points', // which leaderboard section is showing
   myPick: null,
   tab: 'home',
   // Antechamber (invite-gate) state
   phase: 'open',      // 'gate' | 'standby' | 'open'
   ante: null,         // { phase, enabled, threshold, claimed, remaining, referralBase }
   oathbound: 0,       // how many souls I've brought in
-  config: null,       // { dayZero } server-driven app config
+  config: null,       // { dayZero, leaderboard } server-driven app config
   mainBooted: false,  // guard so we only wire the tab app once
 };
 
@@ -1179,36 +1183,68 @@ async function onQuestClick(questId) {
 }
 
 // ─── Leaderboard ────────────────────────────────────────────
-function renderBoard() {
-  const mount = document.getElementById('board-mount');
-  if (!state.board.length) {
-    mount.innerHTML = `<div class="empty"><span class="empty-ghost">${icon('ghost')}</span>Be the first to call it</div>`;
-    return;
-  }
+// The Pantheon tab is hidden entirely until the admin enables the leaderboard.
+function applyLeaderboardVisibility() {
+  const tabBtn = document.querySelector('.tab-item[data-tab="board"]');
+  const pane = document.querySelector('.tab-pane[data-pane="board"]');
+  const show = !!state.leaderboard;
+  if (tabBtn) tabBtn.classList.toggle('hidden', !show);
+  if (!show && state.tab === 'board') switchTabSafe('home');
+}
+function switchTabSafe(name) {
+  const btn = document.querySelector(`.tab-item[data-tab="${name}"]`);
+  if (btn) btn.click();
+}
 
-  const top3 = state.board.slice(0, 3);
-  const rest = state.board.slice(3);
-  const myId = String(state.user?.telegram_id);
-  const nameOf = u => u.handle || u.first_name || u.username || 'Anon';
-  const primMark = u => u.is_primordial
+function boardName(u) { return u.handle || u.first_name || u.username || 'Anon'; }
+function boardPrimMark(u) {
+  return u.is_primordial
     ? `<span class="board-prim" title="Primordial · founding member">${icon('diamond')}</span>`
     : '';
-  const podiumOrder = [top3[1], top3[0], top3[2]].filter(Boolean);
+}
 
-  mount.innerHTML = `
+function renderBoard() {
+  const mount = document.getElementById('board-mount');
+  if (!mount) return;
+  if (!state.leaderboard) {
+    mount.innerHTML = `<div class="empty"><span class="empty-ghost">${icon('ghost')}</span>The Pantheon is sealed — it opens soon.</div>`;
+    return;
+  }
+  const view = state.boardView === 'activity' ? 'activity' : 'points';
+  const toggle = `
+    <div class="board-switch" role="tablist">
+      <button class="board-switch-btn ${view === 'points' ? 'on' : ''}" data-board="points" type="button">Ichor</button>
+      <button class="board-switch-btn ${view === 'activity' ? 'on' : ''}" data-board="activity" type="button">Most active</button>
+    </div>`;
+  mount.innerHTML = toggle + (view === 'activity' ? activityBoardHtml() : pointsBoardHtml());
+  mount.querySelectorAll('.board-switch-btn').forEach(b => {
+    b.addEventListener('click', () => {
+      state.boardView = b.dataset.board;
+      renderBoard();
+    });
+  });
+}
+
+function pointsBoardHtml() {
+  const data = state.boardPoints;
+  if (!data.length) return `<div class="empty"><span class="empty-ghost">${icon('ghost')}</span>Be the first to call it</div>`;
+  const top3 = data.slice(0, 3);
+  const rest = data.slice(3);
+  const myId = String(state.user?.telegram_id);
+  const podiumOrder = [top3[1], top3[0], top3[2]].filter(Boolean);
+  return `
     <div class="podium">
       ${podiumOrder.map((u) => {
         const realRank = top3.indexOf(u) + 1;
         return `
           <div class="podium-slot" data-rank="${realRank}">
             <div class="podium-rank">${realRank === 1 ? 'Champion' : realRank === 2 ? 'Runner-up' : 'Third'}</div>
-            <div class="podium-name">${escapeHtml(nameOf(u))}${primMark(u)}</div>
+            <div class="podium-name">${escapeHtml(boardName(u))}${boardPrimMark(u)}</div>
             <div class="podium-pts">${u.points}</div>
           </div>
         `;
       }).join('')}
     </div>
-
     <div class="board-list">
       ${rest.map((u, i) => {
         const rank = i + 4;
@@ -1216,13 +1252,48 @@ function renderBoard() {
         return `
           <div class="board-row ${isMe ? 'me' : ''} ${rank <= 10 ? 'top' : ''}" style="--i:${i}">
             <div class="board-rank">${rank}</div>
-            <div class="board-name">${escapeHtml(nameOf(u))}${primMark(u)}</div>
+            <div class="board-name">${escapeHtml(boardName(u))}${boardPrimMark(u)}</div>
             <div class="board-points">${u.points}</div>
           </div>
         `;
       }).join('')}
-    </div>
-  `;
+    </div>`;
+}
+
+function activityBoardHtml() {
+  const data = state.boardActivity;
+  if (!data.length) return `<div class="empty"><span class="empty-ghost">${icon('ghost')}</span>No activity yet</div>`;
+  const myId = String(state.user?.telegram_id);
+  return `
+    <p class="board-note">Ranked by how consistently they show up — current day-streak first.</p>
+    <div class="board-list">
+      ${data.map((u, i) => {
+        const rank = i + 1;
+        const isMe = String(u.telegram_id) === myId;
+        const streak = u.streak || 0;
+        const days = u.active_days || 0;
+        return `
+          <div class="board-row act ${isMe ? 'me' : ''} ${rank <= 3 ? 'top' : ''}" style="--i:${i}">
+            <div class="board-rank">${rank}</div>
+            <div class="board-name">${escapeHtml(boardName(u))}${boardPrimMark(u)}
+              <span class="board-sub">joined ${fmtJoined(u.created_at)}</span>
+            </div>
+            <div class="board-act">
+              <span class="board-streak">${streak}<small>d streak</small></span>
+              <span class="board-days">${days}<small>days</small></span>
+            </div>
+          </div>
+        `;
+      }).join('')}
+    </div>`;
+}
+
+function fmtJoined(ts) {
+  if (!ts) return '—';
+  try {
+    const d = new Date(ts);
+    return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+  } catch { return '—'; }
 }
 
 // ─── Helpers ────────────────────────────────────────────────
@@ -1344,27 +1415,42 @@ function standbyHtml(a) {
   const u = state.user || {};
   const name = u.handle || u.username || 'nameless';
   const link = referralLink();
+  const referred = state.oathbound || 0;
+  const earned = u.referral_earned || 0;
+  const points = u.points || 0;
   return `
-    <div class="ante-eyebrow">Your spot is secured</div>
-    <div class="prim-badge">
-      <div class="prim-badge-ring"></div>
-      <div class="prim-badge-gem prim-badge-clock">${icon('primClock')}</div>
-      <div class="prim-badge-label">Primordial</div>
-      <div class="prim-badge-handle">@${escapeHtml(name)}</div>
+    <div class="claimed-hero">
+      <div class="claimed-check" aria-hidden="true">${icon('check') || '✓'}</div>
+      <div class="ante-eyebrow">Spot claimed</div>
+      <h1 class="claimed-handle">@${escapeHtml(name)}</h1>
+      <p class="ante-sub">You’re in early. Your handle is locked in forever — now bring others and watch your anchor points climb.</p>
     </div>
-    <p class="ante-sub">Your early spot is locked in and your badge is yours alone. The gates stay sealed until enough people have claimed theirs — invite others, and open the world sooner.</p>
-    ${progressHtml(a)}
-    <div class="ante-oath">
-      <div class="ante-oath-num">${state.oathbound}</div>
-      <div class="ante-oath-label">souls you have summoned</div>
+
+    <div class="claim-stats">
+      <div class="claim-stat">
+        <div class="claim-stat-num">${referred}</div>
+        <div class="claim-stat-label">referred</div>
+      </div>
+      <div class="claim-stat accent">
+        <div class="claim-stat-num">${points}</div>
+        <div class="claim-stat-label">anchor points</div>
+      </div>
+      <div class="claim-stat">
+        <div class="claim-stat-num">${earned}</div>
+        <div class="claim-stat-label">from referrals</div>
+      </div>
     </div>
-    <div class="copy-pills">
-      <button id="copy-link" class="copy-pill wide solo" type="button" ${link ? '' : 'disabled'}>
-        <span class="copy-pill-k">Your summons link</span>
-        <span class="copy-pill-v mono">${escapeHtml(link || 'unavailable')}</span>
-        <span class="copy-pill-ico">⧉</span>
+
+    <div class="claim-refer">
+      <div class="claim-refer-head">Your referral link</div>
+      <button id="copy-link" class="claim-refer-pill" type="button" ${link ? '' : 'disabled'}>
+        <span class="claim-refer-link mono">${escapeHtml(link || 'unavailable')}</span>
+        <span class="claim-refer-copy">${icon('copy') || '⧉'}</span>
       </button>
-    </div>`;
+      <p class="claim-refer-note">Share it — everyone who joins through your link is credited to you.</p>
+    </div>
+
+    ${progressHtml(a)}`;
 }
 
 function validHandle(h) {
@@ -1637,12 +1723,17 @@ async function enterMainApp() {
     const [todayRes, questsRes, boardRes] = await Promise.all([
       api('/api/today').catch(() => ({ challenge: null })),
       api('/api/quests').catch(() => ({ quests: [] })),
-      api('/api/board').catch(() => ({ board: [] })),
+      api('/api/board').catch(() => ({ enabled: false, points: [], activity: [] })),
     ]);
 
     state.challenge = todayRes.challenge;
     state.quests = questsRes.quests || [];
-    state.board = boardRes.board || [];
+    state.leaderboard = !!boardRes.enabled;
+    state.boardPoints = boardRes.points || [];
+    state.boardActivity = boardRes.activity || [];
+    state.board = state.boardPoints; // back-compat
+
+    applyLeaderboardVisibility();
 
     if (state.challenge) {
       try {

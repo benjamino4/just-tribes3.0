@@ -9,6 +9,7 @@ import { requireUser } from './auth.js';
 import { getSetting, getSettings, setSetting } from './settings.js';
 import { adminWebhookPath, handleAdminUpdate, registerAdminWebhook, notifyPendingProof, notifyNewPrimordial, notifyGatesOpen, notifyNewReply } from '../admin-bot/index.js';
 import { moderateReply } from './moderation.js';
+import { creditReferralFlat } from './referral.js';
 import { publicWebhookPath, handlePublicUpdate, registerPublicWebhook } from '../bot/index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -129,7 +130,8 @@ app.get('/api/me', requireUser, async (req, res) => {
   // Ensure the row exists.
   let { rows } = await q(
     `SELECT telegram_id, username, first_name, points, streak, best_streak,
-            handle, sigil, referred_by, is_primordial, primordial_no
+            handle, sigil, referred_by, is_primordial, primordial_no,
+            referral_earned, active_days, created_at, last_active
      FROM users WHERE telegram_id = $1`,
     [id]
   );
@@ -141,7 +143,8 @@ app.get('/api/me', requireUser, async (req, res) => {
     );
     ({ rows } = await q(
       `SELECT telegram_id, username, first_name, points, streak, best_streak,
-              handle, sigil, referred_by, is_primordial, primordial_no
+              handle, sigil, referred_by, is_primordial, primordial_no,
+              referral_earned, active_days, created_at, last_active
        FROM users WHERE telegram_id = $1`,
       [id]
     ));
@@ -164,11 +167,17 @@ app.get('/api/me', requireUser, async (req, res) => {
           `SELECT telegram_id FROM users WHERE sigil = $1`, [code]
         );
         if (ref.length && String(ref[0].telegram_id) !== String(id)) {
-          await q(
-            `UPDATE users SET referred_by = $1 WHERE telegram_id = $2 AND referred_by IS NULL`,
+          const upd = await q(
+            `UPDATE users SET referred_by = $1 WHERE telegram_id = $2 AND referred_by IS NULL
+             RETURNING telegram_id`,
             [ref[0].telegram_id, id]
           );
-          user.referred_by = ref[0].telegram_id;
+          if (upd.rows.length) {
+            user.referred_by = ref[0].telegram_id;
+            // Pay the referrer their flat per-head bounty right now (no-op
+            // unless the admin set 'points' mode with a positive value).
+            try { await creditReferralFlat(q, ref[0].telegram_id); } catch { /* ignore */ }
+          }
         }
       } catch { /* ignore attribution races */ }
     }
@@ -182,6 +191,30 @@ app.get('/api/me', requireUser, async (req, res) => {
     );
     oathbound = c[0]?.n || 0;
   } catch { oathbound = 0; }
+
+  // ── Daily activity + streak ───────────────────────────────────────────
+  // Every app open counts attendance. If the last visit was yesterday the
+  // streak grows; if it was today nothing changes; any older gap resets the
+  // streak to 1. active_days is the lifetime count of distinct days seen.
+  try {
+    const prev = user.last_active ? new Date(user.last_active) : null;
+    const today = new Date(); today.setUTCHours(0, 0, 0, 0);
+    const prevDay = prev ? new Date(Date.UTC(prev.getUTCFullYear(), prev.getUTCMonth(), prev.getUTCDate())) : null;
+    const dayGap = prevDay ? Math.round((today - prevDay) / 86400000) : null;
+    if (dayGap !== 0) {
+      // first visit today — advance activity
+      const newStreak = dayGap === 1 ? (user.streak || 0) + 1 : 1;
+      const newBest = Math.max(user.best_streak || 0, newStreak);
+      const newActive = (user.active_days || 0) + 1;
+      await q(
+        `UPDATE users SET last_active = (NOW() AT TIME ZONE 'UTC')::date,
+                          streak = $1, best_streak = $2, active_days = $3
+         WHERE telegram_id = $4`,
+        [newStreak, newBest, newActive, id]
+      );
+      user.streak = newStreak; user.best_streak = newBest; user.active_days = newActive;
+    }
+  } catch { /* activity tracking is best-effort */ }
 
   const ante = await antechamberState(user);
 
@@ -200,7 +233,14 @@ app.get('/api/me', requireUser, async (req, res) => {
     } catch { /* leave null; client falls back */ }
   }
 
-  res.json({ user, oathbound, antechamber: ante, config: { dayZero } });
+  // Leaderboard stays hidden until the admin switches it on.
+  let leaderboard = false;
+  try {
+    const lb = await getSetting('leaderboard_enabled', 'false');
+    leaderboard = lb === 'true';
+  } catch { leaderboard = false; }
+
+  res.json({ user, oathbound, antechamber: ante, config: { dayZero, leaderboard } });
 });
 
 // Claim a Primordial handle during the gated phase (or anytime, universally).
@@ -319,12 +359,28 @@ app.post('/api/pick', requireUser, async (req, res) => {
 });
 
 app.get('/api/board', async (req, res) => {
-  const { rows } = await q(
+  // Leaderboard is hidden until the admin enables it — refuse data otherwise
+  // so a crafted request can't peek at the boards early.
+  let enabled = false;
+  try { enabled = (await getSetting('leaderboard_enabled', 'false')) === 'true'; } catch { enabled = false; }
+  if (!enabled) return res.json({ enabled: false, points: [], activity: [] });
+
+  // Board 1 — Ichor (points accumulated).
+  const { rows: points } = await q(
     `SELECT telegram_id, username, first_name, points, streak,
             handle, is_primordial, primordial_no
      FROM users ORDER BY points DESC, streak DESC LIMIT 100`
   );
-  res.json({ board: rows });
+  // Board 2 — pure activity (how active they are): current streak first,
+  // then lifetime active days, then longest streak.
+  const { rows: activity } = await q(
+    `SELECT telegram_id, username, first_name, points, streak, best_streak,
+            active_days, handle, is_primordial, primordial_no,
+            created_at, last_active
+     FROM users
+     ORDER BY streak DESC, active_days DESC, best_streak DESC LIMIT 100`
+  );
+  res.json({ enabled: true, points, activity });
 });
 
 app.get('/api/challenge/:id/stats', async (req, res) => {
